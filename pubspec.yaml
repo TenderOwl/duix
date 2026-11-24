@@ -1,0 +1,14 @@
+name: dui_retained
+description: Experimental retained-mode declarative UI kernel for Dart.
+version: 0.1.0
+publish_to: none
+
+environment:
+  sdk: ^3.5.0
+
+dependencies:
+  ffi: ^2.1.0
+
+dev_dependencies:
+  lints: ^5.0.0
+  test: ^1.25.0

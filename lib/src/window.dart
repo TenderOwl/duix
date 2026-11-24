@@ -1,0 +1,159 @@
+import 'dart:async';
+
+import 'drawing.dart';
+import 'events.dart';
+import 'geometry.dart';
+import 'observable.dart';
+import 'ui_element.dart';
+
+abstract interface class NativeHost {
+  Future<void> showWindow(Window window);
+  Future<void> closeWindow(Window window);
+}
+
+final class Application {
+  Application({required this.host});
+
+  final NativeHost host;
+  bool _running = false;
+
+  Future<void> run(Window mainWindow) async {
+    if (_running) throw StateError('The application is already running.');
+    _running = true;
+    await host.showWindow(mainWindow);
+  }
+
+  Future<void> shutdown(Window window) async {
+    await host.closeWindow(window);
+    _running = false;
+  }
+}
+
+final class Window extends ObservableObject implements WindowHost {
+  Window({
+    String title = '',
+    double width = 800,
+    double height = 600,
+    Color background = Color.white,
+    UIElement? content,
+  })  : _title = title,
+        _logicalSize = Size(width, height),
+        _background = background {
+    this.content = content;
+  }
+
+  String _title;
+  Size _logicalSize;
+  Color _background;
+  UIElement? _content;
+  Control? _focused;
+  bool _frameScheduled = false;
+  bool _isVisible = false;
+
+  String get title => _title;
+  set title(String value) {
+    if (_title == value) return;
+    final oldValue = _title;
+    _title = value;
+    notifyPropertyChanged('title', oldValue, value);
+  }
+
+  Color get background => _background;
+  set background(Color value) {
+    if (_background == value) return;
+    final oldValue = _background;
+    _background = value;
+    requestFrame();
+    notifyPropertyChanged('background', oldValue, value);
+  }
+
+  Size get logicalSize => _logicalSize;
+  double get devicePixelRatio => 1;
+  bool get isVisible => _isVisible;
+  Control? get focusedElement => _focused;
+  bool get frameScheduled => _frameScheduled;
+
+  UIElement? get content => _content;
+  set content(UIElement? value) {
+    if (identical(_content, value)) return;
+    _content?.attachToParent(null);
+    _content?.mountTo(null);
+    _content = value;
+    _content?.attachToParent(null);
+    _content?.mountTo(this);
+    requestFrame();
+  }
+
+  Future<void> show() async {
+    _isVisible = true;
+    requestFrame();
+  }
+
+  void close() {
+    _isVisible = false;
+    _content?.mountTo(null);
+  }
+
+  void resize(double width, double height) {
+    _logicalSize = Size(width, height);
+    _content?.invalidateMeasure();
+    requestFrame();
+  }
+
+  @override
+  void requestFrame() {
+    _frameScheduled = true;
+  }
+
+  @override
+  bool requestFocus(Control control) {
+    if (!control.isFocusable || !control.isEnabled) return false;
+    _focused?.updateFocus(false);
+    _focused = control;
+    control.updateFocus(true);
+    return true;
+  }
+
+  void dispatchPointerDown(Point position) {
+    final root = _content;
+    if (root == null) return;
+    root.measure(logicalSize);
+    root.arrange(Rect.fromLTWH(0, 0, logicalSize.width, logicalSize.height));
+    final target = root.hitTest(position);
+    if (target == null) return;
+    final preview = PointerEventArgs(pointerId: 1, position: position)
+      ..originalSource = target;
+    target.raiseEvent(UIElement.previewPointerDown, preview);
+    if (preview.handled) return;
+    target.raiseEvent(
+      UIElement.pointerDown,
+      PointerEventArgs(pointerId: 1, position: position)
+        ..originalSource = target,
+    );
+  }
+
+  void dispatchPointerUp(Point position) {
+    final target = _content?.hitTest(position);
+    target?.raiseEvent(
+      UIElement.pointerUp,
+      PointerEventArgs(pointerId: 1, position: position)
+        ..originalSource = target,
+    );
+  }
+
+  void dispatchTextInput(String text) {
+    _focused?.raiseEvent(UIElement.textInput, TextInputEventArgs(text));
+  }
+
+  void renderFrame(DrawingContext context) {
+    final root = _content;
+    if (root == null || !_isVisible) {
+      _frameScheduled = false;
+      return;
+    }
+    root.measure(logicalSize);
+    root.arrange(Rect.fromLTWH(0, 0, logicalSize.width, logicalSize.height));
+    root.render(context);
+    _frameScheduled = false;
+  }
+}

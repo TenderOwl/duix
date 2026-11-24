@@ -1,0 +1,6 @@
+.dart_tool/
+.tooling/
+.native-deps/
+build/
+native/build/
+pubspec.lock
