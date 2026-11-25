@@ -64,6 +64,7 @@ final class Window extends ObservableObject implements WindowHost {
   double _devicePixelRatio = 1;
   UIElement? _content;
   Control? _focused;
+  Control? _pointerCapture;
   TextInputHandler? textInputHandler;
   ClipboardHandler? clipboardHandler;
   bool _frameScheduled = false;
@@ -185,31 +186,66 @@ final class Window extends ObservableObject implements WindowHost {
     return true;
   }
 
-  void dispatchPointerDown(Point position) {
+  @override
+  bool capturePointer(Control control) {
+    if (!control.isMounted || !identical(control.window, this)) return false;
+    _pointerCapture = control;
+    return true;
+  }
+
+  @override
+  void releasePointer(Control control) {
+    if (identical(_pointerCapture, control)) _pointerCapture = null;
+  }
+
+  @override
+  bool hasPointerCapture(Control control) =>
+      identical(_pointerCapture, control);
+
+  void dispatchPointerDown(
+    Point position, {
+    PointerButton button = PointerButton.primary,
+  }) {
     final root = _content;
     if (root == null) return;
     root.measure(logicalSize);
     root.arrange(Rect.fromLTWH(0, 0, logicalSize.width, logicalSize.height));
     final target = root.hitTest(position);
     if (target == null) return;
-    final preview = PointerEventArgs(pointerId: 1, position: position)
-      ..originalSource = target;
+    final preview = PointerEventArgs(
+      pointerId: 1,
+      position: position,
+      button: button,
+    )..originalSource = target;
     target.raiseEvent(UIElement.previewPointerDown, preview);
     if (preview.handled) return;
     target.raiseEvent(
       UIElement.pointerDown,
+      PointerEventArgs(pointerId: 1, position: position, button: button)
+        ..originalSource = target,
+    );
+  }
+
+  void dispatchPointerMove(Point position) {
+    final target = _pointerCapture ?? _content?.hitTest(position);
+    target?.raiseEvent(
+      UIElement.pointerMove,
       PointerEventArgs(pointerId: 1, position: position)
         ..originalSource = target,
     );
   }
 
-  void dispatchPointerUp(Point position) {
-    final target = _content?.hitTest(position);
+  void dispatchPointerUp(
+    Point position, {
+    PointerButton button = PointerButton.primary,
+  }) {
+    final target = _pointerCapture ?? _content?.hitTest(position);
     target?.raiseEvent(
       UIElement.pointerUp,
-      PointerEventArgs(pointerId: 1, position: position)
+      PointerEventArgs(pointerId: 1, position: position, button: button)
         ..originalSource = target,
     );
+    if (button == PointerButton.primary) _pointerCapture = null;
   }
 
   void dispatchTextInput(String text) {

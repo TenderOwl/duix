@@ -36,6 +36,20 @@ void main() {
   test('null frame and metrics arguments return errors', () {
     expect(bindings.windowBeginFrame(nullptr), 0);
     expect(bindings.lastError, isNotEmpty);
+    expect(
+      () => bindings.pushClipRect(nullptr, 0, 0, 10, 10),
+      throwsA(
+        isA<StateError>().having(
+          (error) => error.message,
+          'message',
+          contains('Invalid clip rectangle'),
+        ),
+      ),
+    );
+    expect(
+      () => bindings.popClip(nullptr),
+      throwsA(isA<StateError>()),
+    );
     expect(bindings.windowPresent(nullptr), 0);
     expect(bindings.lastError, contains('No active frame'));
 
@@ -152,7 +166,10 @@ void main() {
         );
         expect(bindings.windowBeginFrame(window), 1,
             reason: bindings.lastError);
+        bindings.pushClipRect(window, 4, 4, 40, 24);
+        bindings.drawRect(window, 0, 0, 160, 80, 0x5580CFFF);
         bindings.textLayoutDraw(window, layout, 4, 4, 0xFF000000);
+        bindings.popClip(window);
         expect(bindings.windowPresent(window), 1, reason: bindings.lastError);
       });
     } finally {

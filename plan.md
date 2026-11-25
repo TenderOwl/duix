@@ -120,8 +120,11 @@ Skia canvas масштабируется через `displayScale`. Backbuffer �
 - `TextBlock` использует кэшированный `TextLayout` для measurement и drawing, освобождает его при замене и unmount;
 - Unicode/HiDPI-матрица native text layout с проверками measurement, hit test, caret, selection и масштабов 1.0/1.25/1.5/2.0;
 - интерактивная галерея `example/native_text_gallery.dart` с автоматическим smoke-режимом;
-- интерактивный пример `example/native_textbox.dart` с тремя полями, Unicode, two-way binding preview, keyboard/clipboard/IME подсказками и smoke-режимом;
-- `TextBox` получает focus по pointer down; позиционирование caret кликом остаётся в этапе 2.5;
+- интерактивный пример `example/native_textbox.dart` с тремя полями, Unicode, two-way binding preview, mouse/keyboard/clipboard/IME подсказками и smoke-режимом;
+- `TextBox` получает focus по primary pointer down, устанавливает caret через `TextLayout.hitTest()` и выделяет текст перетаскиванием;
+- backend-independent pointer capture в `Window` маршрутизирует move/up захваченному контролу, включая координаты за его границами; capture освобождается при primary up, focus loss и unmount;
+- `DrawingContext` поддерживает вложенные `pushClipRect`/`popClip`; native backend реализует их через Skia save/clipRect/restore;
+- `TextBox` обрезает текст и decoration по content bounds, подсвечивает обычный selection и рисует caret у focused collapsed selection;
 - `TextBuffer` и `TextSelection` с UTF-16 offsets, selection anchor/active end, проверкой диапазонов и командами редактирования;
 - `TextBox` вставляет text input в caret, заменяет selection и синхронизирует текст с two-way binding;
 - SDL text input lifecycle: Start/Stop при focus, TextLayout-based input area/caret, cleanup при unmount/close;
@@ -130,7 +133,7 @@ Skia canvas масштабируется через `displayScale`. Backbuffer �
 - `SDL_EVENT_TEXT_EDITING` проходит через C ABI, Dart FFI и `Window` в focused `TextBox`; composition selection передаётся в UTF-16 offsets;
 - `TextBox` хранит composition text/range отдельно от подтверждённого `TextBuffer`, рисует composition через кэшированный `TextLayout` с подчёркиванием и подсветкой активного диапазона;
 - промежуточная composition не изменяет `text` и two-way binding; подтверждение через text input заменяет selection и обновляет модель;
-- 76 Dart-тестов, включая composition с кириллицей, CJK/emoji, commit, отмену и потерю focus.
+- 94 Dart-теста, включая clipping/rendering, horizontal scrolling, mouse caret/selection, pointer capture, surrogate pairs, composition и clipboard.
 
 ### 3.2. Проверенное поведение
 
@@ -141,13 +144,19 @@ Skia canvas масштабируется через `displayScale`. Backbuffer �
 - Белый фон окна отображается корректно.
 - HiDPI-масштабирование подтверждено на 4K-дисплее.
 - `dart analyze` проходит без замечаний.
-- Все 76 Dart-тестов проходят, включая composition и clipboard ABI-тесты.
+- Все 94 Dart-теста проходят, включая render/clipping, native clip ABI и восстановление прежнего Windows clipboard.
 - На Windows подтверждены реальные SDL Start/Stop/SetTextInputArea и активное состояние ввода при focus; потеря focus и close останавливают ввод.
 - Input area и caret преобразуются из logical UI units в SDL window units; caret вычисляется через `TextLayout`.
 - `TextBox` при text input заменяет активное selection, сохраняет направление anchor/extent и обновляет source двустороннего binding.
 - Backspace/Delete удаляют выделение или целую surrogate pair; внешнее сокращение текста ограничивает offsets новой длиной.
 - Routed Left/Right, Home/End, Shift selection, Ctrl/Cmd word navigation, Select All и Cut/Copy/Paste проходят через `Window.dispatchKeyDown()`; направление selection и two-way binding проверены.
-- SDL clipboard на Windows выполняет Unicode round-trip и освобождает native string через C ABI; полный тестовый запуск после этапа 2.4 завершился без ошибок.
+- Left на offset 0 и Right на `text.length` сохраняют caret на границе вместо генерации `-1`/`length + 1`; отдельная регрессия покрывает обычную и word-навигацию, Shift selection и surrogate pair `A😀B`.
+- Primary click устанавливает caret через `TextLayout`; drag сохраняет anchor, работает в обоих направлениях и за границами контрола благодаря pointer capture. Клик не оставляет caret внутри surrogate pair и не изменяет binding source.
+- `TextBox` использует unbounded single-line layout и автоматический horizontal scroll offset: End и drag за правой границей показывают конец, Home возвращает начало, Left/Right удерживают caret в видимой области. Mouse hit-test и SDL caret получают то же смещение, selection/composition рисуются вместе с прокрученным текстом.
+- Текст, selection, composition и caret заключены в Skia clip content bounds; обычный selection рисуется до текста, caret — после него. Focus/collapsed/IME-состояния проверены render-командами.
+- Исправлена native-геометрия: `getRectsForRange()` получает UTF-16 offsets без преобразования в UTF-8 bytes, а caret строится по `getGlyphInfoAtUTF16Offset()` или последнему text box для конца строки с учётом направления текста.
+- Регрессионный тест на `A😀B` при scale 2.0 проверяет строго возрастающие caret coordinates на offsets 0/1/3/4 и соответствие selection rects диапазонам `0..1`, `1..3` и всего текста. До исправления тест воспроизводил caret `x = 0` после `A`.
+- SDL clipboard на Windows выполняет Unicode round-trip, освобождает native string через C ABI и в последнем полном прогоне успешно восстанавливает прежнее значение; ранее наблюдавшаяся нестабильность `Couldn't open clipboard` требует наблюдения на повторных запусках.
 - `DuiEvent` с modifiers и composition range имеет ABI size 72 байта; SDL byte offsets преобразуются в UTF-16. OS key modifiers и маппинг SDL key codes покрыты косвенно, без синтеза системного keyboard input.
 - Composition видна до commit, не меняет `TextBuffer`/binding, поддерживает CJK/emoji selection range и кириллицу без selection; пустой editing event, focus loss, unmount и editing commands очищают её.
 - Матрица проверяет ASCII, кириллицу, emoji, CJK, Arabic, Hebrew, multiline, пустую и очень длинную строки, а также стабильность logical metrics на масштабах 1.0, 1.25, 1.5 и 2.0.
@@ -159,7 +168,7 @@ Skia canvas масштабируется через `displayScale`. Backbuffer �
 - Paragraph smoke на Windows измеряет `ASCII, кириллица` через SkParagraph: width 124.945, height 21.
 - Native smoke автоматически завершается после 3 smoke-кадров.
 - Native text gallery smoke успешно рисует 3 кадра: scale 2.0, logical 960×800, physical 1920×1600, 4 renderFrame и 4 present.
-- TextBox smoke через `--textbox --smoke` рисует composition до commit, подтверждает `Smoke か😀`, проверяет неизменность binding до commit, Home и Shift+Right, затем завершается после 3 кадров: logical 760×590, physical 1520×1180, 4 renderFrame и 4 present.
+- TextBox smoke через `--textbox --smoke` рисует composition, обычный selection и caret в отдельных кадрах, проверяет `Smoke か😀`, mouse caret и captured drag, затем завершается после 3 кадров: logical 760×590, physical 1520×1180, 4 renderFrame и 4 present.
 - Diagnostics подтверждены на Windows: scale 2.0, logical 320×200, physical 640×400, 4 renderFrame и 4 present.
 
 ### 3.3. Основные файлы
@@ -233,7 +242,7 @@ python tools/bootstrap_native.py --smoke --dart "<путь-к-dart>"
 1. **P0:** `TextBox.measureCore()` всё ещё приблизительно считает ширину через число символов.
 2. **P0:** legacy `drawText`, используемый `TextBox`, рисует через `drawSimpleText` без SkParagraph.
 3. **P1:** native text layout пока принимает только конечную положительную `maxWidth`; infinite constraints остаются задачей layout system.
-4. **P0:** длинный текст `TextBox` не обрезается по границам контрола; обычные visual selection/caret не отображаются; mouse interaction для текста не реализован.
+4. **P1:** Windows clipboard cleanup нестабилен при восстановлении пустого прежнего значения: SDL `Couldn't open clipboard`; round-trip и запись самого значения при этом успешны.
 5. **P1:** нативный пример рисует кадр каждые 8 мс независимо от invalidate.
 6. **P1:** нет keyboard focus traversal и focus scopes.
 7. **P1:** нет `Grid`, `ScrollViewer`, alignment и min/max constraints.
@@ -445,13 +454,13 @@ text_layout_selection_rects
 
 ## 2.5. Mouse interaction
 
-- [ ] Hit test позиции текста через `TextLayout`.
-- [ ] Установка caret кликом.
-- [ ] Selection перетаскиванием.
-- [ ] Pointer capture во время drag.
+- [x] Hit test позиции текста через `TextLayout`.
+- [x] Установка caret кликом.
+- [x] Selection перетаскиванием.
+- [x] Pointer capture во время drag.
 - [ ] Двойной клик — выделение слова, если не осложняет этап.
 
-Критерий готовности: можно ввести, выделить, изменить и вставить текст; two-way binding остаётся синхронизированным.
+Критерий готовности: можно ввести, выделить, изменить и вставить текст; two-way binding остаётся синхронизированным. Выполнено и проверено unit-тестами и native smoke на Windows. Двойной клик отложен как необязательная часть этапа. Обычные selection/caret и clipping добавлены последующим исправлением отрисовки. Неверные native caret coordinates и UTF-16 selection ranges исправлены, покрыты координатной регрессией и подтверждены ручной проверкой. Граничная навигация также подтверждена вручную; горизонтальная прокрутка пока проверена автоматическими render/mouse/keyboard/native smoke-тестами.
 
 ---
 
@@ -663,13 +672,12 @@ default < inherited < style < binding < local < animation
 
 Порядок ближайших рабочих сессий:
 
-1. **Этап 2.5:** mouse selection и caret positioning через `TextLayout`.
-2. **Дефекты TextBox:** ограничить рисование текста границами контрола и реализовать видимые обычные selection/caret.
+1. **Стабилизация Windows clipboard:** устранить сбой восстановления пустого прежнего значения в native ABI-тесте.
+2. **Этап 3:** focus traversal.
 3. **Незавершённая часть этапа 1.2:** проверить сборку и Paragraph smoke на Linux (FontConfig/Freetype) и macOS (CoreText).
-4. **Ручная визуальная проверка этапа 1.5:** открыть text gallery на мониторах с разными масштабами и проверить clipping; автоматический smoke этого не заменяет.
+4. **Ручная визуальная проверка:** открыть text gallery и TextBox на мониторах с разными масштабами, проверить clipping, selection и caret; автоматический smoke этого не заменяет.
 5. **Ручная проверка этапа 2.4:** русский, китайский/японский ввод и emoji через реальные системные IME.
-6. **Этап 3:** focus traversal.
-7. **Этап 4:** render on demand.
+6. **Этап 4:** render on demand.
 
 Не начинать GPU, styles или virtualization до завершения этапов 1–4.
 
@@ -710,6 +718,59 @@ default < inherited < style < binding < local < animation
 ---
 
 ## 9. Журнал работ
+
+### 2026-11-25 — clipping и видимые selection/caret в TextBox
+
+Сделано:
+
+- `DrawingContext` получил `pushClipRect()`/`popClip()`; добавлены recording-команды и реализация в `NativeDrawingContext`.
+- В C ABI/C++/Dart FFI добавлены `dui_window_push_clip_rect` и `dui_window_pop_clip` с проверками active frame и аргументов; native backend использует Skia save/clipRect/restore.
+- `TextBox` ограничивает текст и decorations content clip с padding. Обычный selection рисуется через `TextLayout.selectionRects()` до текста.
+- Focused `TextBox` с collapsed selection рисует caret через `TextLayout.caretRect()` после текста; при IME composition обычный caret не дублируется. Clip восстанавливается через `finally`.
+- Добавлены 5 тестов `test/text_box_rendering_test.dart` и native ABI-проверки null/active clip. Smoke отдельно рисует composition, обычный selection и caret, сохраняя 3 кадра.
+- Подсказка `example/native_textbox.dart` обновлена.
+
+Проверено:
+
+- `dart format lib example test` и `dart analyze` — без замечаний.
+- Native library пересобрана после C ABI/C++ изменений; новые clip ABI и render-тесты проходят.
+- Полный `dart test` — 88 из 89 тестов проходят. Clipboard round-trip успешен, но восстановление пустого прежнего значения падает с `Couldn't open clipboard`; отдельный запуск и дополнительные retry cleanup не помогли, retry-изменение откачено.
+- Полный bootstrap с `--textbox --smoke --diagnostics` — успешно: Paragraph smoke `width=124.945, height=21`; TextBox smoke 3 кадра, 4 renderFrame и 4 present при scale 2.0.
+
+Не проверено:
+
+- Ручной визуальный контроль clipping/selection/caret и Linux/macOS. Caret пока статический, без blink timer.
+
+Следующий шаг:
+
+- Отдельно стабилизировать восстановление пустого Windows clipboard, затем перейти к этапу 3.
+
+### 2026-11-25 — этап 2.5, mouse interaction
+
+Сделано:
+
+- Добавлены bubble `UIElement.pointerMove`, `Window.dispatchPointerMove()` и маршрутизация SDL `DUI_EVENT_POINTER_MOVE`; SDL mouse buttons преобразуются в `PointerButton`.
+- `Window` поддерживает backend-independent pointer capture/release: move/up направляются захваченному контролу даже за его границами; primary up автоматически освобождает capture.
+- Primary click в `TextBox` получает UTF-16 offset через `TextLayout.hitTest()`, устанавливает caret и начинает selection drag с сохранением anchor. Hit test не оставляет caret внутри surrogate pair.
+- Pointer capture освобождается при primary up, focus loss и unmount; клик очищает composition без изменения подтверждённого текста.
+- Добавлены 8 тестов `test/text_mouse_interaction_test.dart`; TextBox smoke теперь проверяет native hit test, captured drag за пределами поля и установку caret кликом.
+- C ABI и C++ не изменялись.
+
+Проверено:
+
+- `dart format lib example test` — изменений после форматирования нет; `dart analyze` — без замечаний.
+- `dart test` — все 84 теста проходят, включая clipboard ABI-тест.
+- Полный bootstrap с `--textbox --smoke --diagnostics` — успешно: Paragraph smoke `width=124.945, height=21`; TextBox smoke 3 кадра, 4 renderFrame и 4 present при scale 2.0.
+
+Не реализовано / не проверено:
+
+- Двойной клик для выделения слова отложен как необязательная часть этапа.
+- Обычные visual selection/caret и clipping длинного текста остаются открытыми дефектами.
+- Физическая мышь в интерактивном примере вручную, Linux и macOS не проверялись; native smoke использует программную dispatch-последовательность.
+
+Следующий шаг:
+
+- Исправить clipping текста и добавить видимые обычные selection/caret в `TextBox`.
 
 ### 2026-11-25 — этап 2.4, IME composition
 

@@ -35,9 +35,10 @@ Future<void> main(List<String> args) async {
         spacing: 14,
         padding: const EdgeInsets.all(24),
         children: [
-          TextBlock(text: 'TextBox keyboard and clipboard', fontSize: 28),
+          TextBlock(text: 'TextBox editing', fontSize: 28),
           TextBlock(
-            text: 'Click a field to focus it. Type to replace the selection.',
+            text: 'Click to place the caret. Drag to select, including '
+                'outside the field.',
             fontSize: 16,
             color: const Color(0xFF555555),
           ),
@@ -69,8 +70,8 @@ Future<void> main(List<String> args) async {
             content: TextBox(),
           ),
           TextBlock(
-            text: 'IME composition is underlined. Visual caret, normal '
-                'selection and text clipping are not implemented yet.',
+            text: 'Selection and caret are visible. IME composition is '
+                'underlined; long text is clipped to the field.',
             fontSize: 14,
             color: const Color(0xFF555555),
           ),
@@ -97,7 +98,29 @@ Future<void> main(List<String> args) async {
       if (source.value != 'Smoke か😀' || editor.selectedText != 'S') {
         throw StateError('TextBox smoke composition commit failed.');
       }
-      for (var frame = 0; frame < 2 && host.isOpen(window); frame++) {
+      // Draw the ordinary selection before exercising mouse interaction.
+      host.presentWindow(window);
+
+      final textStart = Point(editor.bounds.left + 8, editor.bounds.top + 12);
+      final outside = Point(textStart.x + 1000, textStart.y);
+      window.dispatchPointerDown(textStart);
+      window.dispatchPointerMove(outside);
+      if (!editor.hasPointerCapture) {
+        throw StateError('TextBox smoke did not capture the pointer.');
+      }
+      window.dispatchPointerUp(outside);
+      if (editor.selectedText != source.value ||
+          editor.selection.baseOffset != 0 ||
+          editor.hasPointerCapture) {
+        throw StateError('TextBox smoke mouse selection failed.');
+      }
+      window.dispatchPointerDown(textStart);
+      window.dispatchPointerUp(textStart);
+      if (editor.caretOffset != 0 || !editor.selection.isCollapsed) {
+        throw StateError('TextBox smoke mouse caret positioning failed.');
+      }
+
+      for (var frame = 0; frame < 1 && host.isOpen(window); frame++) {
         host.pumpEvents();
         host.presentWindow(window);
         await Future<void>.delayed(const Duration(milliseconds: 16));

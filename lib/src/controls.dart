@@ -242,9 +242,12 @@ final class TextBox extends Control {
       if (event.property == TextBuffer.selectionProperty) {
         invalidatePaint();
       }
+      _ensureCaretVisible();
       _syncTextInputArea();
     });
     addHandler(UIElement.pointerDown, _pointerDown);
+    addHandler(UIElement.pointerMove, _pointerMove);
+    addHandler(UIElement.pointerUp, _pointerUp);
     addHandler(UIElement.textInput, _textInput);
     addHandler(UIElement.textEditing, _textEditing);
     addHandler(UIElement.keyDown, _keyDown);
@@ -266,6 +269,8 @@ final class TextBox extends Control {
   TextLayout? _renderLayout;
   TextLayoutOptions? _renderLayoutOptions;
   TextLayoutFactory? _renderLayoutFactory;
+  double _horizontalScrollOffset = 0;
+  bool _isSelecting = false;
 
   String get text => getValue(textProperty);
   set text(String value) => setValue(textProperty, value);
@@ -309,9 +314,64 @@ final class TextBox extends Control {
   }
 
   void _pointerDown(Object sender, PointerEventArgs args) {
-    if (!isEnabled) return;
+    if (!isEnabled || args.button != PointerButton.primary) return;
+    _clearComposition();
     focus();
+    buffer.moveCaret(_hitTestOffset(args.position));
+    _isSelecting = true;
+    capturePointer();
     args.handled = true;
+  }
+
+  void _pointerMove(Object sender, PointerEventArgs args) {
+    if (!_isSelecting) return;
+    buffer.moveCaret(
+      _hitTestOffset(args.position),
+      extendSelection: true,
+    );
+    args.handled = true;
+  }
+
+  void _pointerUp(Object sender, PointerEventArgs args) {
+    if (!_isSelecting || args.button != PointerButton.primary) return;
+    buffer.moveCaret(
+      _hitTestOffset(args.position),
+      extendSelection: true,
+    );
+    _cancelPointerSelection();
+    args.handled = true;
+  }
+
+  int _hitTestOffset(Point position) {
+    final local = Point(
+      position.x - bounds.left - 8 + _horizontalScrollOffset,
+      position.y - bounds.top - 7,
+    );
+    final layout = _layoutForRender(text);
+    final offset = layout.hitTest(local).offset.clamp(0, text.length);
+    if (offset > 0 &&
+        offset < text.length &&
+        _isHighSurrogate(text.codeUnitAt(offset - 1)) &&
+        _isLowSurrogate(text.codeUnitAt(offset))) {
+      final before = offset - 1;
+      final after = offset + 1;
+      final midpoint =
+          (layout.caretRect(before).left + layout.caretRect(after).left) / 2;
+      return local.x < midpoint ? before : after;
+    }
+    return offset;
+  }
+
+  static bool _isHighSurrogate(int codeUnit) =>
+      codeUnit >= 0xD800 && codeUnit <= 0xDBFF;
+
+  static bool _isLowSurrogate(int codeUnit) =>
+      codeUnit >= 0xDC00 && codeUnit <= 0xDFFF;
+
+  void _cancelPointerSelection() {
+    if (!_isSelecting) return;
+    _isSelecting = false;
+    _mountedHost?.releasePointer(this);
   }
 
   void _textInput(Object sender, TextInputEventArgs args) {
@@ -385,6 +445,7 @@ final class TextBox extends Control {
 
   @override
   void onUnmounted() {
+    _cancelPointerSelection();
     _clearComposition();
     _clearRenderLayout();
     if (isFocused) _mountedHost?.stopTextInput(this);
@@ -397,6 +458,7 @@ final class TextBox extends Control {
       window?.startTextInput(this);
       _syncTextInputArea();
     } else {
+      _cancelPointerSelection();
       _clearComposition();
       _mountedHost?.stopTextInput(this);
     }
@@ -406,25 +468,51 @@ final class TextBox extends Control {
   void onTextInputActivated() => _syncTextInputArea();
 
   @override
-  void arrangeCore(Rect finalRect) => _syncTextInputArea();
+  void arrangeCore(Rect finalRect) {
+    _ensureCaretVisible();
+    _syncTextInputArea();
+  }
+
+  void _ensureCaretVisible([TextLayout? layout]) {
+    final viewport = (bounds.width - 16).clamp(0.0, double.infinity);
+    if (viewport <= 0) {
+      _horizontalScrollOffset = 0;
+      return;
+    }
+
+    final displayText = hasComposition
+        ? text.replaceRange(selection.start, selection.end, compositionText)
+        : text;
+    var targetOffset = caretOffset;
+    if (hasComposition) {
+      final active = compositionSelection;
+      targetOffset = selection.start +
+          (active == null ? compositionText.length : active.end);
+    }
+    final resolved = layout ?? _layoutForRender(displayText);
+    final caretX = resolved.caretRect(targetOffset).left;
+    var nextOffset = _horizontalScrollOffset;
+    if (caretX < nextOffset) {
+      nextOffset = caretX;
+    } else if (caretX > nextOffset + viewport - 1) {
+      nextOffset = caretX - viewport + 1;
+    }
+    final contentWidth =
+        resolved.width > caretX ? resolved.width : caretX.toDouble();
+    final maximumOffset =
+        contentWidth > viewport ? contentWidth - viewport + 1 : 0.0;
+    _horizontalScrollOffset = nextOffset.clamp(0.0, maximumOffset);
+  }
 
   void _syncTextInputArea() {
+    _ensureCaretVisible();
     final host = _mountedHost;
     if (host == null || !isFocused) return;
     final width = (bounds.width - 16).clamp(1.0, double.infinity);
     final height = (bounds.height - 14).clamp(1.0, double.infinity);
-    final layout = host.textLayoutFactory.create(TextLayoutOptions(
-      text: text,
-      fontSize: 14,
-      maxWidth: width,
-      scale: host.displayScale,
-    ));
-    final double cursorX;
-    try {
-      cursorX = layout.caretRect(caretOffset).left;
-    } finally {
-      layout.dispose();
-    }
+    final layout = _layoutForRender(text);
+    final cursorX =
+        layout.caretRect(caretOffset).left - _horizontalScrollOffset;
     host.updateTextInputArea(
       this,
       Rect.fromLTWH(bounds.left + 8, bounds.top + 7, width, height),
@@ -454,46 +542,91 @@ final class TextBox extends Control {
   @override
   void renderCore(DrawingContext context) {
     context.drawRect(bounds, const Paint(Colors.white));
-    final origin = Point(bounds.left + 8, bounds.top + 7);
+    final contentBounds = Rect.fromLTWH(
+      bounds.left + 8,
+      bounds.top + 4,
+      (bounds.width - 16).clamp(0, double.infinity),
+      (bounds.height - 8).clamp(0, double.infinity),
+    );
     final compositionBase = selection.start;
     final displayText = hasComposition
         ? text.replaceRange(selection.start, selection.end, compositionText)
         : text;
     final layout = _layoutForRender(displayText);
+    _ensureCaretVisible(layout);
+    final origin = Point(
+      bounds.left + 8 - _horizontalScrollOffset,
+      bounds.top + 7,
+    );
 
-    if (hasComposition) {
-      final active = compositionSelection ??
-          TextSelection(baseOffset: 0, extentOffset: compositionText.length);
-      for (final rect in layout.selectionRects(
-        compositionBase + active.start,
-        compositionBase + active.end,
-      )) {
+    context.pushClipRect(contentBounds);
+    try {
+      if (!hasComposition && !selection.isCollapsed) {
+        for (final rect in layout.selectionRects(
+          selection.start,
+          selection.end,
+        )) {
+          context.drawRect(
+            Rect.fromLTWH(
+              origin.x + rect.left,
+              origin.y + rect.top,
+              rect.width,
+              rect.height,
+            ),
+            const Paint(Color(0x5580CFFF)),
+          );
+        }
+      }
+
+      if (hasComposition) {
+        final active = compositionSelection ??
+            TextSelection(baseOffset: 0, extentOffset: compositionText.length);
+        for (final rect in layout.selectionRects(
+          compositionBase + active.start,
+          compositionBase + active.end,
+        )) {
+          context.drawRect(
+            Rect.fromLTWH(
+              origin.x + rect.left,
+              origin.y + rect.top,
+              rect.width,
+              rect.height,
+            ),
+            const Paint(Color(0x5599CCFF)),
+          );
+        }
+        for (final rect in layout.selectionRects(
+          compositionBase,
+          compositionBase + compositionText.length,
+        )) {
+          context.drawRect(
+            Rect.fromLTWH(
+              origin.x + rect.left,
+              origin.y + rect.bottom - 1,
+              rect.width,
+              2,
+            ),
+            const Paint(Color(0xFF336699)),
+          );
+        }
+      }
+      layout.draw(context, origin);
+
+      if (isFocused && !hasComposition && selection.isCollapsed) {
+        final caret = layout.caretRect(caretOffset);
         context.drawRect(
           Rect.fromLTWH(
-            origin.x + rect.left,
-            origin.y + rect.top,
-            rect.width,
-            rect.height,
+            origin.x + caret.left,
+            origin.y + caret.top,
+            1,
+            caret.height > 0 ? caret.height : layout.height,
           ),
-          const Paint(Color(0x5599CCFF)),
+          const Paint(Color(0xFF202020)),
         );
       }
-      for (final rect in layout.selectionRects(
-        compositionBase,
-        compositionBase + compositionText.length,
-      )) {
-        context.drawRect(
-          Rect.fromLTWH(
-            origin.x + rect.left,
-            origin.y + rect.bottom - 1,
-            rect.width,
-            2,
-          ),
-          const Paint(Color(0xFF336699)),
-        );
-      }
+    } finally {
+      context.popClip();
     }
-    layout.draw(context, origin);
   }
 
   TextLayout _layoutForRender(String displayText) {
@@ -502,7 +635,7 @@ final class TextBox extends Control {
     final options = TextLayoutOptions(
       text: displayText,
       fontSize: 14,
-      maxWidth: (bounds.width - 16).clamp(1.0, double.infinity),
+      maxWidth: double.infinity,
       scale: host?.displayScale ?? 1,
     );
     final current = _renderLayout;

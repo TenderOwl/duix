@@ -166,6 +166,7 @@ final class TextBuffer extends ObservableObject {
   }
 
   int _previousCodePointOffset(int offset) {
+    if (offset == 0) return 0;
     if (offset >= 2 &&
         _isLowSurrogate(_text.codeUnitAt(offset - 1)) &&
         _isHighSurrogate(_text.codeUnitAt(offset - 2))) {
@@ -175,6 +176,7 @@ final class TextBuffer extends ObservableObject {
   }
 
   int _nextCodePointOffset(int offset) {
+    if (offset == _text.length) return offset;
     if (offset + 1 < _text.length &&
         _isHighSurrogate(_text.codeUnitAt(offset)) &&
         _isLowSurrogate(_text.codeUnitAt(offset + 1))) {

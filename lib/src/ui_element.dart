@@ -9,6 +9,9 @@ abstract interface class WindowHost {
   bool requestFocus(Control control);
   TextLayoutFactory get textLayoutFactory;
   double get displayScale;
+  bool capturePointer(Control control) => false;
+  void releasePointer(Control control) {}
+  bool hasPointerCapture(Control control) => false;
   void startTextInput(Control control) {}
   void stopTextInput(Control control) {}
   void updateTextInputArea(
@@ -27,6 +30,10 @@ abstract class UIElement extends PropertyOwner {
   );
   static const pointerDown = RoutedEvent<PointerEventArgs>(
     'pointerDown',
+    RoutingStrategy.bubble,
+  );
+  static const pointerMove = RoutedEvent<PointerEventArgs>(
+    'pointerMove',
     RoutingStrategy.bubble,
   );
   static const pointerUp = RoutedEvent<PointerEventArgs>(
@@ -232,6 +239,9 @@ abstract class Control extends UIElement {
   bool get isPointerOver => _isPointerOver;
 
   bool focus() => _window?.requestFocus(this) ?? false;
+  bool capturePointer() => _window?.capturePointer(this) ?? false;
+  void releasePointer() => _window?.releasePointer(this);
+  bool get hasPointerCapture => _window?.hasPointerCapture(this) ?? false;
 
   void updateFocus(bool value) {
     if (_isFocused == value) return;

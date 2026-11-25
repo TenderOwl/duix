@@ -137,6 +137,13 @@ DUI_API int32_t dui_window_set_text_input_area(
     double cursor_x);
 
 DUI_API int32_t dui_window_begin_frame(DuiWindow* window);
+DUI_API int32_t dui_window_push_clip_rect(
+    DuiWindow* window,
+    double x,
+    double y,
+    double width,
+    double height);
+DUI_API int32_t dui_window_pop_clip(DuiWindow* window);
 DUI_API void dui_draw_rect(
     DuiWindow* window,
     double x,

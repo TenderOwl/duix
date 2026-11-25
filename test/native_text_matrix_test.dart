@@ -58,6 +58,37 @@ void main() {
     }
   });
 
+  test('caret advances and UTF-16 selection ranges match glyphs', () {
+    const text = 'A😀B';
+    final layout = factory.create(const TextLayoutOptions(
+      text: text,
+      fontSize: 24,
+      maxWidth: 240,
+      scale: 2,
+    ));
+    try {
+      final carets = [0, 1, 3, 4].map(layout.caretRect).toList();
+      for (var index = 1; index < carets.length; index++) {
+        expect(
+          carets[index].left,
+          greaterThan(carets[index - 1].left),
+          reason: 'Caret must advance at UTF-16 offset ${[0, 1, 3, 4][index]}',
+        );
+      }
+
+      final first = layout.selectionRects(0, 1).single;
+      final emoji = layout.selectionRects(1, 3).single;
+      final full = layout.selectionRects(0, text.length);
+      final fullRight = full
+          .map((rect) => rect.right)
+          .reduce((left, right) => left > right ? left : right);
+      expect(emoji.left, greaterThanOrEqualTo(first.right - 0.5));
+      expect(emoji.right, lessThan(fullRight - 0.5));
+    } finally {
+      layout.dispose();
+    }
+  });
+
   test('empty string has stable metrics and caret', () {
     final layout = factory.create(const TextLayoutOptions(
       text: '',
@@ -74,6 +105,30 @@ void main() {
       expect(layout.selectionRects(0, 0), isEmpty);
     } finally {
       layout.dispose();
+    }
+  });
+
+  test('unbounded width keeps a single line without wrapping', () {
+    const text = 'one two three four five';
+    final unbounded = factory.create(const TextLayoutOptions(
+      text: text,
+      fontSize: 18,
+      maxWidth: double.infinity,
+      scale: 1.5,
+    ));
+    final constrained = factory.create(const TextLayoutOptions(
+      text: text,
+      fontSize: 18,
+      maxWidth: 40,
+      scale: 1.5,
+    ));
+    try {
+      expect(unbounded.width, greaterThan(40));
+      expect(unbounded.height, lessThan(constrained.height));
+      expect(unbounded.caretRect(text.length).left, greaterThan(40));
+    } finally {
+      unbounded.dispose();
+      constrained.dispose();
     }
   });
 

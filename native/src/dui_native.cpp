@@ -584,6 +584,36 @@ int32_t dui_window_begin_frame(DuiWindow* window) {
   return 1;
 }
 
+int32_t dui_window_push_clip_rect(
+    DuiWindow* window,
+    double x,
+    double y,
+    double width,
+    double height) {
+  clear_error();
+  if (!window || !window->frame_active || !window->surface ||
+      !std::isfinite(x) || !std::isfinite(y) || !std::isfinite(width) ||
+      !std::isfinite(height) || width < 0 || height < 0) {
+    set_error("Invalid clip rectangle arguments or no active frame.");
+    return 0;
+  }
+  auto* canvas = window->surface->getCanvas();
+  canvas->save();
+  canvas->clipRect(
+      SkRect::MakeXYWH(x, y, width, height), SkClipOp::kIntersect, true);
+  return 1;
+}
+
+int32_t dui_window_pop_clip(DuiWindow* window) {
+  clear_error();
+  if (!window || !window->frame_active || !window->surface) {
+    set_error("Cannot restore clip without an active frame.");
+    return 0;
+  }
+  window->surface->getCanvas()->restore();
+  return 1;
+}
+
 void dui_draw_rect(
     DuiWindow* window,
     double x,
@@ -654,11 +684,12 @@ DuiTextLayout* dui_text_layout_create(const DuiTextLayoutOptions* options) {
       (!options->text_utf8 && options->text_length != 0) ||
       (!options->font_family_utf8 && options->font_family_length != 0) ||
       !std::isfinite(options->font_size) || options->font_size <= 0 ||
-      !std::isfinite(options->max_width) || options->max_width <= 0 ||
+      std::isnan(options->max_width) || options->max_width <= 0 ||
       !std::isfinite(options->scale) || options->scale <= 0 ||
       options->alignment < 0 || options->alignment > 2 ||
       !std::isfinite(options->font_size * options->scale) ||
-      !std::isfinite(options->max_width * options->scale)) {
+      std::isnan(options->max_width * options->scale) ||
+      options->max_width * options->scale <= 0) {
     set_error("Invalid text layout arguments.");
     return nullptr;
   }
@@ -866,17 +897,45 @@ int32_t dui_text_layout_caret_rect(
       set_error("Caret offset is outside a UTF-16 text boundary.");
       return 0;
     }
-    const auto boxes = layout->paragraph->getRectsForRange(
-        byte_offset,
-        byte_offset,
-        skia::textlayout::RectHeightStyle::kMax,
-        skia::textlayout::RectWidthStyle::kTight);
-    if (boxes.empty()) {
+    if (layout->utf16_length == 0) {
       write_rect(out_rect, SkRect::MakeWH(0, layout->paragraph->getHeight()), layout->scale);
-    } else {
-      write_rect(out_rect, boxes.front().rect, layout->scale);
+      return 1;
     }
-    return 1;
+
+    if (offset_utf16 < layout->utf16_length) {
+      skia::textlayout::Paragraph::GlyphInfo info{};
+      if (layout->paragraph->getGlyphInfoAtUTF16Offset(offset_utf16, &info)) {
+        const auto& bounds = info.fGraphemeLayoutBounds;
+        const auto left = info.fDirection == skia::textlayout::TextDirection::kRtl
+            ? bounds.right()
+            : bounds.left();
+        write_rect(
+            out_rect,
+            SkRect::MakeXYWH(left, bounds.top(), 0, bounds.height()),
+            layout->scale);
+        return 1;
+      }
+    } else {
+      const auto boxes = layout->paragraph->getRectsForRange(
+          0,
+          offset_utf16,
+          skia::textlayout::RectHeightStyle::kMax,
+          skia::textlayout::RectWidthStyle::kTight);
+      if (!boxes.empty()) {
+        const auto& box = boxes.back();
+        const auto left = box.direction == skia::textlayout::TextDirection::kRtl
+            ? box.rect.left()
+            : box.rect.right();
+        write_rect(
+            out_rect,
+            SkRect::MakeXYWH(left, box.rect.top(), 0, box.rect.height()),
+            layout->scale);
+        return 1;
+      }
+    }
+
+    set_error("SkParagraph could not resolve the caret geometry.");
+    return 0;
   } catch (const std::exception& error) {
     set_error(error.what());
     return 0;
@@ -908,8 +967,8 @@ int32_t dui_text_layout_selection_rects(
       return 0;
     }
     const auto boxes = layout->paragraph->getRectsForRange(
-        start,
-        end,
+        start_utf16,
+        end_utf16,
         skia::textlayout::RectHeightStyle::kMax,
         skia::textlayout::RectWidthStyle::kTight);
     if (boxes.size() > std::numeric_limits<uint32_t>::max()) {

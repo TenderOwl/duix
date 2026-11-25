@@ -3,6 +3,7 @@ import 'dart:ffi';
 
 import 'package:ffi/ffi.dart';
 
+import '../events.dart';
 import '../geometry.dart';
 import '../window.dart';
 import 'native_bindings.dart';
@@ -244,9 +245,17 @@ final class SdlSkiaHost
       case 3:
         window.resize(event.width, event.height);
       case 4:
-        window.dispatchPointerDown(Point(event.x, event.y));
+        window.dispatchPointerDown(
+          Point(event.x, event.y),
+          button: _pointerButton(event.keyCode),
+        );
       case 5:
-        window.dispatchPointerUp(Point(event.x, event.y));
+        window.dispatchPointerUp(
+          Point(event.x, event.y),
+          button: _pointerButton(event.keyCode),
+        );
+      case 6:
+        window.dispatchPointerMove(Point(event.x, event.y));
       case 7:
         final text = event.text;
         if (text != null) window.dispatchTextInput(text);
@@ -289,6 +298,12 @@ final class SdlSkiaHost
   }
 }
 
+PointerButton _pointerButton(int button) => switch (button) {
+      2 => PointerButton.middle,
+      3 => PointerButton.secondary,
+      _ => PointerButton.primary,
+    };
+
 String _keyName(int keyCode) => switch (keyCode) {
       0x00000008 => 'backspace',
       0x00000061 => 'a',
@@ -309,6 +324,20 @@ final class NativeDrawingContext implements NativeTextDrawingContext {
   final NativeBindings bindings;
   @override
   final Pointer<DuiWindowOpaque> window;
+
+  @override
+  void pushClipRect(Rect rect) {
+    bindings.pushClipRect(
+      window,
+      rect.left,
+      rect.top,
+      rect.width,
+      rect.height,
+    );
+  }
+
+  @override
+  void popClip() => bindings.popClip(window);
 
   @override
   void drawRect(Rect rect, Paint paint) {

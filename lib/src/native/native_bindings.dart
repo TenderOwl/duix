@@ -232,6 +232,13 @@ typedef _WindowBackgroundNative = Void Function(
   Uint32,
 );
 typedef _FrameNative = Int32 Function(Pointer<DuiWindowOpaque>);
+typedef _WindowPushClipNative = Int32 Function(
+  Pointer<DuiWindowOpaque>,
+  Double,
+  Double,
+  Double,
+  Double,
+);
 typedef _DrawRectNative = Void Function(
   Pointer<DuiWindowOpaque>,
   Double,
@@ -331,6 +338,13 @@ typedef _WindowTextInputAreaDart = int Function(
   double,
 );
 typedef _FrameDart = int Function(Pointer<DuiWindowOpaque>);
+typedef _WindowPushClipDart = int Function(
+  Pointer<DuiWindowOpaque>,
+  double,
+  double,
+  double,
+  double,
+);
 typedef _DrawRectDart = void Function(
   Pointer<DuiWindowOpaque>,
   double,
@@ -456,6 +470,13 @@ final class NativeBindings {
         windowBeginFrame = library.lookupFunction<_FrameNative, _FrameDart>(
           'dui_window_begin_frame',
         ),
+        _windowPushClip =
+            library.lookupFunction<_WindowPushClipNative, _WindowPushClipDart>(
+          'dui_window_push_clip_rect',
+        ),
+        _windowPopClip = library.lookupFunction<_FrameNative, _FrameDart>(
+          'dui_window_pop_clip',
+        ),
         drawRect = library.lookupFunction<_DrawRectNative, _DrawRectDart>(
           'dui_draw_rect',
         ),
@@ -517,6 +538,8 @@ final class NativeBindings {
   final _FrameDart windowTextInputActive;
   final _WindowTextInputAreaDart windowSetTextInputArea;
   final _FrameDart windowBeginFrame;
+  final _WindowPushClipDart _windowPushClip;
+  final _FrameDart _windowPopClip;
   final _DrawRectDart drawRect;
   final _DrawTextDart drawText;
   final _TextLayoutCreateDart _textLayoutCreate;
@@ -533,6 +556,24 @@ final class NativeBindings {
     return pointer == nullptr
         ? 'Unknown native error.'
         : pointer.toDartString();
+  }
+
+  void pushClipRect(
+    Pointer<DuiWindowOpaque> window,
+    double x,
+    double y,
+    double width,
+    double height,
+  ) {
+    if (_windowPushClip(window, x, y, width, height) == 0) {
+      throw StateError('Could not push native clip: $lastError');
+    }
+  }
+
+  void popClip(Pointer<DuiWindowOpaque> window) {
+    if (_windowPopClip(window) == 0) {
+      throw StateError('Could not restore native clip: $lastError');
+    }
   }
 
   bool writeClipboardText(String text) {

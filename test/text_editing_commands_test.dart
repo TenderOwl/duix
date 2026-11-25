@@ -32,6 +32,33 @@ void main() {
       expect(box.selection, const TextSelection.collapsed(5));
     });
 
+    test('Left and Right stop at boundaries and preserve surrogate pairs', () {
+      final box = TextBox(text: 'A😀B')..moveCaret(0);
+      final window = Window(content: box);
+      box.focus();
+
+      window.dispatchKeyDown('left');
+      expect(box.selection, const TextSelection.collapsed(0));
+      window.dispatchKeyDown('left', controlPressed: true);
+      expect(box.selection, const TextSelection.collapsed(0));
+
+      window.dispatchKeyDown('right');
+      expect(box.caretOffset, 1);
+      window.dispatchKeyDown('right', shiftPressed: true);
+      expect(
+        box.selection,
+        const TextSelection(baseOffset: 1, extentOffset: 3),
+      );
+      window.dispatchKeyDown('right');
+      expect(box.selection, const TextSelection.collapsed(3));
+      window.dispatchKeyDown('right');
+      expect(box.caretOffset, 4);
+      window.dispatchKeyDown('right');
+      expect(box.selection, const TextSelection.collapsed(4));
+      window.dispatchKeyDown('right', controlPressed: true);
+      expect(box.selection, const TextSelection.collapsed(4));
+    });
+
     test('Shift preserves the anchor in both selection directions', () {
       final box = TextBox(text: 'abcdef')..moveCaret(4);
       final window = Window(content: box);
