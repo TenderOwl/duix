@@ -149,8 +149,8 @@ Skia canvas масштабируется через `displayScale`. Backbuffer �
 - `UIElement` поддерживает min/max width/height, margin, horizontal/vertical alignment, раздельные `desiredSize`, `arrangedSize` и `bounds`;
 - `StackPanel` измеряет детей с бесконечным главным направлением; measure cache учитывает изменение available constraints;
 - `DockPanel` поддерживает attached `Dock.left/top/right/bottom`, последовательное уменьшение remaining rect и `lastChildFill` для последнего видимого ребёнка;
-- `Grid` поддерживает Auto/Pixel/weighted Star tracks, наблюдаемые row/column definitions, attached row/column, spacing и physical-pixel rounding границ;
-- 147 Dart-тестов, включая Grid tracks/gap/invalidate/HiDPI, DockPanel measure/arrange/invalidate, diagnostics FPS/render-on-demand, synchronous live-resize frame с увеличением physical backbuffer, layout constraints/alignment, infinite text width, clipping/rendering, horizontal scrolling, mouse caret/selection, pointer capture, surrogate pairs, composition, clipboard, render-on-demand и scheduler counters.
+- `Grid` поддерживает Auto/Pixel/weighted Star tracks, наблюдаемые row/column definitions, attached row/column и rowSpan/columnSpan, spacing и physical-pixel rounding границ;
+- 155 Dart-тестов, включая Grid tracks/span/gap/invalidate/HiDPI, DockPanel measure/arrange/invalidate, diagnostics FPS/render-on-demand, synchronous live-resize frame с увеличением physical backbuffer, layout constraints/alignment, infinite text width, clipping/rendering, horizontal scrolling, mouse caret/selection, pointer capture, surrogate pairs, composition, clipboard, render-on-demand и scheduler counters.
 
 ### 3.2. Проверенное поведение
 
@@ -161,7 +161,7 @@ Skia canvas масштабируется через `displayScale`. Backbuffer �
 - Белый фон окна отображается корректно.
 - HiDPI-масштабирование подтверждено на 4K-дисплее.
 - `dart analyze` проходит без замечаний.
-- Все 145 тестов при исключении двух clipboard-сценариев проходят, включая 10 Grid-тестов, 7 DockPanel-тестов и FPS/render-on-demand. Два прежних полных прогона остановились только на Windows clipboard `Couldn't open clipboard`.
+- Все 153 теста при исключении двух clipboard-сценариев проходят, включая 18 Grid-тестов, 7 DockPanel-тестов и FPS/render-on-demand. Два прежних полных прогона остановились только на Windows clipboard `Couldn't open clipboard`.
 - Native integration-тест подтверждает, что Dart callback выполняет `beginFrame/present` до возврата из `SDL_SetWindowSize`, получает logical size 240×120 и увеличенный physical backbuffer. Непрерывный drag и maximize двойным щелчком по рамке подтверждены пользователем.
 - Margin включается в `desiredSize` и исключается из фактических `bounds`; start/center/end/stretch выравнивание проверено по координатам, а `arrangedSize` сохраняет размер исходного слота.
 - Повторный `presentWindow()` без invalidate не увеличивает render/present counters; изменение `Label.text` планирует ровно один следующий кадр. SDL expose/resize могут законно запланировать дополнительный кадр.
@@ -585,10 +585,10 @@ text_layout_selection_rects
 - [x] Auto, Pixel и Star tracks.
 - [x] Row/column definitions.
 - [x] Gap.
-- [ ] RowSpan/ColumnSpan после базовой версии.
+- [x] RowSpan/ColumnSpan после базовой версии.
 - [x] Тесты на дробные размеры и HiDPI rounding.
 
-Базовая версия использует `GridLength.auto`, `GridLength.pixel()` и `GridLength.star(weight)`, наблюдаемые `RowDefinition`/`ColumnDefinition` и `rowSpacing`/`columnSpacing`. Attached `Grid.row`/`Grid.column` по умолчанию равны 0; пустые definitions создают по одному Star track. Auto учитывает максимальный desired size ячейки, Pixel фиксирует размер, Star делит остаток по весам. При бесконечном constraint Star измеряется по содержимому. Auto-строки повторно измеряются после определения ширины столбцов, а arrange округляет границы к физическим пикселям через `displayScale`. Span пока не реализован.
+Версия использует `GridLength.auto`, `GridLength.pixel()` и `GridLength.star(weight)`, наблюдаемые `RowDefinition`/`ColumnDefinition` и `rowSpacing`/`columnSpacing`. Attached `Grid.row`/`Grid.column` по умолчанию равны 0, а `rowSpan`/`columnSpan` — 1; пустые definitions создают по одному Star track. Auto учитывает максимальный desired size ячейки, Pixel фиксирует размер, Star делит остаток по весам. Spanning-children измеряются по объединённым tracks и промежуточным gaps: дефицит равномерно распределяется между Auto-tracks диапазона, а при бесконечном constraint без Auto — между Star-tracks. После роста Auto конечные Star-доли пересчитываются. Auto-строки повторно измеряются после определения ширины столбцов, а arrange объединяет уже HiDPI-округлённые границы первого и последнего track, включая промежуточные gaps.
 
 ## 5.4. ScrollViewer
 
@@ -721,11 +721,10 @@ default < inherited < style < binding < local < animation
 Порядок ближайших рабочих сессий:
 
 1. **Стабилизация Windows clipboard:** устранить повторяемый сбой `Couldn't open clipboard` в native ABI-тесте.
-2. **Завершение этапа 5.3:** Grid RowSpan/ColumnSpan и связанные measure/arrange-тесты.
-3. **Этап 5.4:** ScrollViewer — viewport, extent, wheel, scrollbars и clipping.
-4. **Незавершённая часть этапа 1.2:** проверить сборку и Paragraph smoke на Linux (FontConfig/Freetype) и macOS (CoreText).
-5. **Ручная визуальная проверка:** открыть text gallery и TextBox на мониторах с разными масштабами, проверить clipping, selection и caret; автоматический smoke этого не заменяет.
-6. **Ручная проверка этапа 2.4:** русский, китайский/японский ввод и emoji через реальные системные IME.
+2. **Этап 5.4:** ScrollViewer — viewport, extent, wheel, scrollbars и clipping.
+3. **Незавершённая часть этапа 1.2:** проверить сборку и Paragraph smoke на Linux (FontConfig/Freetype) и macOS (CoreText).
+4. **Ручная визуальная проверка:** открыть text gallery и TextBox на мониторах с разными масштабами, проверить clipping, selection и caret; автоматический smoke этого не заменяет.
+5. **Ручная проверка этапа 2.4:** русский, китайский/японский ввод и emoji через реальные системные IME.
 
 Не начинать GPU, styles или virtualization до завершения этапов 1–4.
 
@@ -766,6 +765,29 @@ default < inherited < style < binding < local < animation
 ---
 
 ## 9. Журнал работ
+
+### 2026-11-26 — этап 5.3, RowSpan и ColumnSpan
+
+Сделано:
+
+- Добавлены attached `Grid.rowSpanProperty` и `Grid.columnSpanProperty` со статическими getters/setters. Значения по умолчанию равны 1; значения меньше 1, выход начальной ячейки или всего диапазона за definitions отклоняются.
+- Spanning-children измеряются отдельно от одиночных по объединённым tracks и промежуточным gaps. Дефицит равномерно распределяется между Auto-tracks диапазона; при бесконечном constraint без Auto используются Star-tracks. После роста Auto конечные Star-доли пересчитываются.
+- Arrange объединяет уже HiDPI-округлённые границы первого и последнего track, включая промежуточные gaps. Повторный measure сохраняет wrapping и учёт объединённой ширины столбцов.
+- Добавлены 8 тестов `test/grid_test.dart`: ColumnSpan/RowSpan с gaps, рост Auto и invalidation, перерасчёт Star, бесконечные Star constraints, HiDPI 1.25 и validation.
+
+Проверено:
+
+- `dart format` и `dart analyze` — без замечаний.
+- Все 18 Grid-тестов проходят. Общий прогон с исключением двух clipboard-сценариев — все 153 теста проходят.
+- `git diff --check` — успешно, только известные LF→CRLF warnings.
+
+Не проверено / ограничение:
+
+- Распределение дефицита между tracks остаётся упрощённым. Отдельный визуальный пример не добавлялся; C++ и native ABI не менялись.
+
+Следующий шаг:
+
+- Стабилизация Windows clipboard согласно порядку ближайших задач, затем ScrollViewer.
 
 ### 2026-11-26 — этап 5.3, базовый Grid
 

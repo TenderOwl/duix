@@ -200,6 +200,154 @@ void main() {
         children[1].bounds.right, closeTo(children[2].bounds.left, 0.000001));
   });
 
+  test('column span includes intermediate tracks and spacing', () {
+    final child = _FixedElement(const Size(30, 20));
+    Grid.setColumnSpan(child, 2);
+    final grid = Grid(
+      columns: [
+        ColumnDefinition(width: GridLength.pixel(40)),
+        ColumnDefinition(width: GridLength.pixel(60)),
+      ],
+      rows: [RowDefinition(height: GridLength.pixel(30))],
+      columnSpacing: 10,
+      children: [child],
+    );
+
+    _layout(grid, const Size(110, 30));
+
+    expect(Grid.getColumnSpan(child), 2);
+    expect(child.bounds, const Rect.fromLTWH(0, 0, 110, 30));
+  });
+
+  test('row span includes intermediate tracks and spacing', () {
+    final child = _FixedElement(const Size(20, 10));
+    Grid.setRowSpan(child, 2);
+    final grid = Grid(
+      rows: [
+        RowDefinition(height: GridLength.pixel(20)),
+        RowDefinition(height: GridLength.pixel(30)),
+      ],
+      rowSpacing: 5,
+      children: [child],
+    );
+
+    _layout(grid, const Size(200, 55));
+
+    expect(Grid.getRowSpan(child), 2);
+    expect(child.bounds, const Rect.fromLTWH(0, 0, 200, 55));
+  });
+
+  test('column span distributes its deficit between auto columns', () {
+    final child = _FixedElement(const Size(100, 60));
+    Grid.setColumnSpan(child, 2);
+    final grid = Grid(
+      columns: [ColumnDefinition(), ColumnDefinition()],
+      children: [child],
+    );
+
+    _layout(grid, const Size(100, 60));
+
+    expect(grid.desiredSize, const Size(100, 60));
+    expect(child.bounds, const Rect.fromLTWH(0, 0, 100, 60));
+
+    Grid.setColumnSpan(child, 1);
+    _layout(grid, const Size(100, 60));
+    expect(child.bounds, const Rect.fromLTWH(0, 0, 100, 60));
+  });
+
+  test('auto span growth reduces finite star tracks', () {
+    final spanning = _FixedElement(const Size(120, 20));
+    final star = _FixedElement(const Size(10, 10));
+    Grid.setColumnSpan(spanning, 2);
+    Grid.setColumn(star, 1);
+    final grid = Grid(
+      columns: [
+        ColumnDefinition(),
+        ColumnDefinition(width: GridLength.star()),
+      ],
+      children: [spanning, star],
+    );
+
+    _layout(grid, const Size(100, 60));
+
+    expect(spanning.bounds, const Rect.fromLTWH(0, 0, 100, 60));
+    expect(star.bounds, const Rect.fromLTWH(20, 0, 80, 60));
+  });
+
+  test('infinite star tracks accept a spanning content deficit', () {
+    final child = _FixedElement(const Size(100, 20));
+    Grid.setColumnSpan(child, 2);
+    final grid = Grid(
+      columns: [
+        ColumnDefinition(width: GridLength.star()),
+        ColumnDefinition(width: GridLength.star()),
+      ],
+      children: [child],
+    );
+
+    grid.measure(const Size(double.infinity, double.infinity));
+    grid.arrange(const Rect.fromLTWH(0, 0, 200, 100));
+
+    expect(grid.desiredSize, const Size(100, 20));
+    expect(child.bounds, const Rect.fromLTWH(0, 0, 200, 100));
+  });
+
+  test('row span distributes its deficit between auto rows', () {
+    final child = _FixedElement(const Size(20, 60));
+    Grid.setRowSpan(child, 2);
+    final grid = Grid(
+      rows: [RowDefinition(), RowDefinition()],
+      children: [child],
+    );
+
+    _layout(grid, const Size(40, 60));
+
+    expect(grid.desiredSize, const Size(40, 60));
+    expect(child.bounds, const Rect.fromLTWH(0, 0, 40, 60));
+  });
+
+  test('spanned arrange uses the same HiDPI-rounded track boundaries', () {
+    final spanning = _FixedElement(Size.zero);
+    Grid.setColumnSpan(spanning, 2);
+    final singles = List.generate(3, (_) => _FixedElement(Size.zero));
+    for (var index = 0; index < singles.length; index++) {
+      Grid.setColumn(singles[index], index);
+    }
+    final grid = Grid(
+      columns: List.generate(
+        3,
+        (_) => ColumnDefinition(width: GridLength.star()),
+      ),
+      columnSpacing: 2,
+      children: [spanning, ...singles],
+    );
+    final window = Window(width: 101, height: 20, content: grid)
+      ..updateDevicePixelRatio(1.25);
+
+    window.updateLayout();
+
+    expect(spanning.bounds.left, singles[0].bounds.left);
+    expect(spanning.bounds.right, singles[1].bounds.right);
+    expect(
+      spanning.bounds.width * 1.25,
+      closeTo((spanning.bounds.width * 1.25).round(), 0.000001),
+    );
+  });
+
+  test('invalid spans and ranges are rejected', () {
+    expect(
+        () => Grid.setRowSpan(_FixedElement(Size.zero), 0), throwsRangeError);
+    expect(
+      () => Grid.setColumnSpan(_FixedElement(Size.zero), -1),
+      throwsRangeError,
+    );
+
+    final child = _FixedElement(Size.zero);
+    Grid.setColumnSpan(child, 2);
+    final grid = Grid(children: [child]);
+    expect(() => grid.measure(const Size(100, 100)), throwsStateError);
+  });
+
   test('invalid lengths, cells and spacing are rejected', () {
     expect(() => GridLength.pixel(-1), throwsArgumentError);
     expect(() => GridLength.pixel(double.infinity), throwsArgumentError);

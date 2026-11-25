@@ -171,6 +171,16 @@ final class Grid extends Panel {
     defaultValue: 0,
     affectsMeasure: true,
   );
+  static const rowSpanProperty = DuiProperty<UIElement, int>(
+    name: 'Grid.rowSpan',
+    defaultValue: 1,
+    affectsMeasure: true,
+  );
+  static const columnSpanProperty = DuiProperty<UIElement, int>(
+    name: 'Grid.columnSpan',
+    defaultValue: 1,
+    affectsMeasure: true,
+  );
 
   late final GridDefinitionList<ColumnDefinition> columnDefinitions =
       GridDefinitionList<ColumnDefinition>._(this);
@@ -205,6 +215,19 @@ final class Grid extends Panel {
     element.setValue(columnProperty, value);
   }
 
+  static int getRowSpan(UIElement element) => element.getValue(rowSpanProperty);
+  static void setRowSpan(UIElement element, int value) {
+    _validateSpan(value);
+    element.setValue(rowSpanProperty, value);
+  }
+
+  static int getColumnSpan(UIElement element) =>
+      element.getValue(columnSpanProperty);
+  static void setColumnSpan(UIElement element, int value) {
+    _validateSpan(value);
+    element.setValue(columnSpanProperty, value);
+  }
+
   double get columnSpacing => _columnSpacing;
   set columnSpacing(double value) {
     _validateSpacing(value, 'columnSpacing');
@@ -232,17 +255,42 @@ final class Grid extends Panel {
     final columns = _columns;
     final rows = _rows;
     _validateCells(columns.length, rows.length);
+    final columnLengths =
+        columns.map((definition) => definition.width).toList();
+    final rowLengths = rows.map((definition) => definition.height).toList();
 
     _columnWidths = _resolveTracks(
-      columns.map((definition) => definition.width).toList(),
+      columnLengths,
       availableSize.width,
       columnSpacing,
       (column, width) => _measureColumn(column, width, rows),
     );
+    _resolveSpans(
+      _visibleChildren.where((child) => getColumnSpan(child) > 1),
+      columnLengths,
+      _columnWidths,
+      availableSize.width,
+      columnSpacing,
+      getColumn,
+      getColumnSpan,
+      (child, width) => _measureColumnSpan(child, width, rows),
+      (column, width) => _measureColumn(column, width, rows),
+    );
     _rowHeights = _resolveTracks(
-      rows.map((definition) => definition.height).toList(),
+      rowLengths,
       availableSize.height,
       rowSpacing,
+      _measureRow,
+    );
+    _resolveSpans(
+      _visibleChildren.where((child) => getRowSpan(child) > 1),
+      rowLengths,
+      _rowHeights,
+      availableSize.height,
+      rowSpacing,
+      getRow,
+      getRowSpan,
+      _measureRowSpan,
       _measureRow,
     );
 
@@ -267,20 +315,50 @@ final class Grid extends Panel {
     return result;
   }
 
+  double _measureColumnSpan(
+    UIElement child,
+    double width,
+    List<RowDefinition> rows,
+  ) {
+    final rowLength = rows[getRow(child)].height;
+    final height = rowLength.isPixel ? rowLength.value : double.infinity;
+    child.measure(Size(width, height));
+    return child.desiredSize.width;
+  }
+
   double _measureRow(int row, double height) {
     var result = 0.0;
     for (final child in _childrenInRow(row)) {
-      child.measure(Size(_columnWidths[getColumn(child)], height));
+      final width = _spanExtent(
+        _columnWidths,
+        getColumn(child),
+        getColumnSpan(child),
+        columnSpacing,
+      );
+      child.measure(Size(width, height));
       result = _max(result, child.desiredSize.height);
     }
     return result;
   }
 
-  Iterable<UIElement> _childrenInColumn(int column) =>
-      _visibleChildren.where((child) => getColumn(child) == column);
+  double _measureRowSpan(UIElement child, double height) {
+    final width = _spanExtent(
+      _columnWidths,
+      getColumn(child),
+      getColumnSpan(child),
+      columnSpacing,
+    );
+    child.measure(Size(width, height));
+    return child.desiredSize.height;
+  }
 
-  Iterable<UIElement> _childrenInRow(int row) =>
-      _visibleChildren.where((child) => getRow(child) == row);
+  Iterable<UIElement> _childrenInColumn(int column) => _visibleChildren.where(
+        (child) => getColumn(child) == column && getColumnSpan(child) == 1,
+      );
+
+  Iterable<UIElement> _childrenInRow(int row) => _visibleChildren.where(
+        (child) => getRow(child) == row && getRowSpan(child) == 1,
+      );
 
   List<double> _resolveTracks(
     List<GridLength> lengths,
@@ -289,36 +367,114 @@ final class Grid extends Panel {
     double Function(int index, double constraint) measureTrack,
   ) {
     final sizes = List<double>.filled(lengths.length, 0);
-    var fixedExtent = 0.0;
-    var totalWeight = 0.0;
-
     for (var index = 0; index < lengths.length; index++) {
       final length = lengths[index];
       if (length.isPixel) {
         sizes[index] = length.value;
         measureTrack(index, length.value);
-        fixedExtent += length.value;
       } else if (length.isAuto || !available.isFinite) {
-        final desired = measureTrack(index, double.infinity);
-        sizes[index] = desired;
-        fixedExtent += desired;
-      } else {
-        totalWeight += length.value;
+        sizes[index] = measureTrack(index, double.infinity);
+      }
+    }
+    _distributeStars(lengths, sizes, available, spacing, measureTrack);
+    return sizes;
+  }
+
+  void _resolveSpans(
+    Iterable<UIElement> spanningChildren,
+    List<GridLength> lengths,
+    List<double> sizes,
+    double available,
+    double spacing,
+    int Function(UIElement child) startOf,
+    int Function(UIElement child) spanOf,
+    double Function(UIElement child, double constraint) measureChild,
+    double Function(int index, double constraint) measureTrack,
+  ) {
+    final children = spanningChildren.toList();
+    for (final child in children) {
+      final start = startOf(child);
+      final span = spanOf(child);
+      final end = start + span;
+      final growthTargets = <int>[
+        for (var index = start; index < end; index++)
+          if (lengths[index].isAuto ||
+              (!available.isFinite && lengths[index].isStar))
+            index,
+      ];
+      final autoTargets =
+          growthTargets.where((index) => lengths[index].isAuto).toList();
+      final targets = autoTargets.isEmpty ? growthTargets : autoTargets;
+      final current = _spanExtent(sizes, start, span, spacing);
+      final desired = measureChild(
+        child,
+        targets.isEmpty ? current : double.infinity,
+      );
+      final deficit = desired - current;
+      if (targets.isNotEmpty && deficit > 0) {
+        final addition = deficit / targets.length;
+        for (final index in targets) {
+          sizes[index] += addition;
+        }
+        _distributeStars(
+          lengths,
+          sizes,
+          available,
+          spacing,
+          measureTrack,
+        );
       }
     }
 
-    if (available.isFinite && totalWeight > 0) {
-      final gaps = spacing * (lengths.length - 1);
-      final remaining = _max(0, available - fixedExtent - gaps);
-      for (var index = 0; index < lengths.length; index++) {
-        final length = lengths[index];
-        if (!length.isStar) continue;
-        final size = remaining * length.value / totalWeight;
-        sizes[index] = size;
-        measureTrack(index, size);
+    for (final child in children) {
+      measureChild(
+        child,
+        _spanExtent(sizes, startOf(child), spanOf(child), spacing),
+      );
+    }
+  }
+
+  void _distributeStars(
+    List<GridLength> lengths,
+    List<double> sizes,
+    double available,
+    double spacing,
+    double Function(int index, double constraint) measureTrack,
+  ) {
+    if (!available.isFinite) return;
+    var fixedExtent = 0.0;
+    var totalWeight = 0.0;
+    for (var index = 0; index < lengths.length; index++) {
+      final length = lengths[index];
+      if (length.isStar) {
+        totalWeight += length.value;
+      } else {
+        fixedExtent += sizes[index];
       }
     }
-    return sizes;
+    if (totalWeight == 0) return;
+    final gaps = spacing * (lengths.length - 1);
+    final remaining = _max(0, available - fixedExtent - gaps);
+    for (var index = 0; index < lengths.length; index++) {
+      final length = lengths[index];
+      if (!length.isStar) continue;
+      final size = remaining * length.value / totalWeight;
+      sizes[index] = size;
+      measureTrack(index, size);
+    }
+  }
+
+  static double _spanExtent(
+    List<double> sizes,
+    int start,
+    int span,
+    double spacing,
+  ) {
+    var result = spacing * (span - 1);
+    for (var index = start; index < start + span; index++) {
+      result += sizes[index];
+    }
+    return result;
   }
 
   @override
@@ -342,12 +498,18 @@ final class Grid extends Panel {
     for (final child in _visibleChildren) {
       final column = getColumn(child);
       final row = getRow(child);
+      final lastColumn = column + getColumnSpan(child) - 1;
+      final lastRow = row + getRowSpan(child) - 1;
+      final left = columnOffsets[column].$1;
+      final top = rowOffsets[row].$1;
+      final right = columnOffsets[lastColumn].$1 + columnOffsets[lastColumn].$2;
+      final bottom = rowOffsets[lastRow].$1 + rowOffsets[lastRow].$2;
       child.arrange(
         Rect.fromLTWH(
-          finalRect.left + columnOffsets[column].$1,
-          finalRect.top + rowOffsets[row].$1,
-          columnOffsets[column].$2,
-          rowOffsets[row].$2,
+          finalRect.left + left,
+          finalRect.top + top,
+          right - left,
+          bottom - top,
         ),
       );
     }
@@ -399,11 +561,19 @@ final class Grid extends Panel {
 
   void _validateCells(int columnCount, int rowCount) {
     for (final child in _visibleChildren) {
-      if (getColumn(child) >= columnCount) {
-        throw StateError('Child column ${getColumn(child)} is not defined.');
+      final column = getColumn(child);
+      final row = getRow(child);
+      final columnSpan = getColumnSpan(child);
+      final rowSpan = getRowSpan(child);
+      if (column < 0 || columnSpan < 1 || column + columnSpan > columnCount) {
+        throw StateError(
+          'Child column range $column..${column + columnSpan} is not defined.',
+        );
       }
-      if (getRow(child) >= rowCount) {
-        throw StateError('Child row ${getRow(child)} is not defined.');
+      if (row < 0 || rowSpan < 1 || row + rowSpan > rowCount) {
+        throw StateError(
+          'Child row range $row..${row + rowSpan} is not defined.',
+        );
       }
     }
   }
@@ -430,6 +600,12 @@ final class Grid extends Panel {
       result += size;
     }
     return result + spacing * (sizes.length - 1);
+  }
+
+  static void _validateSpan(int value) {
+    if (value < 1) {
+      throw RangeError.value(value, 'value', 'Must be at least 1.');
+    }
   }
 
   static double _validateSpacing(double value, String name) {
