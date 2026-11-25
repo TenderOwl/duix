@@ -10,6 +10,7 @@ export 'src/drawing.dart';
 export 'src/events.dart';
 export 'src/focus_manager.dart';
 export 'src/geometry.dart';
+export 'src/grid.dart';
 export 'src/headless_text_layout.dart';
 export 'src/observable.dart';
 export 'src/panel.dart';
