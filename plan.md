@@ -142,6 +142,7 @@ Skia canvas масштабируется через `displayScale`. Backbuffer �
 - интерактивные примеры используют wait с пределом 16 мс и уступают Dart event loop, поэтому Timer/Future invalidate обрабатываются без постоянного render/present;
 - SDL renderer создаётся с включённым VSync;
 - diagnostics включают `scheduled`, `layout`, `painted`, `presented`;
+- `example/native_frame_benchmark.dart` измеряет process CPU на Windows через `GetProcessTimes`, idle counters и latency async invalidate→present;
 - 117 Dart-тестов, включая clipping/rendering, horizontal scrolling, mouse caret/selection, pointer capture, surrogate pairs, composition, clipboard, render-on-demand и scheduler counters.
 
 ### 3.2. Проверенное поведение
@@ -158,6 +159,8 @@ Skia canvas масштабируется через `displayScale`. Backbuffer �
 - Несколько invalidate до кадра увеличивают `scheduled` и вызывают wake-up только один раз; `layout` и `painted` увеличиваются на каждом обработанном кадре, а пустой `renderFrame()` ничего не рисует.
 - Native integration-тест подтверждает `Timer → TextBlock.text → invalidate`: от стабильного baseline добавляется ровно один scheduled/layout/painted/presented.
 - Рекурсивный `Window.updateLayout()` во время measure выбрасывает `StateError`, сбрасывает guard через `finally` и не мешает следующему нормальному кадру.
+- Два последовательных benchmark-запуска на Windows дали idle process CPU 1.54% и 1.53% за примерно 1 с, без новых кадров после стартовых `scheduled/layout/painted/presented=2/2/2/2`.
+- Каждый запуск выполнил 60 async updates ровно за 60 кадров; итоговые counters 62/62/62/62. Медианная invalidate→present latency 16.49 и 16.28 мс, максимум 16.98 и 17.10 мс; средняя latency зависит от фазы таймера и составила 15.48 и 12.05 мс.
 - На Windows подтверждены реальные SDL Start/Stop/SetTextInputArea и активное состояние ввода при focus; потеря focus и close останавливают ввод.
 - Input area и caret преобразуются из logical UI units в SDL window units; caret вычисляется через `TextLayout`.
 - `TextBox` при text input заменяет активное selection, сохраняет направление anchor/extent и обновляет source двустороннего binding.
@@ -223,6 +226,7 @@ example/native_counter.dart          — нативный интерактивн
 example/native_smoke.dart            — native smoke с автоматическим завершением
 example/native_text_gallery.dart     — Unicode/HiDPI text gallery и её smoke-режим
 example/native_textbox.dart          — интерактивная проверка TextBox и smoke-режим
+example/native_frame_benchmark.dart  — idle CPU и async invalidate latency
 test/                                — автоматические тесты
 ```
 
@@ -234,6 +238,7 @@ dart format lib example test
 dart analyze
 dart test
 dart run example/counter.dart
+dart run example/native_frame_benchmark.dart
 ```
 
 Нативная проверка и сборка:
@@ -267,7 +272,7 @@ python tools/bootstrap_native.py --smoke --dart "<путь-к-dart>"
 2. **P0:** legacy `drawText`, используемый `TextBox`, рисует через `drawSimpleText` без SkParagraph.
 3. **P1:** native text layout пока принимает только конечную положительную `maxWidth`; infinite constraints остаются задачей layout system.
 4. **P1:** Windows clipboard cleanup нестабилен при восстановлении пустого прежнего значения: SDL `Couldn't open clipboard`; round-trip и запись самого значения при этом успешны.
-5. **P1:** SDL wait ограничен 16 мс, чтобы Dart timers получали управление; это не полностью event-driven async integration. Idle CPU и задержку ввода нужно измерить при профилировании этапа 4.3.
+5. **P2:** SDL wait ограничен 16 мс, чтобы Dart timers получали управление; это не полностью event-driven async integration. Измеренные 1.53–1.54% idle process CPU и медианная latency около 16.3–16.5 мс пока не оправдывают усложнение backend.
 6. **P1:** нет `Grid`, `ScrollViewer`, alignment и min/max constraints.
 7. **P1:** binding lifecycle и отмена подписок требуют более строгой модели владения.
 8. **P1:** нет единого механизма `dispose()` для контролов и ресурсов.
@@ -536,12 +541,12 @@ text_layout_selection_rects
 
 ## 4.3. Кэширование
 
-- [ ] Кэшировать `TextLayout`.
-- [ ] Кэшировать paths/paints, если профилирование покажет необходимость.
-- [ ] Не вводить retained GPU scene graph на CPU backend.
-- [ ] Добавить damage rectangles только после профилирования.
+- [x] Кэшировать `TextLayout`.
+- [x] Кэшировать paths/paints, если профилирование покажет необходимость — замеры не выявили необходимости, новый cache не добавлен.
+- [x] Не вводить retained GPU scene graph на CPU backend.
+- [x] Добавить damage rectangles только после профилирования — профилирование выполнено, damage rectangles не добавлены.
 
-Критерий готовности: неподвижное окно почти не использует CPU, ввод остаётся отзывчивым.
+Критерий готовности достигнут на Windows benchmark: idle process CPU 1.53–1.54%, нулевой прирост кадров в idle, 60 async updates дают 60 кадров с медианной latency около 16.3–16.5 мс. Это локальный замер, а не кроссплатформенная гарантия.
 
 ---
 
@@ -699,7 +704,7 @@ default < inherited < style < binding < local < animation
 
 Порядок ближайших рабочих сессий:
 
-1. **Этап 4.3:** профилирование idle CPU/input latency, подтверждение существующего TextLayout cache; paths/paints и damage rectangles добавлять только по результатам измерений.
+1. **Этап 5.1:** min/max constraints, margin и alignment; отдельно разрешить infinite constraints native text layout.
 2. **Стабилизация Windows clipboard:** устранить сбой восстановления пустого прежнего значения в native ABI-тесте.
 3. **Незавершённая часть этапа 1.2:** проверить сборку и Paragraph smoke на Linux (FontConfig/Freetype) и macOS (CoreText).
 4. **Ручная визуальная проверка:** открыть text gallery и TextBox на мониторах с разными масштабами, проверить clipping, selection и caret; автоматический smoke этого не заменяет.
@@ -744,6 +749,31 @@ default < inherited < style < binding < local < animation
 ---
 
 ## 9. Журнал работ
+
+### 2026-11-25 — этап 4.3, профилирование и кэширование
+
+Сделано:
+
+- Добавлен `example/native_frame_benchmark.dart`: после 1 с idle выполняет 60 периодических async updates, измеряет invalidate→present latency и counters. На Windows process CPU читается через `GetProcessTimes`; на других ОС CPU сообщается как unsupported.
+- Подтверждено существующее кэширование `TextLayout` в `TextBlock` и `TextBox`: полный `TextLayoutOptions`, identity factory, повторное использование и disposal при замене/unmount уже реализованы и покрыты тестами.
+- По результатам замеров не добавлены paths/paints cache, damage rectangles или retained GPU scene graph. C ABI/C++ и scheduler не менялись.
+
+Проверено:
+
+- `dart format example/native_frame_benchmark.dart` и `dart analyze` — без замечаний.
+- Полный `dart test` — все 117 тестов проходят, включая clipboard.
+- Первый benchmark: idle wall 1013.5 мс, process CPU 15.6 мс (1.54%); counters 2/2/2/2. Выполнено 60 updates за 60 кадров; latency average 15.48 мс, median 16.49 мс, max 16.98 мс. Итоговые counters 62/62/62/62; общий process CPU 7.70%.
+- Повторный benchmark: idle wall 1018.4 мс, process CPU 15.6 мс (1.53%); те же counters. Latency average 12.05 мс, median 16.28 мс, max 17.10 мс; общий process CPU 7.71%.
+- `git diff --check` — успешно.
+
+Ограничения:
+
+- CPU измерен только для benchmark-процесса на Windows, без системного профилирования и энергопотребления. Физический ввод, Linux и macOS не проверялись; async latency не равна измеренной задержке аппаратного ввода.
+- Предел wait 16 мс остаётся сознательным компромиссом для Dart timers; дальнейшая event-driven интеграция отложена как P2.
+
+Следующий шаг:
+
+- Этап 5.1: min/max constraints, margin, alignment и infinite constraints native text layout.
 
 ### 2026-11-25 — этап 4.2, централизованный scheduler
 
