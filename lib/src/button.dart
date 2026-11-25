@@ -1,6 +1,7 @@
 import 'content_control.dart';
 import 'drawing.dart';
 import 'events.dart';
+import 'focus_decoration.dart';
 import 'geometry.dart';
 import 'ui_element.dart';
 
@@ -59,6 +60,7 @@ final class Button extends ContentControl {
       bounds,
       Paint(isPressed ? const Color(0xFFB0B0B0) : const Color(0xFFE0E0E0)),
     );
+    if (isFocused) drawFocusRing(context, bounds);
     super.renderCore(context);
   }
 }

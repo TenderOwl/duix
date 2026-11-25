@@ -1,6 +1,7 @@
 import 'colors.dart';
 import 'drawing.dart';
 import 'events.dart';
+import 'focus_decoration.dart';
 import 'geometry.dart';
 import 'headless_text_layout.dart';
 import 'properties.dart';
@@ -319,6 +320,7 @@ final class TextBox extends Control {
   @override
   void renderCore(DrawingContext context) {
     context.drawRect(bounds, const Paint(Colors.white));
+    if (isFocused) drawFocusRing(context, bounds);
     final contentBounds = Rect.fromLTWH(
       bounds.left + 8,
       bounds.top + 4,

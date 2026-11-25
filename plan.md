@@ -133,7 +133,8 @@ Skia canvas масштабируется через `displayScale`. Backbuffer �
 - `SDL_EVENT_TEXT_EDITING` проходит через C ABI, Dart FFI и `Window` в focused `TextBox`; composition selection передаётся в UTF-16 offsets;
 - `TextBox` хранит composition text/range отдельно от подтверждённого `TextBuffer`, рисует composition через кэшированный `TextLayout` с подчёркиванием и подсветкой активного диапазона;
 - промежуточная composition не изменяет `text` и two-way binding; подтверждение через text input заменяет selection и обновляет модель;
-- 106 Dart-тестов, включая clipping/rendering, horizontal scrolling, mouse caret/selection, pointer capture, surrogate pairs, composition и clipboard.
+- `Button` и `TextBox` рисуют двухпиксельный focus ring внутри своих bounds только при активном focus;
+- 108 Dart-тестов, включая clipping/rendering, horizontal scrolling, mouse caret/selection, pointer capture, surrogate pairs, composition и clipboard.
 
 ### 3.2. Проверенное поведение
 
@@ -144,7 +145,7 @@ Skia canvas масштабируется через `displayScale`. Backbuffer �
 - Белый фон окна отображается корректно.
 - HiDPI-масштабирование подтверждено на 4K-дисплее.
 - `dart analyze` проходит без замечаний.
-- Все 106 Dart-тестов проходят, включая render/clipping, native clip ABI и восстановление прежнего Windows clipboard.
+- Все 108 Dart-тестов проходят, включая render/clipping, native clip ABI и восстановление прежнего Windows clipboard.
 - На Windows подтверждены реальные SDL Start/Stop/SetTextInputArea и активное состояние ввода при focus; потеря focus и close останавливают ввод.
 - Input area и caret преобразуются из logical UI units в SDL window units; caret вычисляется через `TextLayout`.
 - `TextBox` при text input заменяет активное selection, сохраняет направление anchor/extent и обновляет source двустороннего binding.
@@ -179,6 +180,7 @@ lib/native.dart                      — публичный native API
 lib/src/application.dart             — Application
 lib/src/window.dart                  — Window и native host-контракты
 lib/src/focus_manager.dart           — FocusManager
+lib/src/focus_decoration.dart        — общий focus ring для контролов
 lib/src/ui_element.dart              — UIElement, Control и WindowHost lifecycle
 lib/src/controls.dart                — compatibility barrel для контролов
 lib/src/content_control.dart         — ContentControl
@@ -731,6 +733,29 @@ default < inherited < style < binding < local < animation
 ---
 
 ## 9. Журнал работ
+
+### 2026-11-25 — видимое focus-состояние контролов
+
+Сделано:
+
+- Добавлен общий `drawFocusRing()` в `lib/src/focus_decoration.dart`: четыре rectangle-команды рисуют двухпиксельную рамку внутри bounds без расширения layout и clipping наружу.
+- `Button` и `TextBox` рисуют рамку только при `isFocused`; существующие pressed background, caret, selection и composition сохранены.
+- Добавлены 2 теста `test/focus_rendering_test.dart` на появление/исчезновение рамки, точную геометрию Button и совместимость с caret/disable у TextBox.
+- C ABI и C++ не изменялись.
+
+Проверено:
+
+- `dart format` и `dart analyze` — без замечаний.
+- Полный `dart test` — все 108 тестов проходят, включая clipboard.
+- Полный bootstrap с `--textbox --smoke --diagnostics` — успешно: Paragraph smoke `width=124.945, height=21`; TextBox smoke 3 кадра, 4 renderFrame и 4 present при scale 2.0.
+
+Не проверено:
+
+- Ручной визуальный контроль контраста и рамки на физической клавиатуре, Linux и macOS.
+
+Следующий шаг:
+
+- Этап 3.3: keyboard activation и physical/logical key.
 
 ### 2026-11-25 — этап 3.2, Tab traversal
 
