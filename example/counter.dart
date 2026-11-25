@@ -11,14 +11,14 @@ final class MemoryHost implements NativeHost {
 Future<void> main() async {
   final counter = ObservableValue<int>(0);
 
-  final title = TextBlock(fontSize: 24)
+  final title = Label(fontSize: 24)
     ..bind(
-      TextBlock.textProperty,
+      Label.textProperty,
       counter.map((value) => 'Нажатий: $value').asBinding(),
     );
 
   final button = Button(
-    content: TextBlock(text: 'Увеличить'),
+    content: Label(text: 'Увеличить'),
     onClick: () => counter.value++,
   );
 
@@ -51,7 +51,7 @@ Future<void> main() async {
   window.renderFrame(renderer);
   print('После нажатия: ${title.text}');
   print(
-      'Тот же TextBlock: ${identical(title, window.content!.logicalChildren.first)}');
+      'Тот же Label: ${identical(title, window.content!.logicalChildren.first)}');
   print('Команд отрисовки: ${renderer.commands.length}');
 
   await application.shutdown(window);

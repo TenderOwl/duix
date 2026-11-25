@@ -10,7 +10,7 @@ Future<void> main() async {
   const updateCount = 60;
   final host = await SdlSkiaHost.initialize(diagnosticsEnabled: true);
   final application = Application(host: host);
-  final text = TextBlock(text: 'Idle', fontSize: 24);
+  final text = Label(text: 'Idle', fontSize: 24);
   final window = Window(
     title: 'DUI — frame benchmark',
     width: 480,

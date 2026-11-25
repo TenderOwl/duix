@@ -34,9 +34,9 @@ void main() {
     expect(() => layout.hitTest(const Point(0, 0)), throwsStateError);
   });
 
-  test('TextBlock reuses layout and invalidates every cache input', () async {
+  test('Label reuses layout and invalidates every cache input', () async {
     final factory = _CountingTextLayoutFactory();
-    final text = TextBlock(text: 'first');
+    final text = Label(text: 'first');
     final window = Window(
       width: 200,
       height: 100,
@@ -84,8 +84,8 @@ void main() {
     expect(last.isDisposed, isTrue);
   });
 
-  test('TextBlock measurement respects available width', () {
-    final text = TextBlock(text: 'aaaa', fontSize: 10);
+  test('Label measurement respects available width', () {
+    final text = Label(text: 'aaaa', fontSize: 10);
 
     final size = text.measure(const Size(12, 100));
 

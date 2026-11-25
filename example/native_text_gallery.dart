@@ -22,11 +22,11 @@ Future<void> main(List<String> args) async {
         spacing: 9,
         padding: const EdgeInsets.all(24),
         children: [
-          TextBlock(
+          Label(
             text: 'SkParagraph Unicode and HiDPI gallery',
             fontSize: 28,
           ),
-          TextBlock(
+          Label(
             text:
                 'Every sample uses the same layout for measurement and drawing.',
             fontSize: 14,
@@ -55,12 +55,12 @@ Future<void> main(List<String> args) async {
               'Long строка 🚀 中文 with mixed scripts',
             ).join(' '),
           ),
-          TextBlock(
+          Label(
             text: 'Centered alignment — выравнивание по центру',
             fontSize: 20,
             alignment: TextAlignment.center,
           ),
-          TextBlock(
+          Label(
             text: 'End alignment — выравнивание по концу',
             fontSize: 20,
             alignment: TextAlignment.end,
@@ -107,11 +107,11 @@ Future<void> main(List<String> args) async {
 UIElement _sample(String label, String text, {String? note}) => StackPanel(
       spacing: 2,
       children: [
-        TextBlock(
+        Label(
           text: note == null ? label : '$label — $note',
           fontSize: 12,
           color: const Color(0xFF555555),
         ),
-        TextBlock(text: text, fontSize: 20),
+        Label(text: text, fontSize: 20),
       ],
     );

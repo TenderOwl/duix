@@ -6,8 +6,8 @@ import 'properties.dart';
 import 'text_layout.dart';
 import 'ui_element.dart';
 
-final class TextBlock extends Control {
-  TextBlock({
+final class Label extends Control {
+  Label({
     String text = '',
     double fontSize = 14,
     Color color = Colors.black,
@@ -18,19 +18,19 @@ final class TextBlock extends Control {
     setValue(colorProperty, color);
   }
 
-  static const textProperty = DuiProperty<TextBlock, String>(
+  static const textProperty = DuiProperty<Label, String>(
     name: 'text',
     defaultValue: '',
     affectsMeasure: true,
     affectsPaint: true,
   );
-  static const fontSizeProperty = DuiProperty<TextBlock, double>(
+  static const fontSizeProperty = DuiProperty<Label, double>(
     name: 'fontSize',
     defaultValue: 14,
     affectsMeasure: true,
     affectsPaint: true,
   );
-  static const colorProperty = DuiProperty<TextBlock, Color>(
+  static const colorProperty = DuiProperty<Label, Color>(
     name: 'color',
     defaultValue: Colors.black,
     affectsPaint: true,

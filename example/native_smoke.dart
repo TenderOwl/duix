@@ -15,7 +15,7 @@ Future<void> main(List<String> args) async {
     application = Application(host: host);
     var activations = 0;
     final button = Button(
-      content: TextBlock(text: 'Space / Enter', fontSize: 16),
+      content: Label(text: 'Space / Enter', fontSize: 16),
       onClick: () => activations++,
     );
     window = Window(
@@ -26,7 +26,7 @@ Future<void> main(List<String> args) async {
         spacing: 12,
         padding: const EdgeInsets.all(20),
         children: [
-          TextBlock(text: 'Native smoke test', fontSize: 20),
+          Label(text: 'Native smoke test', fontSize: 20),
           button,
         ],
       ),

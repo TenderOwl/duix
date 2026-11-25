@@ -26,7 +26,7 @@ void main() {
         () {
       final disabled = Button()..isEnabled = false;
       final invisible = Button()..isVisible = false;
-      final text = TextBlock(text: 'not focusable');
+      final text = Label(text: 'not focusable');
       final window = Window(
         content: StackPanel(children: [disabled, invisible, text]),
       );

@@ -5,10 +5,10 @@ void main() {
   group('bindings', () {
     test('one-way binding updates the existing control', () {
       final source = ObservableValue<String>('first');
-      final text = TextBlock();
+      final text = Label();
       final identity = text;
 
-      text.bind(TextBlock.textProperty, source.asBinding());
+      text.bind(Label.textProperty, source.asBinding());
       source.value = 'second';
 
       expect(text.text, 'second');
@@ -17,8 +17,7 @@ void main() {
 
     test('property changes contain correct previous values', () {
       final source = ObservableValue<String>('a');
-      final text = TextBlock()
-        ..bind(TextBlock.textProperty, source.asBinding());
+      final text = Label()..bind(Label.textProperty, source.asBinding());
       final changes = <String>[];
       text.addPropertyListener((event) {
         changes.add('${event.oldValue}->${event.newValue}');
@@ -48,9 +47,8 @@ void main() {
 
     test('cancelling a subscription stops updates', () {
       final source = ObservableValue<String>('a');
-      final text = TextBlock();
-      final subscription =
-          text.bind(TextBlock.textProperty, source.asBinding());
+      final text = Label();
+      final subscription = text.bind(Label.textProperty, source.asBinding());
 
       subscription.cancel();
       text.text = 'local';

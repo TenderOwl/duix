@@ -86,7 +86,7 @@ Skia canvas масштабируется через `displayScale`. Backbuffer �
 
 - `Application`, `Window`, `WindowHost`;
 - `UIElement`, `Control`, `ContentControl`, `Panel`;
-- `TextBlock`, `TextBox`, `Button`, `Border`, `StackPanel`;
+- `Label`, `TextBox`, `Button`, `Border`, `StackPanel`;
 - постоянное дерево и lifecycle mount/unmount;
 - `DuiProperty`;
 - `ObservableValue`;
@@ -117,7 +117,7 @@ Skia canvas масштабируется через `displayScale`. Backbuffer �
 - opaque `DuiTextLayout` и C ABI для create/destroy, measure, draw, hit test, caret и selection;
 - Dart FFI bindings для native text layout с UTF-16 offsets и caller-owned output buffers;
 - `NativeTextLayoutFactory` поверх SkParagraph и `HeadlessTextLayoutFactory` для unit-тестов;
-- `TextBlock` использует кэшированный `TextLayout` для measurement и drawing, освобождает его при замене и unmount;
+- `Label` использует кэшированный `TextLayout` для measurement и drawing, освобождает его при замене и unmount;
 - Unicode/HiDPI-матрица native text layout с проверками measurement, hit test, caret, selection и масштабов 1.0/1.25/1.5/2.0;
 - интерактивная галерея `example/native_text_gallery.dart` с автоматическим smoke-режимом;
 - интерактивный пример `example/native_textbox.dart` с тремя полями, Unicode, two-way binding preview, mouse/keyboard/clipboard/IME подсказками и smoke-режимом;
@@ -149,15 +149,15 @@ Skia canvas масштабируется через `displayScale`. Backbuffer �
 
 - Нативный пример запускается.
 - Заголовок и кнопка видимы.
-- Нажатие кнопки обновляет существующий `TextBlock`.
-- Идентичность `TextBlock` сохраняется.
+- Нажатие кнопки обновляет существующий `Label`.
+- Идентичность `Label` сохраняется.
 - Белый фон окна отображается корректно.
 - HiDPI-масштабирование подтверждено на 4K-дисплее.
 - `dart analyze` проходит без замечаний.
 - Все 117 Dart-тестов проходят, включая render/clipping, native clip ABI, render-on-demand, async scheduler и восстановление прежнего Windows clipboard.
-- Повторный `presentWindow()` без invalidate не увеличивает render/present counters; изменение `TextBlock.text` планирует ровно один следующий кадр. SDL expose/resize могут законно запланировать дополнительный кадр.
+- Повторный `presentWindow()` без invalidate не увеличивает render/present counters; изменение `Label.text` планирует ровно один следующий кадр. SDL expose/resize могут законно запланировать дополнительный кадр.
 - Несколько invalidate до кадра увеличивают `scheduled` и вызывают wake-up только один раз; `layout` и `painted` увеличиваются на каждом обработанном кадре, а пустой `renderFrame()` ничего не рисует.
-- Native integration-тест подтверждает `Timer → TextBlock.text → invalidate`: от стабильного baseline добавляется ровно один scheduled/layout/painted/presented.
+- Native integration-тест подтверждает `Timer → Label.text → invalidate`: от стабильного baseline добавляется ровно один scheduled/layout/painted/presented.
 - Рекурсивный `Window.updateLayout()` во время measure выбрасывает `StateError`, сбрасывает guard через `finally` и не мешает следующему нормальному кадру.
 - Два последовательных benchmark-запуска на Windows дали idle process CPU 1.54% и 1.53% за примерно 1 с, без новых кадров после стартовых `scheduled/layout/painted/presented=2/2/2/2`.
 - Каждый запуск выполнил 60 async updates ровно за 60 кадров; итоговые counters 62/62/62/62. Медианная invalidate→present latency 16.49 и 16.28 мс, максимум 16.98 и 17.10 мс; средняя latency зависит от фазы таймера и составила 15.48 и 12.05 мс.
@@ -177,7 +177,7 @@ Skia canvas масштабируется через `displayScale`. Backbuffer �
 - Composition видна до commit, не меняет `TextBuffer`/binding, поддерживает CJK/emoji selection range и кириллицу без selection; пустой editing event, focus loss, unmount и editing commands очищают её.
 - Матрица проверяет ASCII, кириллицу, emoji, CJK, Arabic, Hebrew, multiline, пустую и очень длинную строки, а также стабильность logical metrics на масштабах 1.0, 1.25, 1.5 и 2.0.
 - Пустая строка имеет нулевую ширину и конечные неотрицательные metrics; учтён допустимый glyph overhang tight selection boxes за пределами advance width.
-- `TextBlock` на Windows получает реальные SkParagraph metrics, переносит длинный текст по доступной ширине и рисует тот же native layout.
+- `Label` на Windows получает реальные SkParagraph metrics, переносит длинный текст по доступной ширине и рисует тот же native layout.
 - Цвет не пересоздаёт layout; text, fontSize, alignment, maxWidth, scale и factory вызывают замену с disposal предыдущего layout.
 - Native text handles измеряют ASCII, кириллицу и emoji, возвращают UTF-16 hit-test/caret/selection geometry и рисуются в активном SDL/Skia frame.
 - Полный `python tools/bootstrap_native.py` успешно пересобирает Skia/SkParagraph и native library.
@@ -201,7 +201,7 @@ lib/src/ui_element.dart              — UIElement, Control и WindowHost lifecy
 lib/src/controls.dart                — compatibility barrel для контролов
 lib/src/content_control.dart         — ContentControl
 lib/src/button.dart                  — Button
-lib/src/text_block.dart              — TextBlock
+lib/src/label.dart              — Label
 lib/src/text_box.dart                — TextBox, editing, scrolling и IME
 lib/src/border.dart                  — Border
 lib/src/colors.dart                  — Colors
@@ -355,7 +355,7 @@ abstract interface class TextLayout {
 
 Требования:
 
-- [x] `TextBlock` не рассчитывает ширину по числу символов.
+- [x] `Label` не рассчитывает ширину по числу символов.
 - [x] Текстовая раскладка кэшируется.
 - [x] Cache invalidation происходит при изменении text, font, fontSize, width и scale.
 - [x] `TextLayout` не становится публичной Skia-сущностью.
@@ -404,7 +404,7 @@ text_layout_selection_rects
 - [x] Возвращать простые структуры с `struct_size`.
 - [x] Обрабатывать ошибки без C++ exceptions за ABI boundary.
 
-## 1.4. Перевести `TextBlock` на `TextLayout`
+## 1.4. Перевести `Label` на `TextLayout`
 
 - [x] Получить реальные `width`, `height` и baseline.
 - [x] Учитывать доступную ширину в `measureCore()`.
@@ -749,6 +749,25 @@ default < inherited < style < binding < local < animation
 ---
 
 ## 9. Журнал работ
+
+### 2026-11-25 — переименование TextBlock в Label
+
+Сделано:
+
+- Readonly-текстовый контрол полностью переименован из `TextBlock` в `Label`, чтобы явно отличать его от редактируемого `TextBox`.
+- `lib/src/text_block.dart` переименован в `lib/src/label.dart`, тест — в `test/label_layout_test.dart`; exports, bindings, примеры и все тесты используют `Label`.
+- Compatibility alias специально не сохранён: публичный API содержит только однозначное имя `Label`.
+- Текущие разделы плана обновлены; прежние записи журнала сохранены как историческая терминология соответствующих этапов.
+
+Проверено:
+
+- Поиск по Dart-коду не находит `TextBlock` или `text_block`.
+- `dart format`, `dart analyze` — без замечаний.
+- Полный `dart test` — все 117 тестов проходят.
+
+Следующий шаг:
+
+- Этап 5.1: min/max constraints, margin, alignment и infinite constraints native text layout.
 
 ### 2026-11-25 — этап 4.3, профилирование и кэширование
 

@@ -184,9 +184,9 @@ void main() {
     }
   });
 
-  test('TextBlock uses native measurement, wrapping and drawing', () async {
+  test('Label uses native measurement, wrapping and drawing', () async {
     final host = await SdlSkiaHost.initialize();
-    final text = TextBlock(
+    final text = Label(
       text: 'Native measurement',
       fontSize: 16,
     );
@@ -215,7 +215,7 @@ void main() {
 
   test('unchanged windows skip render and present until invalidated', () async {
     final host = await SdlSkiaHost.initialize(diagnosticsEnabled: true);
-    final text = TextBlock(text: 'Initial');
+    final text = Label(text: 'Initial');
     final window = Window(width: 320, height: 200, content: text);
     try {
       await host.showWindow(window);
@@ -249,7 +249,7 @@ void main() {
   test('async Dart invalidation wakes the scheduler and renders one frame',
       () async {
     final host = await SdlSkiaHost.initialize(diagnosticsEnabled: true);
-    final text = TextBlock(text: 'Initial');
+    final text = Label(text: 'Initial');
     final window = Window(width: 320, height: 200, content: text);
     try {
       await host.showWindow(window);

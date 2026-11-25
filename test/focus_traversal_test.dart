@@ -40,7 +40,7 @@ void main() {
       final window = Window(
         content: StackPanel(
           children: [
-            TextBlock(text: 'not focusable'),
+            Label(text: 'not focusable'),
             Button()..isEnabled = false,
             Button()..isVisible = false,
             StackPanel(children: [hiddenChild])..isVisible = false,
@@ -61,7 +61,7 @@ void main() {
     test('does nothing when no control can receive focus', () {
       final window = Window(
         content: StackPanel(
-          children: [TextBlock(text: 'label'), Button()..isEnabled = false],
+          children: [Label(text: 'label'), Button()..isEnabled = false],
         ),
       );
 

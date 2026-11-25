@@ -4,7 +4,7 @@ import 'package:test/test.dart';
 void main() {
   test('scheduler coalesces invalidations and separates layout from paint',
       () async {
-    final text = TextBlock(text: 'Initial');
+    final text = Label(text: 'Initial');
     final window = Window(width: 200, height: 100, content: text);
     var wakeUps = 0;
     window.setFrameRequestHandler(() => wakeUps++);
@@ -50,7 +50,7 @@ void main() {
   });
 
   test('invalidate during paint preserves the next scheduled frame', () async {
-    final text = TextBlock(text: 'Initial');
+    final text = Label(text: 'Initial');
     final window = Window(content: text);
     await window.show();
     window.renderFrame(RecordingDrawingContext());
@@ -82,7 +82,7 @@ void main() {
     );
     expect(window.layoutPassCount, 0);
 
-    window.content = TextBlock(text: 'Recovered');
+    window.content = Label(text: 'Recovered');
     window.renderFrame(RecordingDrawingContext());
     expect(window.layoutPassCount, 1);
     expect(window.paintPassCount, 1);

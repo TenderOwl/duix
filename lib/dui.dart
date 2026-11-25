@@ -15,7 +15,7 @@ export 'src/panel.dart';
 export 'src/properties.dart';
 export 'src/recording_renderer.dart';
 export 'src/stack_panel.dart';
-export 'src/text_block.dart';
+export 'src/label.dart';
 export 'src/text_box.dart';
 export 'src/text_buffer.dart';
 export 'src/text_layout.dart';

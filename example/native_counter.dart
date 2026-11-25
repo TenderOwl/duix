@@ -9,9 +9,9 @@ Future<void> main(List<String> args) async {
   );
   final counter = ObservableValue<int>(0);
 
-  final title = TextBlock(fontSize: 24)
+  final title = Label(fontSize: 24)
     ..bind(
-      TextBlock.textProperty,
+      Label.textProperty,
       counter.map((value) => 'Нажатий: $value').asBinding(),
     );
 
@@ -25,7 +25,7 @@ Future<void> main(List<String> args) async {
       children: [
         title,
         Button(
-          content: TextBlock(text: 'Увеличить', fontSize: 16),
+          content: Label(text: 'Увеличить', fontSize: 16),
           onClick: () => counter.value++,
         ),
       ],

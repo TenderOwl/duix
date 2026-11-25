@@ -4,13 +4,13 @@ import 'package:test/test.dart';
 void main() {
   test('click updates binding and recording renderer output', () async {
     final counter = ObservableValue<int>(0);
-    final title = TextBlock()
+    final title = Label()
       ..bind(
-        TextBlock.textProperty,
+        Label.textProperty,
         counter.map((value) => 'Count: $value').asBinding(),
       );
     final button = Button(
-      content: TextBlock(text: 'Increment'),
+      content: Label(text: 'Increment'),
       onClick: () => counter.value++,
     );
     final window = Window(
@@ -49,7 +49,7 @@ void main() {
   });
 
   test('window tracks native display scale changes', () {
-    final window = Window(content: TextBlock(text: 'HiDPI'));
+    final window = Window(content: Label(text: 'HiDPI'));
     final changes = <double>[];
     window.addPropertyListener((event) {
       if (event.property == 'devicePixelRatio') {

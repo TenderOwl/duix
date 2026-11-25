@@ -3,7 +3,7 @@ import 'package:test/test.dart';
 
 void main() {
   test('children receive parent and window lifecycle', () async {
-    final child = TextBlock(text: 'child');
+    final child = Label(text: 'child');
     final panel = StackPanel();
     final window = Window(content: panel);
     await window.show();
@@ -21,15 +21,15 @@ void main() {
   });
 
   test('an element cannot have two parents', () {
-    final child = TextBlock();
+    final child = Label();
     StackPanel(children: [child]);
 
     expect(() => StackPanel(children: [child]), throwsStateError);
   });
 
   test('StackPanel measures and arranges children vertically', () {
-    final first = TextBlock(text: 'a', fontSize: 10);
-    final second = TextBlock(text: 'b', fontSize: 10);
+    final first = Label(text: 'a', fontSize: 10);
+    final second = Label(text: 'b', fontSize: 10);
     final panel = StackPanel(spacing: 5, children: [first, second]);
 
     panel.measure(const Size(200, 200));

@@ -3,7 +3,7 @@ import 'package:test/test.dart';
 
 void main() {
   test('events tunnel and bubble through the retained tree', () async {
-    final child = TextBlock(text: 'target');
+    final child = Label(text: 'target');
     final root = StackPanel(children: [child]);
     final window = Window(width: 200, height: 100, content: root);
     await window.show();
@@ -28,7 +28,7 @@ void main() {
   });
 
   test('handled event stops bubbling', () async {
-    final child = TextBlock(text: 'target');
+    final child = Label(text: 'target');
     final root = StackPanel(children: [child]);
     final window = Window(width: 200, height: 100, content: root);
     await window.show();

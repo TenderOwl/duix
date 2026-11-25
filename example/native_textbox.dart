@@ -20,9 +20,9 @@ Future<void> main(List<String> args) async {
         source.asBinding(),
         mode: BindingMode.twoWay,
       );
-    final bindingPreview = TextBlock(fontSize: 18)
+    final bindingPreview = Label(fontSize: 18)
       ..bind(
-        TextBlock.textProperty,
+        Label.textProperty,
         source.map((value) => 'Two-way binding: $value').asBinding(),
       );
 
@@ -35,18 +35,18 @@ Future<void> main(List<String> args) async {
         spacing: 14,
         padding: const EdgeInsets.all(24),
         children: [
-          TextBlock(text: 'TextBox editing', fontSize: 28),
-          TextBlock(
+          Label(text: 'TextBox editing', fontSize: 28),
+          Label(
             text: 'Click to place the caret. Drag to select, including '
                 'outside the field.',
             fontSize: 16,
             color: const Color(0xFF555555),
           ),
-          TextBlock(
+          Label(
             text: 'Left/Right · Home/End · Shift+arrows · Ctrl/Cmd+arrows',
             fontSize: 16,
           ),
-          TextBlock(
+          Label(
             text: 'Ctrl/Cmd+A · Ctrl/Cmd+C/X/V · Backspace/Delete',
             fontSize: 16,
           ),
@@ -69,7 +69,7 @@ Future<void> main(List<String> args) async {
             padding: const EdgeInsets.all(4),
             content: TextBox(),
           ),
-          TextBlock(
+          Label(
             text: 'Selection and caret are visible. IME composition is '
                 'underlined; long text is clipped to the field.',
             fontSize: 14,
@@ -167,7 +167,7 @@ Future<void> main(List<String> args) async {
   }
 }
 
-TextBlock _fieldLabel(String text) => TextBlock(
+Label _fieldLabel(String text) => Label(
       text: text,
       fontSize: 14,
       color: const Color(0xFF555555),

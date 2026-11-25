@@ -6,7 +6,7 @@ const _focusRingColor = 0xFF356AC3;
 void main() {
   group('focus rendering', () {
     test('Button draws a focus ring only while focused', () async {
-      final button = Button(content: TextBlock(text: 'Action'));
+      final button = Button(content: Label(text: 'Action'));
       final window = Window(width: 120, height: 50, content: button);
       await window.show();
 
