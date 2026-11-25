@@ -1,4 +1,4 @@
-import 'package:dui_retained/dui.dart';
+import 'package:duix/dui.dart';
 import 'package:test/test.dart';
 
 void main() {

@@ -45,6 +45,7 @@ final class Window extends ObservableObject implements WindowHost {
   String _title;
   Size _logicalSize;
   Color _background;
+  double _devicePixelRatio = 1;
   UIElement? _content;
   Control? _focused;
   bool _frameScheduled = false;
@@ -68,10 +69,19 @@ final class Window extends ObservableObject implements WindowHost {
   }
 
   Size get logicalSize => _logicalSize;
-  double get devicePixelRatio => 1;
+  double get devicePixelRatio => _devicePixelRatio;
   bool get isVisible => _isVisible;
   Control? get focusedElement => _focused;
   bool get frameScheduled => _frameScheduled;
+
+  void updateDevicePixelRatio(double value) {
+    if (value <= 0 || value == _devicePixelRatio) return;
+    final oldValue = _devicePixelRatio;
+    _devicePixelRatio = value;
+    _content?.invalidateMeasure();
+    requestFrame();
+    notifyPropertyChanged('devicePixelRatio', oldValue, value);
+  }
 
   UIElement? get content => _content;
   set content(UIElement? value) {

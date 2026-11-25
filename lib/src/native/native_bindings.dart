@@ -37,6 +37,23 @@ final class DuiEventStruct extends Struct {
   external Pointer<Utf8> textUtf8;
 }
 
+final class DuiWindowMetricsStruct extends Struct {
+  @Uint32()
+  external int structSize;
+
+  @Int32()
+  external int physicalWidth;
+
+  @Int32()
+  external int physicalHeight;
+
+  @Double()
+  external double displayScale;
+
+  @Double()
+  external double pixelDensity;
+}
+
 final class NativeEvent {
   const NativeEvent({
     required this.type,
@@ -59,6 +76,20 @@ final class NativeEvent {
   final String? text;
 }
 
+final class NativeWindowMetrics {
+  const NativeWindowMetrics({
+    required this.physicalWidth,
+    required this.physicalHeight,
+    required this.displayScale,
+    required this.pixelDensity,
+  });
+
+  final int physicalWidth;
+  final int physicalHeight;
+  final double displayScale;
+  final double pixelDensity;
+}
+
 typedef _AbiVersionNative = Uint32 Function();
 typedef _LastErrorNative = Pointer<Utf8> Function();
 typedef _HostCreateNative = Pointer<DuiHostOpaque> Function();
@@ -78,6 +109,11 @@ typedef _WindowDestroyNative = Void Function(
   Pointer<DuiWindowOpaque>,
 );
 typedef _WindowIdNative = Uint64 Function(Pointer<DuiWindowOpaque>);
+typedef _WindowContentScaleNative = Double Function(Pointer<DuiWindowOpaque>);
+typedef _WindowMetricsNative = Int32 Function(
+  Pointer<DuiWindowOpaque>,
+  Pointer<DuiWindowMetricsStruct>,
+);
 typedef _WindowBackgroundNative = Void Function(
   Pointer<DuiWindowOpaque>,
   Uint32,
@@ -120,6 +156,11 @@ typedef _WindowDestroyDart = void Function(
   Pointer<DuiWindowOpaque>,
 );
 typedef _WindowIdDart = int Function(Pointer<DuiWindowOpaque>);
+typedef _WindowContentScaleDart = double Function(Pointer<DuiWindowOpaque>);
+typedef _WindowMetricsDart = int Function(
+  Pointer<DuiWindowOpaque>,
+  Pointer<DuiWindowMetricsStruct>,
+);
 typedef _WindowBackgroundDart = void Function(Pointer<DuiWindowOpaque>, int);
 typedef _FrameDart = int Function(Pointer<DuiWindowOpaque>);
 typedef _DrawRectDart = void Function(
@@ -170,6 +211,14 @@ final class NativeBindings {
         windowGetId = library.lookupFunction<_WindowIdNative, _WindowIdDart>(
           'dui_window_get_id',
         ),
+        windowGetContentScale = library
+            .lookupFunction<_WindowContentScaleNative, _WindowContentScaleDart>(
+          'dui_window_get_content_scale',
+        ),
+        _windowGetMetrics =
+            library.lookupFunction<_WindowMetricsNative, _WindowMetricsDart>(
+          'dui_window_get_metrics',
+        ),
         windowSetBackground = library
             .lookupFunction<_WindowBackgroundNative, _WindowBackgroundDart>(
           'dui_window_set_background',
@@ -199,6 +248,8 @@ final class NativeBindings {
   final _WindowCreateDart windowCreate;
   final _WindowDestroyDart windowDestroy;
   final _WindowIdDart windowGetId;
+  final _WindowContentScaleDart windowGetContentScale;
+  final _WindowMetricsDart _windowGetMetrics;
   final _WindowBackgroundDart windowSetBackground;
   final _FrameDart windowBeginFrame;
   final _DrawRectDart drawRect;
@@ -210,6 +261,21 @@ final class NativeBindings {
     return pointer == nullptr
         ? 'Unknown native error.'
         : pointer.toDartString();
+  }
+
+  NativeWindowMetrics windowMetrics(
+      Pointer<DuiWindowOpaque> window, Arena arena) {
+    final metrics = arena<DuiWindowMetricsStruct>();
+    if (_windowGetMetrics(window, metrics) == 0) {
+      throw StateError('Could not read native window metrics: $lastError');
+    }
+    final value = metrics.ref;
+    return NativeWindowMetrics(
+      physicalWidth: value.physicalWidth,
+      physicalHeight: value.physicalHeight,
+      displayScale: value.displayScale,
+      pixelDensity: value.pixelDensity,
+    );
   }
 
   NativeEvent? nextEvent(Pointer<DuiHostOpaque> host, Arena arena) {

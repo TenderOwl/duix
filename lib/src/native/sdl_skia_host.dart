@@ -14,26 +14,86 @@ final class _NativeWindowSession {
   final Pointer<DuiWindowOpaque> pointer;
   final int id;
   bool open = true;
+  int renderFrameCount = 0;
+  int presentCount = 0;
+}
+
+final class NativeWindowDiagnostics {
+  const NativeWindowDiagnostics({
+    required this.displayScale,
+    required this.pixelDensity,
+    required this.logicalWidth,
+    required this.logicalHeight,
+    required this.physicalWidth,
+    required this.physicalHeight,
+    required this.renderFrameCount,
+    required this.presentCount,
+  });
+
+  final double displayScale;
+  final double pixelDensity;
+  final double logicalWidth;
+  final double logicalHeight;
+  final int physicalWidth;
+  final int physicalHeight;
+  final int renderFrameCount;
+  final int presentCount;
+
+  @override
+  String toString() {
+    return 'Native diagnostics: displayScale=$displayScale, '
+        'pixelDensity=$pixelDensity, '
+        'logical=${logicalWidth}x$logicalHeight, '
+        'physical=${physicalWidth}x$physicalHeight, '
+        'renderFrame=$renderFrameCount, present=$presentCount';
+  }
 }
 
 final class SdlSkiaHost implements NativeHost {
-  SdlSkiaHost._(this.bindings) : _host = bindings.hostCreate() {
+  SdlSkiaHost._(this.bindings, {required this.diagnosticsEnabled})
+      : _host = bindings.hostCreate() {
     if (_host == nullptr) {
       throw StateError('Could not create SDL host: ${bindings.lastError}');
     }
   }
 
   final NativeBindings bindings;
+  final bool diagnosticsEnabled;
   final Pointer<DuiHostOpaque> _host;
   final _sessions = <Window, _NativeWindowSession>{};
   final _windowsById = <int, Window>{};
   bool _disposed = false;
 
-  static Future<SdlSkiaHost> initialize({String? libraryPath}) async {
-    return SdlSkiaHost._(NativeBindings.open(libraryPath: libraryPath));
+  static Future<SdlSkiaHost> initialize({
+    String? libraryPath,
+    bool diagnosticsEnabled = false,
+  }) async {
+    return SdlSkiaHost._(
+      NativeBindings.open(libraryPath: libraryPath),
+      diagnosticsEnabled: diagnosticsEnabled,
+    );
   }
 
   bool isOpen(Window window) => _sessions[window]?.open ?? false;
+
+  NativeWindowDiagnostics? diagnosticsFor(Window window) {
+    if (!diagnosticsEnabled) return null;
+    final session = _sessions[window];
+    if (session == null || !session.open) return null;
+    return using((arena) {
+      final metrics = bindings.windowMetrics(session.pointer, arena);
+      return NativeWindowDiagnostics(
+        displayScale: metrics.displayScale,
+        pixelDensity: metrics.pixelDensity,
+        logicalWidth: window.logicalSize.width,
+        logicalHeight: window.logicalSize.height,
+        physicalWidth: metrics.physicalWidth,
+        physicalHeight: metrics.physicalHeight,
+        renderFrameCount: session.renderFrameCount,
+        presentCount: session.presentCount,
+      );
+    });
+  }
 
   @override
   Future<void> showWindow(Window window) async {
@@ -81,17 +141,22 @@ final class SdlSkiaHost implements NativeHost {
     _checkNotDisposed();
     final session = _sessions[window];
     if (session == null || !session.open || !window.isVisible) return;
+    window.updateDevicePixelRatio(
+      bindings.windowGetContentScale(session.pointer),
+    );
     bindings.windowSetBackground(session.pointer, window.background.value);
     if (bindings.windowBeginFrame(session.pointer) == 0) {
       throw StateError('Could not begin native frame: ${bindings.lastError}');
     }
     try {
+      session.renderFrameCount++;
       window.renderFrame(NativeDrawingContext(bindings, session.pointer));
     } finally {
       if (bindings.windowPresent(session.pointer) == 0) {
         throw StateError(
             'Could not present native frame: ${bindings.lastError}');
       }
+      session.presentCount++;
     }
   }
 

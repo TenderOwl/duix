@@ -40,6 +40,14 @@ typedef struct DuiEvent {
   const char* text_utf8;
 } DuiEvent;
 
+typedef struct DuiWindowMetrics {
+  uint32_t struct_size;
+  int32_t physical_width;
+  int32_t physical_height;
+  double display_scale;
+  double pixel_density;
+} DuiWindowMetrics;
+
 DUI_API uint32_t dui_abi_version(void);
 DUI_API const char* dui_last_error_message(void);
 
@@ -54,6 +62,10 @@ DUI_API DuiWindow* dui_window_create(
     int32_t height);
 DUI_API void dui_window_destroy(DuiHost* host, DuiWindow* window);
 DUI_API uint64_t dui_window_get_id(const DuiWindow* window);
+DUI_API double dui_window_get_content_scale(const DuiWindow* window);
+DUI_API int32_t dui_window_get_metrics(
+    const DuiWindow* window,
+    DuiWindowMetrics* out_metrics);
 DUI_API void dui_window_set_background(DuiWindow* window, uint32_t rgba);
 
 DUI_API int32_t dui_window_begin_frame(DuiWindow* window);

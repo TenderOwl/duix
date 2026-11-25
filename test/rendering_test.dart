@@ -1,4 +1,4 @@
-import 'package:dui_retained/dui.dart';
+import 'package:duix/dui.dart';
 import 'package:test/test.dart';
 
 void main() {
@@ -45,6 +45,25 @@ void main() {
 
     window.background = const Color(0xFF202020);
     expect(window.background.value, 0xFF202020);
+    expect(window.frameScheduled, isTrue);
+  });
+
+  test('window tracks native display scale changes', () {
+    final window = Window(content: TextBlock(text: 'HiDPI'));
+    final changes = <double>[];
+    window.addPropertyListener((event) {
+      if (event.property == 'devicePixelRatio') {
+        changes.add(event.newValue! as double);
+      }
+    });
+
+    window.updateDevicePixelRatio(2);
+    window.updateDevicePixelRatio(2);
+    window.updateDevicePixelRatio(1.25);
+    window.updateDevicePixelRatio(0);
+
+    expect(window.devicePixelRatio, 1.25);
+    expect(changes, [2, 1.25]);
     expect(window.frameScheduled, isTrue);
   });
 }

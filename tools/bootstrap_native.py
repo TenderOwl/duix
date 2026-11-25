@@ -78,6 +78,7 @@ def target_cpu() -> str:
 def build_sdl() -> Path:
     clone_pinned("https://github.com/libsdl-org/SDL.git", SDL_VERSION, SDL_SOURCE)
     build = DEPS / "build" / "SDL"
+    prepare_cmake_build(build, SDL_SOURCE)
     command = [
         "cmake",
         "-S",
@@ -113,6 +114,33 @@ def remove_generated_tree(directory: Path) -> None:
         function(path)
 
     shutil.rmtree(directory, onexc=make_writable)
+
+
+def prepare_cmake_build(build: Path, source: Path) -> None:
+    """Discard a CMake build tree generated at a different location."""
+    cache = build / "CMakeCache.txt"
+    if not cache.exists():
+        return
+
+    cached_paths: dict[str, str] = {}
+    for line in cache.read_text(encoding="utf-8", errors="replace").splitlines():
+        match = re.match(r"^(CMAKE_CACHEFILE_DIR|CMAKE_HOME_DIRECTORY):[^=]+=(.*)$", line)
+        if match:
+            cached_paths[match.group(1)] = match.group(2)
+
+    expected = {
+        "CMAKE_CACHEFILE_DIR": build,
+        "CMAKE_HOME_DIRECTORY": source,
+    }
+    relocated = any(
+        key in cached_paths
+        and os.path.normcase(os.path.normpath(cached_paths[key]))
+        != os.path.normcase(os.path.normpath(os.fspath(path)))
+        for key, path in expected.items()
+    )
+    if relocated:
+        print(f"Removing CMake cache from the previous project location: {build}")
+        remove_generated_tree(build)
 
 
 def repair_skia_dependencies() -> None:
@@ -201,6 +229,7 @@ def skia_extra_libraries() -> str:
 
 
 def build_native(sdl_dir: Path, skia_library: Path) -> Path:
+    prepare_cmake_build(NATIVE_BUILD, ROOT / "native")
     command = [
         "cmake",
         "-S",
@@ -232,19 +261,23 @@ def build_native(sdl_dir: Path, skia_library: Path) -> Path:
     return library
 
 
-def run_example(library: Path, dart: str | None) -> None:
+def run_example(
+    library: Path,
+    dart: str | None,
+    smoke: bool = False,
+    diagnostics: bool = False,
+) -> None:
     executable = dart or shutil.which("dart")
     if not executable:
         raise RuntimeError("Dart SDK was not found. Pass --dart <path-to-dart>.")
     environment = os.environ.copy()
     environment["DUI_NATIVE_LIBRARY"] = str(library)
-    print("\n+ dart run example/native_counter.dart", flush=True)
-    subprocess.run(
-        [executable, "run", "example/native_counter.dart"],
-        cwd=ROOT,
-        env=environment,
-        check=True,
-    )
+    example = "native_smoke.dart" if smoke else "native_counter.dart"
+    command = [executable, "run", f"example/{example}"]
+    if diagnostics:
+        command.append("--diagnostics")
+    print("\n+ " + " ".join(command[1:]), flush=True)
+    subprocess.run(command, cwd=ROOT, env=environment, check=True)
 
 
 def main() -> int:
@@ -252,6 +285,16 @@ def main() -> int:
     parser.add_argument("--check", action="store_true", help="check tools without building")
     parser.add_argument("--skip-native", action="store_true", help="build dependencies only")
     parser.add_argument("--run", action="store_true", help="run the native counter example")
+    parser.add_argument(
+        "--smoke",
+        action="store_true",
+        help="run the native smoke example with automatic shutdown",
+    )
+    parser.add_argument(
+        "--diagnostics",
+        action="store_true",
+        help="print one native metrics snapshot when running an example",
+    )
     parser.add_argument(
         "--repair",
         action="store_true",
@@ -272,8 +315,13 @@ def main() -> int:
             return 0
         library = build_native(sdl_dir, skia_library)
         print(f"\nNative library: {library}")
-        if args.run:
-            run_example(library, args.dart)
+        if args.run or args.smoke:
+            run_example(
+                library,
+                args.dart,
+                smoke=args.smoke,
+                diagnostics=args.diagnostics,
+            )
         return 0
     except (RuntimeError, subprocess.CalledProcessError) as error:
         print(f"\nERROR: {error}", file=sys.stderr)

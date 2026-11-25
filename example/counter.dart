@@ -1,4 +1,4 @@
-import 'package:dui_retained/dui.dart';
+import 'package:duix/dui.dart';
 
 final class MemoryHost implements NativeHost {
   @override

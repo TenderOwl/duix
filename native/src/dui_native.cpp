@@ -18,6 +18,7 @@
 #endif
 
 #include <algorithm>
+#include <cmath>
 #include <cstring>
 #include <memory>
 #include <new>
@@ -54,6 +55,24 @@ void clear_error() { last_error.clear(); }
 void set_error(const char* message) { last_error = message; }
 
 void set_sdl_error() { last_error = SDL_GetError(); }
+
+double window_pixel_density(SDL_Window* window) {
+  const float value = window ? SDL_GetWindowPixelDensity(window) : 1.0f;
+  return value > 0 ? value : 1.0;
+}
+
+double window_display_scale(SDL_Window* window) {
+  const float value = window ? SDL_GetWindowDisplayScale(window) : 1.0f;
+  return value > 0 ? value : 1.0;
+}
+
+double window_units_to_content(SDL_Window* window, double value) {
+  return value * window_pixel_density(window) / window_display_scale(window);
+}
+
+double content_to_window_units(SDL_Window* window, double value) {
+  return value * window_display_scale(window) / window_pixel_density(window);
+}
 
 bool ensure_surface(DuiWindow* window) {
   int width = 0;
@@ -172,28 +191,36 @@ int32_t dui_host_next_event(DuiHost* host, DuiEvent* out_event) {
       out_event->type = DUI_EVENT_CLOSE;
       out_event->window_id = source.window.windowID;
       break;
-    case SDL_EVENT_WINDOW_RESIZED:
+    case SDL_EVENT_WINDOW_RESIZED: {
       out_event->type = DUI_EVENT_RESIZE;
       out_event->window_id = source.window.windowID;
-      out_event->width = source.window.data1;
-      out_event->height = source.window.data2;
+      auto* event_window = SDL_GetWindowFromID(source.window.windowID);
+      out_event->width =
+          window_units_to_content(event_window, source.window.data1);
+      out_event->height =
+          window_units_to_content(event_window, source.window.data2);
       break;
+    }
     case SDL_EVENT_MOUSE_BUTTON_DOWN:
-    case SDL_EVENT_MOUSE_BUTTON_UP:
+    case SDL_EVENT_MOUSE_BUTTON_UP: {
       out_event->type = source.type == SDL_EVENT_MOUSE_BUTTON_DOWN
                             ? DUI_EVENT_POINTER_DOWN
                             : DUI_EVENT_POINTER_UP;
       out_event->window_id = source.button.windowID;
-      out_event->x = source.button.x;
-      out_event->y = source.button.y;
+      auto* event_window = SDL_GetWindowFromID(source.button.windowID);
+      out_event->x = window_units_to_content(event_window, source.button.x);
+      out_event->y = window_units_to_content(event_window, source.button.y);
       out_event->key_code = source.button.button;
       break;
-    case SDL_EVENT_MOUSE_MOTION:
+    }
+    case SDL_EVENT_MOUSE_MOTION: {
       out_event->type = DUI_EVENT_POINTER_MOVE;
       out_event->window_id = source.motion.windowID;
-      out_event->x = source.motion.x;
-      out_event->y = source.motion.y;
+      auto* event_window = SDL_GetWindowFromID(source.motion.windowID);
+      out_event->x = window_units_to_content(event_window, source.motion.x);
+      out_event->y = window_units_to_content(event_window, source.motion.y);
       break;
+    }
     case SDL_EVENT_TEXT_INPUT:
       out_event->type = DUI_EVENT_TEXT_INPUT;
       out_event->window_id = source.text.windowID;
@@ -233,6 +260,12 @@ DuiWindow* dui_window_create(
       set_sdl_error();
       return nullptr;
     }
+    SDL_SetWindowSize(
+        window->window,
+        static_cast<int>(std::lround(
+            content_to_window_units(window->window, width))),
+        static_cast<int>(std::lround(
+            content_to_window_units(window->window, height))));
     window->renderer = SDL_CreateRenderer(window->window, nullptr);
     if (!window->renderer) {
       destroy_window_resources(window.get());
@@ -267,6 +300,34 @@ uint64_t dui_window_get_id(const DuiWindow* window) {
   return window && window->window ? SDL_GetWindowID(window->window) : 0;
 }
 
+double dui_window_get_content_scale(const DuiWindow* window) {
+  return window ? window_display_scale(window->window) : 1.0;
+}
+
+int32_t dui_window_get_metrics(
+    const DuiWindow* window,
+    DuiWindowMetrics* out_metrics) {
+  clear_error();
+  if (!window || !window->window || !out_metrics) {
+    set_error("Invalid window metrics arguments.");
+    return 0;
+  }
+
+  int width = 0;
+  int height = 0;
+  if (!SDL_GetWindowSizeInPixels(window->window, &width, &height)) {
+    set_sdl_error();
+    return 0;
+  }
+  std::memset(out_metrics, 0, sizeof(*out_metrics));
+  out_metrics->struct_size = sizeof(*out_metrics);
+  out_metrics->physical_width = width;
+  out_metrics->physical_height = height;
+  out_metrics->display_scale = window_display_scale(window->window);
+  out_metrics->pixel_density = window_pixel_density(window->window);
+  return 1;
+}
+
 void dui_window_set_background(DuiWindow* window, uint32_t rgba) {
   if (window) window->background_rgba = rgba;
 }
@@ -275,8 +336,13 @@ int32_t dui_window_begin_frame(DuiWindow* window) {
   clear_error();
   if (!window || !ensure_surface(window)) return 0;
   window->frame_active = true;
-  window->surface->getCanvas()->clear(
-      static_cast<SkColor>(window->background_rgba));
+  auto* canvas = window->surface->getCanvas();
+  canvas->resetMatrix();
+  canvas->clear(static_cast<SkColor>(window->background_rgba));
+  canvas->save();
+  const auto scale = static_cast<SkScalar>(
+      dui_window_get_content_scale(window));
+  canvas->scale(scale, scale);
   return 1;
 }
 
@@ -351,6 +417,7 @@ int32_t dui_window_present(DuiWindow* window) {
     return 0;
   }
 
+  window->surface->getCanvas()->restore();
   void* pixels = nullptr;
   int pitch = 0;
   if (!SDL_LockTexture(window->texture, nullptr, &pixels, &pitch)) {

@@ -1,10 +1,12 @@
 import 'dart:async';
 
-import 'package:dui_retained/dui.dart';
-import 'package:dui_retained/native.dart';
+import 'package:duix/dui.dart';
+import 'package:duix/native.dart';
 
-Future<void> main() async {
-  final host = await SdlSkiaHost.initialize();
+Future<void> main(List<String> args) async {
+  final host = await SdlSkiaHost.initialize(
+    diagnosticsEnabled: args.contains('--diagnostics'),
+  );
   final counter = ObservableValue<int>(0);
 
   final title = TextBlock(fontSize: 24)
@@ -23,7 +25,7 @@ Future<void> main() async {
       children: [
         title,
         Button(
-          content: TextBlock(text: 'Увеличить', fontSize: 24),
+          content: TextBlock(text: 'Увеличить', fontSize: 16),
           onClick: () => counter.value++,
         ),
       ],
@@ -32,6 +34,8 @@ Future<void> main() async {
 
   final application = Application(host: host);
   await application.run(window);
+  final diagnostics = host.diagnosticsFor(window);
+  if (diagnostics != null) print(diagnostics);
 
   try {
     while (host.isOpen(window)) {
