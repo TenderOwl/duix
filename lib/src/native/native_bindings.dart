@@ -41,6 +41,12 @@ final class DuiEventStruct extends Struct {
   external int modifiers;
 
   external Pointer<Utf8> textUtf8;
+
+  @Int32()
+  external int compositionStart;
+
+  @Int32()
+  external int compositionLength;
 }
 
 final class DuiWindowMetricsStruct extends Struct {
@@ -163,6 +169,8 @@ final class NativeEvent {
     required this.keyCode,
     required this.modifiers,
     required this.text,
+    required this.compositionStart,
+    required this.compositionLength,
   });
 
   final int type;
@@ -174,6 +182,8 @@ final class NativeEvent {
   final int keyCode;
   final int modifiers;
   final String? text;
+  final int compositionStart;
+  final int compositionLength;
 }
 
 final class NativeWindowMetrics {
@@ -579,6 +589,8 @@ final class NativeBindings {
       keyCode: value.keyCode,
       modifiers: value.modifiers,
       text: value.textUtf8 == nullptr ? null : value.textUtf8.toDartString(),
+      compositionStart: value.compositionStart,
+      compositionLength: value.compositionLength,
     );
   }
 

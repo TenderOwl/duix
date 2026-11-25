@@ -39,7 +39,8 @@ enum DuiEventType {
   DUI_EVENT_POINTER_UP = 5,
   DUI_EVENT_POINTER_MOVE = 6,
   DUI_EVENT_TEXT_INPUT = 7,
-  DUI_EVENT_KEY_DOWN = 8
+  DUI_EVENT_KEY_DOWN = 8,
+  DUI_EVENT_TEXT_EDITING = 9
 };
 
 typedef struct DuiEvent {
@@ -53,6 +54,9 @@ typedef struct DuiEvent {
   int32_t key_code;
   uint16_t modifiers;
   const char* text_utf8;
+  /* Composition selection offsets are UTF-16 code units; negative means unset. */
+  int32_t composition_start;
+  int32_t composition_length;
 } DuiEvent;
 
 typedef struct DuiWindowMetrics {

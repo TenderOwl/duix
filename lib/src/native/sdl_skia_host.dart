@@ -257,6 +257,15 @@ final class SdlSkiaHost
           controlPressed: event.modifiers & 0x00C0 != 0,
           metaPressed: event.modifiers & 0x0C00 != 0,
         );
+      case 9:
+        final text = event.text;
+        if (text != null) {
+          window.dispatchTextEditing(
+            text,
+            compositionStart: event.compositionStart,
+            compositionLength: event.compositionLength,
+          );
+        }
     }
   }
 

@@ -216,6 +216,21 @@ final class Window extends ObservableObject implements WindowHost {
     _focused?.raiseEvent(UIElement.textInput, TextInputEventArgs(text));
   }
 
+  void dispatchTextEditing(
+    String text, {
+    int compositionStart = -1,
+    int compositionLength = -1,
+  }) {
+    _focused?.raiseEvent(
+      UIElement.textEditing,
+      TextEditingEventArgs(
+        text,
+        compositionStart: compositionStart,
+        compositionLength: compositionLength,
+      ),
+    );
+  }
+
   void dispatchKeyDown(
     String key, {
     bool shiftPressed = false,

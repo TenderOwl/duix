@@ -6,7 +6,7 @@ import 'package:test/test.dart';
 
 void main() {
   test('Dart event layout matches the 64-bit C ABI', () {
-    expect(sizeOf<DuiEventStruct>(), 64);
+    expect(sizeOf<DuiEventStruct>(), 72);
   });
 
   test('Dart window metrics layout matches the 64-bit C ABI', () {

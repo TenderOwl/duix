@@ -246,6 +246,7 @@ final class TextBox extends Control {
     });
     addHandler(UIElement.pointerDown, _pointerDown);
     addHandler(UIElement.textInput, _textInput);
+    addHandler(UIElement.textEditing, _textEditing);
     addHandler(UIElement.keyDown, _keyDown);
   }
 
@@ -256,8 +257,15 @@ final class TextBox extends Control {
     affectsPaint: true,
   );
 
+  static const _headlessFactory = HeadlessTextLayoutFactory();
+
   final TextBuffer buffer;
   WindowHost? _mountedHost;
+  String _compositionText = '';
+  TextSelection? _compositionSelection;
+  TextLayout? _renderLayout;
+  TextLayoutOptions? _renderLayoutOptions;
+  TextLayoutFactory? _renderLayoutFactory;
 
   String get text => getValue(textProperty);
   set text(String value) => setValue(textProperty, value);
@@ -267,8 +275,15 @@ final class TextBox extends Control {
 
   int get caretOffset => buffer.caretOffset;
   String get selectedText => buffer.selectedText;
+  String get compositionText => _compositionText;
+  TextSelection? get compositionSelection => _compositionSelection;
+  bool get hasComposition => _compositionText.isNotEmpty;
 
-  void insertText(String value) => buffer.insertText(value);
+  void insertText(String value) {
+    _clearComposition();
+    buffer.insertText(value);
+  }
+
   void deleteBackward() => buffer.deleteBackward();
   void deleteForward() => buffer.deleteForward();
   void moveCaret(int offset, {bool extendSelection = false}) =>
@@ -304,6 +319,28 @@ final class TextBox extends Control {
     args.handled = true;
   }
 
+  void _textEditing(Object sender, TextEditingEventArgs args) {
+    _compositionText = args.text;
+    if (args.compositionStart >= 0 && args.compositionLength >= 0) {
+      final start = args.compositionStart.clamp(0, args.text.length);
+      final end = (args.compositionStart + args.compositionLength)
+          .clamp(start, args.text.length);
+      _compositionSelection =
+          TextSelection(baseOffset: start, extentOffset: end);
+    } else {
+      _compositionSelection = null;
+    }
+    invalidatePaint();
+    args.handled = true;
+  }
+
+  void _clearComposition() {
+    if (_compositionText.isEmpty && _compositionSelection == null) return;
+    _compositionText = '';
+    _compositionSelection = null;
+    invalidatePaint();
+  }
+
   void _keyDown(Object sender, KeyEventArgs args) {
     final shortcut = args.primaryShortcutPressed;
     switch (args.key) {
@@ -336,6 +373,7 @@ final class TextBox extends Control {
       default:
         return;
     }
+    _clearComposition();
     args.handled = true;
   }
 
@@ -347,6 +385,8 @@ final class TextBox extends Control {
 
   @override
   void onUnmounted() {
+    _clearComposition();
+    _clearRenderLayout();
     if (isFocused) _mountedHost?.stopTextInput(this);
     _mountedHost = null;
   }
@@ -357,6 +397,7 @@ final class TextBox extends Control {
       window?.startTextInput(this);
       _syncTextInputArea();
     } else {
+      _clearComposition();
       _mountedHost?.stopTextInput(this);
     }
   }
@@ -398,6 +439,7 @@ final class TextBox extends Control {
     T newValue,
   ) {
     if (property == textProperty && buffer.text != newValue) {
+      _clearComposition();
       buffer.text = newValue as String;
     }
     super.onDuiPropertyChanged(property, oldValue, newValue);
@@ -412,12 +454,77 @@ final class TextBox extends Control {
   @override
   void renderCore(DrawingContext context) {
     context.drawRect(bounds, const Paint(Colors.white));
-    context.drawText(
-      text,
-      Point(bounds.left + 8, bounds.top + 7),
+    final origin = Point(bounds.left + 8, bounds.top + 7);
+    final compositionBase = selection.start;
+    final displayText = hasComposition
+        ? text.replaceRange(selection.start, selection.end, compositionText)
+        : text;
+    final layout = _layoutForRender(displayText);
+
+    if (hasComposition) {
+      final active = compositionSelection ??
+          TextSelection(baseOffset: 0, extentOffset: compositionText.length);
+      for (final rect in layout.selectionRects(
+        compositionBase + active.start,
+        compositionBase + active.end,
+      )) {
+        context.drawRect(
+          Rect.fromLTWH(
+            origin.x + rect.left,
+            origin.y + rect.top,
+            rect.width,
+            rect.height,
+          ),
+          const Paint(Color(0x5599CCFF)),
+        );
+      }
+      for (final rect in layout.selectionRects(
+        compositionBase,
+        compositionBase + compositionText.length,
+      )) {
+        context.drawRect(
+          Rect.fromLTWH(
+            origin.x + rect.left,
+            origin.y + rect.bottom - 1,
+            rect.width,
+            2,
+          ),
+          const Paint(Color(0xFF336699)),
+        );
+      }
+    }
+    layout.draw(context, origin);
+  }
+
+  TextLayout _layoutForRender(String displayText) {
+    final host = window;
+    final factory = host?.textLayoutFactory ?? _headlessFactory;
+    final options = TextLayoutOptions(
+      text: displayText,
       fontSize: 14,
-      color: Colors.black,
+      maxWidth: (bounds.width - 16).clamp(1.0, double.infinity),
+      scale: host?.displayScale ?? 1,
     );
+    final current = _renderLayout;
+    if (current != null &&
+        !current.isDisposed &&
+        identical(_renderLayoutFactory, factory) &&
+        _renderLayoutOptions == options) {
+      return current;
+    }
+    _clearRenderLayout();
+    final created = factory.create(options);
+    _renderLayout = created;
+    _renderLayoutOptions = options;
+    _renderLayoutFactory = factory;
+    return created;
+  }
+
+  void _clearRenderLayout() {
+    _renderLayout?.dispose();
+    _renderLayout = null;
+    _renderLayoutOptions = null;
+    _renderLayoutFactory = null;
   }
 }
 

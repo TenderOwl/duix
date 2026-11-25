@@ -41,6 +41,10 @@ abstract class UIElement extends PropertyOwner {
     'textInput',
     RoutingStrategy.bubble,
   );
+  static const textEditing = RoutedEvent<TextEditingEventArgs>(
+    'textEditing',
+    RoutingStrategy.bubble,
+  );
 
   final _handlers = <RoutedEvent<dynamic>, List<Object>>{};
 

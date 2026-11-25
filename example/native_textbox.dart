@@ -69,8 +69,8 @@ Future<void> main(List<String> args) async {
             content: TextBox(),
           ),
           TextBlock(
-            text: 'Note: visual caret/selection and IME composition are not '
-                'implemented yet.',
+            text: 'IME composition is underlined. Visual caret, normal '
+                'selection and text clipping are not implemented yet.',
             fontSize: 14,
             color: const Color(0xFF555555),
           ),
@@ -82,13 +82,22 @@ Future<void> main(List<String> args) async {
     await application.run(window);
     if (smoke) {
       window.dispatchKeyDown('a', controlPressed: true);
-      window.dispatchTextInput('Smoke 😀');
+      window.dispatchTextEditing(
+        'Smoke か😀',
+        compositionStart: 7,
+        compositionLength: 2,
+      );
+      if (source.value != 'Retained-mode text editing') {
+        throw StateError('Composition changed the two-way binding source.');
+      }
+      host.presentWindow(window);
+      window.dispatchTextInput('Smoke か😀');
       window.dispatchKeyDown('home');
       window.dispatchKeyDown('right', shiftPressed: true);
-      if (source.value != 'Smoke 😀' || editor.selectedText != 'S') {
-        throw StateError('TextBox smoke editing commands failed.');
+      if (source.value != 'Smoke か😀' || editor.selectedText != 'S') {
+        throw StateError('TextBox smoke composition commit failed.');
       }
-      for (var frame = 0; frame < 3 && host.isOpen(window); frame++) {
+      for (var frame = 0; frame < 2 && host.isOpen(window); frame++) {
         host.pumpEvents();
         host.presentWindow(window);
         await Future<void>.delayed(const Duration(milliseconds: 16));

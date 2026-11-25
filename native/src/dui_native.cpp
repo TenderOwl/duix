@@ -119,6 +119,22 @@ bool decode_utf8(
   return true;
 }
 
+uint32_t utf8_prefix_utf16_length(const char* text, int32_t byte_count) {
+  if (!text || byte_count <= 0) return 0;
+  const std::string value(text);
+  const size_t limit = std::min(value.size(), static_cast<size_t>(byte_count));
+  size_t current = 0;
+  uint32_t result = 0;
+  while (current < limit) {
+    uint32_t code_point = 0;
+    size_t next = 0;
+    if (!decode_utf8(value, current, &code_point, &next) || next > limit) break;
+    result += code_point > 0xFFFF ? 2 : 1;
+    current = next;
+  }
+  return result;
+}
+
 bool utf16_to_utf8_offset(
     const DuiTextLayout& layout,
     uint32_t requested,
@@ -359,6 +375,23 @@ int32_t dui_host_next_event(DuiHost* host, DuiEvent* out_event) {
       out_event->window_id = source.text.windowID;
       host->text_storage = source.text.text ? source.text.text : "";
       out_event->text_utf8 = host->text_storage.c_str();
+      break;
+    case SDL_EVENT_TEXT_EDITING:
+      out_event->type = DUI_EVENT_TEXT_EDITING;
+      out_event->window_id = source.edit.windowID;
+      host->text_storage = source.edit.text ? source.edit.text : "";
+      out_event->text_utf8 = host->text_storage.c_str();
+      if (source.edit.start >= 0 && source.edit.length >= 0) {
+        out_event->composition_start = static_cast<int32_t>(
+            utf8_prefix_utf16_length(source.edit.text, source.edit.start));
+        out_event->composition_length = static_cast<int32_t>(
+            utf8_prefix_utf16_length(
+                source.edit.text, source.edit.start + source.edit.length) -
+            out_event->composition_start);
+      } else {
+        out_event->composition_start = -1;
+        out_event->composition_length = -1;
+      }
       break;
     case SDL_EVENT_KEY_DOWN:
       out_event->type = DUI_EVENT_KEY_DOWN;

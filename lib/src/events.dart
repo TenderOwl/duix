@@ -55,3 +55,15 @@ final class TextInputEventArgs extends RoutedEventArgs {
 
   final String text;
 }
+
+final class TextEditingEventArgs extends RoutedEventArgs {
+  TextEditingEventArgs(
+    this.text, {
+    this.compositionStart = -1,
+    this.compositionLength = -1,
+  });
+
+  final String text;
+  final int compositionStart;
+  final int compositionLength;
+}
