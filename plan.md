@@ -120,12 +120,14 @@ Skia canvas масштабируется через `displayScale`. Backbuffer �
 - `TextBlock` использует кэшированный `TextLayout` для measurement и drawing, освобождает его при замене и unmount;
 - Unicode/HiDPI-матрица native text layout с проверками measurement, hit test, caret, selection и масштабов 1.0/1.25/1.5/2.0;
 - интерактивная галерея `example/native_text_gallery.dart` с автоматическим smoke-режимом;
+- интерактивный пример `example/native_textbox.dart` с тремя полями, Unicode, two-way binding preview, keyboard/clipboard подсказками и smoke-режимом;
+- `TextBox` получает focus по pointer down; позиционирование caret кликом остаётся в этапе 2.5;
 - `TextBuffer` и `TextSelection` с UTF-16 offsets, selection anchor/active end, проверкой диапазонов и командами редактирования;
 - `TextBox` вставляет text input в caret, заменяет selection и синхронизирует текст с two-way binding;
 - SDL text input lifecycle: Start/Stop при focus, TextLayout-based input area/caret, cleanup при unmount/close;
 - routed key-down с Shift/Ctrl/Cmd modifiers, команды навигации и редактирования `TextBox`, включая word navigation и selection;
 - backend-independent `ClipboardHandler` и SDL clipboard с UTF-8 copy/cut/paste;
-- 70 Dart-тестов.
+- 71 Dart-тест; после добавления pointer-focus теста 70 проходят, clipboard ABI-тест падает при восстановлении пустого прежнего значения.
 
 ### 3.2. Проверенное поведение
 
@@ -136,13 +138,13 @@ Skia canvas масштабируется через `displayScale`. Backbuffer �
 - Белый фон окна отображается корректно.
 - HiDPI-масштабирование подтверждено на 4K-дисплее.
 - `dart analyze` проходит без замечаний.
-- Все 70 Dart-тестов проходят, включая C ABI, TextLayout, Unicode/HiDPI, text editing, SDL text input lifecycle, keyboard commands и clipboard.
+- 70 из 71 Dart-тестов проходят; новый pointer-focus тест успешен. Clipboard round-trip выполняется, но тест завершается ошибкой SDL `Couldn't open clipboard` при попытке восстановить пустое прежнее значение.
 - На Windows подтверждены реальные SDL Start/Stop/SetTextInputArea и активное состояние ввода при focus; потеря focus и close останавливают ввод.
 - Input area и caret преобразуются из logical UI units в SDL window units; caret вычисляется через `TextLayout`.
 - `TextBox` при text input заменяет активное selection, сохраняет направление anchor/extent и обновляет source двустороннего binding.
 - Backspace/Delete удаляют выделение или целую surrogate pair; внешнее сокращение текста ограничивает offsets новой длиной.
 - Routed Left/Right, Home/End, Shift selection, Ctrl/Cmd word navigation, Select All и Cut/Copy/Paste проходят через `Window.dispatchKeyDown()`; направление selection и two-way binding проверены.
-- SDL clipboard на Windows выполняет Unicode round-trip и освобождает native string через C ABI; тест восстанавливает прежнее содержимое clipboard.
+- SDL clipboard на Windows выполняет Unicode round-trip и освобождает native string через C ABI; восстановление пустого прежнего значения в тесте сейчас нестабильно из-за ошибки открытия Windows clipboard.
 - `DuiEvent` с modifiers сохраняет 64-битный ABI size 64 байта; OS key modifiers и маппинг SDL key codes покрыты косвенно, без синтеза системного keyboard input.
 - Матрица проверяет ASCII, кириллицу, emoji, CJK, Arabic, Hebrew, multiline, пустую и очень длинную строки, а также стабильность logical metrics на масштабах 1.0, 1.25, 1.5 и 2.0.
 - Пустая строка имеет нулевую ширину и конечные неотрицательные metrics; учтён допустимый glyph overhang tight selection boxes за пределами advance width.
@@ -153,6 +155,7 @@ Skia canvas масштабируется через `displayScale`. Backbuffer �
 - Paragraph smoke на Windows измеряет `ASCII, кириллица` через SkParagraph: width 124.945, height 21.
 - Native smoke автоматически завершается после 3 smoke-кадров.
 - Native text gallery smoke успешно рисует 3 кадра: scale 2.0, logical 960×800, physical 1920×1600, 4 renderFrame и 4 present.
+- TextBox smoke через `--textbox --smoke` проверяет Select All, ввод, Home и Shift+Right, затем рисует 3 кадра: logical 760×590, physical 1520×1180, 4 renderFrame и 4 present.
 - Diagnostics подтверждены на Windows: scale 2.0, logical 320×200, physical 640×400, 4 renderFrame и 4 present.
 
 ### 3.3. Основные файлы
@@ -182,6 +185,7 @@ tools/bootstrap_native.py            — зависимости и сборка
 example/native_counter.dart          — нативный интерактивный пример
 example/native_smoke.dart            — native smoke с автоматическим завершением
 example/native_text_gallery.dart     — Unicode/HiDPI text gallery и её smoke-режим
+example/native_textbox.dart          — интерактивная проверка TextBox и smoke-режим
 test/                                — автоматические тесты
 ```
 
@@ -205,6 +209,8 @@ python tools/bootstrap_native.py --smoke
 python tools/bootstrap_native.py --smoke --diagnostics
 python tools/bootstrap_native.py --text-gallery
 python tools/bootstrap_native.py --text-gallery --smoke --diagnostics
+python tools/bootstrap_native.py --textbox
+python tools/bootstrap_native.py --textbox --smoke --diagnostics
 ```
 
 Если Dart не в `PATH`:
@@ -697,6 +703,31 @@ default < inherited < style < binding < local < animation
 ---
 
 ## 9. Журнал работ
+
+### 2026-11-25 — пример для проверки TextBox
+
+Сделано:
+
+- Добавлен `example/native_textbox.dart`: bound editor с live preview, Unicode и пустое поле, подсказки клавиатурных и clipboard-команд.
+- `TextBox` получает focus по pointer down, поэтому кликом можно переключаться между полями; caret positioning по тексту не добавлялся.
+- В bootstrap добавлены `--textbox` и совместимый `--smoke`; smoke проверяет Select All, ввод, Home, Shift+Right и two-way binding.
+- Добавлен unit-тест focus по клику.
+
+Проверено:
+
+- `dart analyze` — без замечаний.
+- TextBox smoke напрямую и через `python tools/bootstrap_native.py --textbox --smoke --diagnostics` — успешно, 3 кадра, 4 renderFrame и 4 present.
+- `python -m unittest test/bootstrap_native_test.py -v` — 2 теста проходят.
+- Полный `dart test` — 70 из 71 тестов проходят; новый pointer-focus тест успешен.
+
+Не работает / не проверено:
+
+- Clipboard ABI-тест завершается ошибкой `Couldn't open clipboard` при восстановлении пустого прежнего значения после успешного round-trip; требуется отдельная стабилизация очистки/восстановления Windows clipboard.
+- Ручной ввод с физической клавиатуры, clipboard через реальные shortcuts, IME и Linux/macOS.
+
+Следующий шаг:
+
+- Этап 2.4: IME composition; отдельно стабилизировать clipboard cleanup test.
 
 ### 2026-11-25 — этап 2.3, клавиатурные команды и clipboard
 

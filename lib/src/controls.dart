@@ -244,6 +244,7 @@ final class TextBox extends Control {
       }
       _syncTextInputArea();
     });
+    addHandler(UIElement.pointerDown, _pointerDown);
     addHandler(UIElement.textInput, _textInput);
     addHandler(UIElement.keyDown, _keyDown);
   }
@@ -290,6 +291,12 @@ final class TextBox extends Control {
     if (value == null || value.isEmpty) return false;
     buffer.replaceSelection(value);
     return true;
+  }
+
+  void _pointerDown(Object sender, PointerEventArgs args) {
+    if (!isEnabled) return;
+    focus();
+    args.handled = true;
   }
 
   void _textInput(Object sender, TextInputEventArgs args) {

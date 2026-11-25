@@ -295,7 +295,7 @@ def run_example(
     environment = os.environ.copy()
     environment["DUI_NATIVE_LIBRARY"] = str(library)
     command = [executable, "run", f"example/{example}"]
-    if smoke and example == "native_text_gallery.dart":
+    if smoke and example in ("native_text_gallery.dart", "native_textbox.dart"):
         command.append("--smoke")
     if diagnostics:
         command.append("--diagnostics")
@@ -312,6 +312,11 @@ def main() -> int:
         "--text-gallery",
         action="store_true",
         help="run the Unicode text gallery; combine with --smoke to close automatically",
+    )
+    parser.add_argument(
+        "--textbox",
+        action="store_true",
+        help="run the TextBox example; combine with --smoke to close automatically",
     )
     parser.add_argument(
         "--smoke",
@@ -343,9 +348,11 @@ def main() -> int:
             return 0
         library = build_native(sdl_dir, skia_library)
         print(f"\nNative library: {library}")
-        if args.run or args.smoke or args.text_gallery:
+        if args.run or args.smoke or args.text_gallery or args.textbox:
             if args.text_gallery:
                 example = "native_text_gallery.dart"
+            elif args.textbox:
+                example = "native_textbox.dart"
             elif args.smoke:
                 example = "native_smoke.dart"
             else:

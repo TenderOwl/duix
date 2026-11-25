@@ -3,6 +3,21 @@ import 'package:test/test.dart';
 
 void main() {
   group('TextBox keyboard commands', () {
+    test('pointer down focuses the clicked field', () {
+      final first = TextBox(text: 'first');
+      final second = TextBox(text: 'second');
+      final window = Window(
+        width: 400,
+        height: 200,
+        content: StackPanel(children: [first, second]),
+      );
+      first.focus();
+
+      window.dispatchPointerDown(const Point(10, 45));
+      expect(first.isFocused, isFalse);
+      expect(second.isFocused, isTrue);
+    });
+
     test('Left and Right collapse selection to its corresponding edge', () {
       final box = TextBox(text: 'abcdef')
         ..selection = const TextSelection(baseOffset: 5, extentOffset: 2);
