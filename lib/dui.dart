@@ -9,6 +9,7 @@ export 'src/observable.dart';
 export 'src/panel.dart';
 export 'src/properties.dart';
 export 'src/recording_renderer.dart';
+export 'src/text_buffer.dart';
 export 'src/text_layout.dart';
 export 'src/ui_element.dart';
 export 'src/window.dart';

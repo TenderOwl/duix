@@ -120,7 +120,9 @@ Skia canvas масштабируется через `displayScale`. Backbuffer �
 - `TextBlock` использует кэшированный `TextLayout` для measurement и drawing, освобождает его при замене и unmount;
 - Unicode/HiDPI-матрица native text layout с проверками measurement, hit test, caret, selection и масштабов 1.0/1.25/1.5/2.0;
 - интерактивная галерея `example/native_text_gallery.dart` с автоматическим smoke-режимом;
-- 41 Dart-тест.
+- `TextBuffer` и `TextSelection` с UTF-16 offsets, selection anchor/active end, проверкой диапазонов и командами редактирования;
+- `TextBox` вставляет text input в caret, заменяет selection и синхронизирует текст с two-way binding;
+- 53 Dart-теста.
 
 ### 3.2. Проверенное поведение
 
@@ -131,7 +133,9 @@ Skia canvas масштабируется через `displayScale`. Backbuffer �
 - Белый фон окна отображается корректно.
 - HiDPI-масштабирование подтверждено на 4K-дисплее.
 - `dart analyze` проходит без замечаний.
-- Все 41 Dart-теста проходят, включая C ABI, TextLayout cache/ownership, native text geometry, Unicode/HiDPI-матрицу и TextBlock integration.
+- Все 53 Dart-теста проходят, включая C ABI, TextLayout, Unicode/HiDPI, TextBlock, text editing и two-way binding.
+- `TextBox` при text input заменяет активное selection, сохраняет направление anchor/extent и обновляет source двустороннего binding.
+- Backspace/Delete удаляют выделение или целую surrogate pair; внешнее сокращение текста ограничивает offsets новой длиной.
 - Матрица проверяет ASCII, кириллицу, emoji, CJK, Arabic, Hebrew, multiline, пустую и очень длинную строки, а также стабильность logical metrics на масштабах 1.0, 1.25, 1.5 и 2.0.
 - Пустая строка имеет нулевую ширину и конечные неотрицательные metrics; учтён допустимый glyph overhang tight selection boxes за пределами advance width.
 - `TextBlock` на Windows получает реальные SkParagraph metrics, переносит длинный текст по доступной ширине и рисует тот же native layout.
@@ -156,6 +160,7 @@ lib/src/observable.dart              — observable primitives
 lib/src/events.dart                  — routed events
 lib/src/window.dart                  — Application и Window
 lib/src/drawing.dart                 — DrawingContext
+lib/src/text_buffer.dart              — UTF-16 text/selection model и команды
 lib/src/text_layout.dart             — текстовый контракт и cache key
 lib/src/headless_text_layout.dart    — deterministic headless text layout
 lib/src/native/native_bindings.dart  — FFI
@@ -377,11 +382,13 @@ text_layout_selection_rects
 
 ## 2.1. Модель текста и выделения
 
-- [ ] Хранить текст независимо от render layout.
-- [ ] Ввести selection anchor и active end.
-- [ ] Определить cursor offset в Unicode code points или UTF-16 offsets и не смешивать модели.
-- [ ] Добавить команды редактирования вместо обработки клавиш прямо в render logic.
-- [ ] Проверять диапазоны offsets.
+- [x] Хранить текст независимо от render layout.
+- [x] Ввести selection anchor и active end.
+- [x] Определить cursor offset в Unicode code points или UTF-16 offsets и не смешивать модели.
+- [x] Добавить команды редактирования вместо обработки клавиш прямо в render logic.
+- [x] Проверять диапазоны offsets.
+
+Зафиксировано: `TextSelection.baseOffset` и `extentOffset` — UTF-16 code unit offsets. Backspace/Delete удаляют surrogate pair целиком; полноценная grapheme-cluster навигация пока не реализована.
 
 ## 2.2. SDL text input lifecycle
 
@@ -633,11 +640,12 @@ default < inherited < style < binding < local < animation
 
 Порядок ближайших рабочих сессий:
 
-1. **Этап 2:** TextBox input/IME/selection/clipboard.
-2. **Незавершённая часть этапа 1.2:** проверить сборку и Paragraph smoke на Linux (FontConfig/Freetype) и macOS (CoreText).
-3. **Ручная визуальная проверка этапа 1.5:** открыть text gallery на мониторах с разными масштабами и проверить clipping; автоматический smoke этого не заменяет.
-4. **Этап 3:** focus traversal.
-5. **Этап 4:** render on demand.
+1. **Этап 2.2:** SDL text input lifecycle: start/stop при focus, input area, caret updates и cleanup при close/unmount.
+2. **Этап 2.3–2.5:** клавиатурные команды, IME composition, clipboard и mouse selection.
+3. **Незавершённая часть этапа 1.2:** проверить сборку и Paragraph smoke на Linux (FontConfig/Freetype) и macOS (CoreText).
+4. **Ручная визуальная проверка этапа 1.5:** открыть text gallery на мониторах с разными масштабами и проверить clipping; автоматический smoke этого не заменяет.
+5. **Этап 3:** focus traversal.
+6. **Этап 4:** render on demand.
 
 Не начинать GPU, styles или virtualization до завершения этапов 1–4.
 
@@ -678,6 +686,33 @@ default < inherited < style < binding < local < animation
 ---
 
 ## 9. Журнал работ
+
+### 2026-11-25 — этап 2.1, модель текста и selection
+
+Сделано:
+
+- Добавлены независимые от rendering `TextBuffer` и `TextSelection` с `baseOffset`/`extentOffset` в UTF-16 code units.
+- Реализованы вставка и замена selection, Backspace/Delete, move caret с расширением selection и Select All.
+- Backspace/Delete не разрывают surrogate pair emoji; offsets проверяются, обратные explicit range отклоняются.
+- Внешнее изменение текста ограничивает оба selection offsets новой длиной.
+- `TextBox` использует `TextBuffer` через свойство `buffer` для text input, синхронизирует two-way binding и предоставляет команды редактирования вне render logic.
+- Модель и файл названы по аналогии с GTK TextBuffer: `text_buffer.dart`; прежние имена `TextEditingController` и `editingController` удалены.
+- Исправлено shadowing параметра `text` в callback buffer, которое препятствовало записи результата редактирования в binding.
+- C ABI и C++ не изменялись.
+
+Проверено:
+
+- `dart analyze` — без замечаний.
+- `dart test` — все 53 теста проходят, включая 12 новых тестов модели, Unicode deletion, диапазонов, routed input и binding integration.
+
+Не реализовано в этом шаге:
+
+- Клавиатурные key bindings, SDL text input lifecycle, IME, clipboard, mouse interaction и отрисовка caret/selection.
+- Grapheme-cluster навигация: offsets и удаление работают на уровне UTF-16 code units/code points.
+
+Следующий шаг:
+
+- Этап 2.2: SDL text input lifecycle и обновление text input area.
 
 ### 2026-11-25 — этап 1.5, Unicode/HiDPI-матрица и text gallery
 

@@ -3,6 +3,7 @@ import 'events.dart';
 import 'geometry.dart';
 import 'headless_text_layout.dart';
 import 'properties.dart';
+import 'text_buffer.dart';
 import 'text_layout.dart';
 import 'ui_element.dart';
 
@@ -231,8 +232,17 @@ final class Button extends ContentControl {
 }
 
 final class TextBox extends Control {
-  TextBox({String text = ''}) {
+  TextBox({String text = ''}) : buffer = TextBuffer(text: text) {
     setValue(textProperty, text);
+    buffer.addPropertyListener((event) {
+      if (event.property == TextBuffer.textProperty &&
+          this.text != event.newValue) {
+        this.text = event.newValue as String;
+      }
+      if (event.property == TextBuffer.selectionProperty) {
+        invalidatePaint();
+      }
+    });
     addHandler(UIElement.textInput, _textInput);
   }
 
@@ -243,12 +253,39 @@ final class TextBox extends Control {
     affectsPaint: true,
   );
 
+  final TextBuffer buffer;
+
   String get text => getValue(textProperty);
   set text(String value) => setValue(textProperty, value);
 
+  TextSelection get selection => buffer.selection;
+  set selection(TextSelection value) => buffer.selection = value;
+
+  int get caretOffset => buffer.caretOffset;
+  String get selectedText => buffer.selectedText;
+
+  void insertText(String value) => buffer.insertText(value);
+  void deleteBackward() => buffer.deleteBackward();
+  void deleteForward() => buffer.deleteForward();
+  void moveCaret(int offset, {bool extendSelection = false}) =>
+      buffer.moveCaret(offset, extendSelection: extendSelection);
+  void selectAll() => buffer.selectAll();
+
   void _textInput(Object sender, TextInputEventArgs args) {
-    text += args.text;
+    insertText(args.text);
     args.handled = true;
+  }
+
+  @override
+  void onDuiPropertyChanged<T>(
+    DuiProperty<dynamic, T> property,
+    T oldValue,
+    T newValue,
+  ) {
+    if (property == textProperty && buffer.text != newValue) {
+      buffer.text = newValue as String;
+    }
+    super.onDuiPropertyChanged(property, oldValue, newValue);
   }
 
   @override
