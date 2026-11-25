@@ -2,10 +2,13 @@ import 'drawing.dart';
 import 'events.dart';
 import 'geometry.dart';
 import 'properties.dart';
+import 'text_layout.dart';
 
 abstract interface class WindowHost {
   void requestFrame();
   bool requestFocus(Control control);
+  TextLayoutFactory get textLayoutFactory;
+  double get displayScale;
 }
 
 abstract class UIElement extends PropertyOwner {
@@ -151,6 +154,7 @@ abstract class UIElement extends PropertyOwner {
   void invalidateMeasure() {
     _measureValid = false;
     _arrangeValid = false;
+    _logicalParent?.invalidateMeasure();
     _window?.requestFrame();
   }
 

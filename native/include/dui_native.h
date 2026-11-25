@@ -1,6 +1,7 @@
 #ifndef DUI_NATIVE_H_
 #define DUI_NATIVE_H_
 
+#include <stddef.h>
 #include <stdint.h>
 
 #if defined(_WIN32)
@@ -17,8 +18,9 @@ extern "C" {
  * Threading contract:
  * - Create, use and destroy a DuiHost on the same OS thread.
  * - Call all functions for its DuiWindow objects on that same thread.
- * - Do not call host or window functions concurrently; the API is not
- *   internally synchronized.
+ * - Create, use and destroy each DuiTextLayout on that same thread.
+ * - Do not call host, window or text layout functions concurrently; the API
+ *   is not internally synchronized.
  * - dui_abi_version() may be called on any thread.
  * - dui_last_error_message() reads thread-local error state. The returned
  *   pointer remains valid until the next native call on that thread.
@@ -26,6 +28,7 @@ extern "C" {
 
 typedef struct DuiHost DuiHost;
 typedef struct DuiWindow DuiWindow;
+typedef struct DuiTextLayout DuiTextLayout;
 
 enum DuiEventType {
   DUI_EVENT_NONE = 0,
@@ -58,6 +61,38 @@ typedef struct DuiWindowMetrics {
   double display_scale;
   double pixel_density;
 } DuiWindowMetrics;
+
+typedef struct DuiTextLayoutOptions {
+  uint32_t struct_size;
+  const char* text_utf8;
+  size_t text_length;
+  const char* font_family_utf8;
+  size_t font_family_length;
+  double font_size;
+  double max_width;
+  double scale;
+  int32_t alignment;
+} DuiTextLayoutOptions;
+
+typedef struct DuiTextMetrics {
+  uint32_t struct_size;
+  double width;
+  double height;
+  double baseline;
+} DuiTextMetrics;
+
+typedef struct DuiTextPosition {
+  uint32_t struct_size;
+  uint32_t offset_utf16;
+} DuiTextPosition;
+
+typedef struct DuiRect {
+  uint32_t struct_size;
+  double left;
+  double top;
+  double width;
+  double height;
+} DuiRect;
 
 DUI_API uint32_t dui_abi_version(void);
 DUI_API const char* dui_last_error_message(void);
@@ -95,6 +130,38 @@ DUI_API void dui_draw_text(
     double font_size,
     uint32_t rgba,
     int32_t alignment);
+
+/* Text offsets are UTF-16 code units. All text buffers are UTF-8 with an
+ * explicit byte length and need not be null-terminated. Output storage belongs
+ * to the caller. Call selection_rects with out_rects == NULL to query count. */
+DUI_API DuiTextLayout* dui_text_layout_create(
+    const DuiTextLayoutOptions* options);
+DUI_API void dui_text_layout_destroy(DuiTextLayout* layout);
+DUI_API int32_t dui_text_layout_measure(
+    DuiTextLayout* layout,
+    DuiTextMetrics* out_metrics);
+DUI_API int32_t dui_text_layout_draw(
+    DuiWindow* window,
+    DuiTextLayout* layout,
+    double x,
+    double y,
+    uint32_t rgba);
+DUI_API int32_t dui_text_layout_hit_test(
+    DuiTextLayout* layout,
+    double x,
+    double y,
+    DuiTextPosition* out_position);
+DUI_API int32_t dui_text_layout_caret_rect(
+    DuiTextLayout* layout,
+    uint32_t offset_utf16,
+    DuiRect* out_rect);
+DUI_API int32_t dui_text_layout_selection_rects(
+    DuiTextLayout* layout,
+    uint32_t start_utf16,
+    uint32_t end_utf16,
+    DuiRect* out_rects,
+    uint32_t rect_capacity,
+    uint32_t* out_count);
 DUI_API int32_t dui_window_present(DuiWindow* window);
 
 #ifdef __cplusplus

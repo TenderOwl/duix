@@ -12,20 +12,39 @@
 #include "include/core/SkPixmap.h"
 #include "include/core/SkSurface.h"
 #include "include/core/SkTypeface.h"
+#include "modules/skparagraph/include/FontCollection.h"
+#include "modules/skparagraph/include/Paragraph.h"
+#include "modules/skparagraph/include/ParagraphBuilder.h"
+#include "modules/skparagraph/include/ParagraphStyle.h"
+#include "modules/skparagraph/include/TextStyle.h"
+#include "modules/skunicode/include/SkUnicode_icu.h"
 
 #if defined(_WIN32)
 #include "include/ports/SkTypeface_win.h"
+#elif defined(__APPLE__)
+#include "include/ports/SkFontMgr_mac_ct.h"
+#else
+#include "include/ports/SkFontMgr_fontconfig.h"
+#include "include/ports/SkFontScanner_FreeType.h"
 #endif
 
 #include <algorithm>
 #include <cmath>
 #include <cstring>
+#include <limits>
 #include <memory>
 #include <new>
 #include <stdexcept>
 #include <string>
 #include <utility>
 #include <vector>
+
+struct DuiTextLayout {
+  std::string text;
+  std::unique_ptr<skia::textlayout::Paragraph> paragraph;
+  double scale = 1.0;
+  uint32_t utf16_length = 0;
+};
 
 struct DuiWindow {
   explicit DuiWindow(DuiHost* owner) : host(owner) {}
@@ -55,6 +74,94 @@ void clear_error() { last_error.clear(); }
 void set_error(const char* message) { last_error = message; }
 
 void set_sdl_error() { last_error = SDL_GetError(); }
+
+bool decode_utf8(
+    const std::string& text,
+    size_t offset,
+    uint32_t* code_point,
+    size_t* next) {
+  if (offset >= text.size()) return false;
+  const auto* bytes = reinterpret_cast<const unsigned char*>(text.data());
+  const unsigned char first = bytes[offset];
+  size_t length = 0;
+  uint32_t value = 0;
+  uint32_t minimum = 0;
+  if (first < 0x80) {
+    length = 1;
+    value = first;
+  } else if (first >= 0xC2 && first <= 0xDF) {
+    length = 2;
+    value = first & 0x1F;
+    minimum = 0x80;
+  } else if (first >= 0xE0 && first <= 0xEF) {
+    length = 3;
+    value = first & 0x0F;
+    minimum = 0x800;
+  } else if (first >= 0xF0 && first <= 0xF4) {
+    length = 4;
+    value = first & 0x07;
+    minimum = 0x10000;
+  } else {
+    return false;
+  }
+  if (offset + length > text.size()) return false;
+  for (size_t index = 1; index < length; ++index) {
+    const unsigned char continuation = bytes[offset + index];
+    if ((continuation & 0xC0) != 0x80) return false;
+    value = (value << 6) | (continuation & 0x3F);
+  }
+  if (value < minimum || value > 0x10FFFF ||
+      (value >= 0xD800 && value <= 0xDFFF)) {
+    return false;
+  }
+  *code_point = value;
+  *next = offset + length;
+  return true;
+}
+
+bool utf16_to_utf8_offset(
+    const DuiTextLayout& layout,
+    uint32_t requested,
+    size_t* byte_offset) {
+  if (requested > layout.utf16_length) return false;
+  size_t current = 0;
+  uint32_t utf16_offset = 0;
+  while (current < layout.text.size()) {
+    if (utf16_offset == requested) {
+      *byte_offset = current;
+      return true;
+    }
+    uint32_t code_point = 0;
+    size_t next = 0;
+    if (!decode_utf8(layout.text, current, &code_point, &next)) return false;
+    const uint32_t units = code_point > 0xFFFF ? 2 : 1;
+    if (units == 2 && requested == utf16_offset + 1) return false;
+    utf16_offset += units;
+    current = next;
+  }
+  if (utf16_offset != requested) return false;
+  *byte_offset = current;
+  return true;
+}
+
+sk_sp<SkFontMgr> create_font_manager() {
+#if defined(_WIN32)
+  return SkFontMgr_New_DirectWrite();
+#elif defined(__APPLE__)
+  return SkFontMgr_New_CoreText(nullptr);
+#else
+  return SkFontMgr_New_FontConfig(nullptr, SkFontScanner_Make_FreeType());
+#endif
+}
+
+void write_rect(DuiRect* output, const SkRect& input, double scale) {
+  std::memset(output, 0, sizeof(*output));
+  output->struct_size = sizeof(*output);
+  output->left = input.left() / scale;
+  output->top = input.top() / scale;
+  output->width = input.width() / scale;
+  output->height = input.height() / scale;
+}
 
 double window_pixel_density(SDL_Window* window) {
   const float value = window ? SDL_GetWindowPixelDensity(window) : 1.0f;
@@ -412,6 +519,293 @@ void dui_draw_text(
       static_cast<SkScalar>(y + font_size),
       font,
       paint);
+}
+
+DuiTextLayout* dui_text_layout_create(const DuiTextLayoutOptions* options) {
+  clear_error();
+  if (!options || options->struct_size != sizeof(*options) ||
+      (!options->text_utf8 && options->text_length != 0) ||
+      (!options->font_family_utf8 && options->font_family_length != 0) ||
+      !std::isfinite(options->font_size) || options->font_size <= 0 ||
+      !std::isfinite(options->max_width) || options->max_width <= 0 ||
+      !std::isfinite(options->scale) || options->scale <= 0 ||
+      options->alignment < 0 || options->alignment > 2 ||
+      !std::isfinite(options->font_size * options->scale) ||
+      !std::isfinite(options->max_width * options->scale)) {
+    set_error("Invalid text layout arguments.");
+    return nullptr;
+  }
+
+  try {
+    auto layout = std::make_unique<DuiTextLayout>();
+    if (options->text_length != 0) {
+      layout->text.assign(options->text_utf8, options->text_length);
+    }
+    layout->scale = options->scale;
+
+    size_t current = 0;
+    uint64_t utf16_length = 0;
+    while (current < layout->text.size()) {
+      uint32_t code_point = 0;
+      size_t next = 0;
+      if (!decode_utf8(layout->text, current, &code_point, &next)) {
+        set_error("Text layout input is not valid UTF-8.");
+        return nullptr;
+      }
+      utf16_length += code_point > 0xFFFF ? 2 : 1;
+      if (utf16_length > std::numeric_limits<uint32_t>::max()) {
+        set_error("Text layout input is too long.");
+        return nullptr;
+      }
+      current = next;
+    }
+    layout->utf16_length = static_cast<uint32_t>(utf16_length);
+
+    auto unicode = SkUnicodes::ICU::Make();
+    auto fonts = sk_make_sp<skia::textlayout::FontCollection>();
+    fonts->setDefaultFontManager(create_font_manager());
+    if (!unicode || !fonts->getFallbackManager()) {
+      set_error("SkParagraph font/unicode initialization failed.");
+      return nullptr;
+    }
+
+    skia::textlayout::TextStyle text_style;
+    text_style.setFontSize(static_cast<SkScalar>(
+        options->font_size * options->scale));
+    if (options->font_family_length != 0) {
+      text_style.setFontFamilies({SkString(
+          options->font_family_utf8,
+          options->font_family_length)});
+    }
+    skia::textlayout::ParagraphStyle paragraph_style;
+    paragraph_style.setTextStyle(text_style);
+    switch (options->alignment) {
+      case 1:
+        paragraph_style.setTextAlign(skia::textlayout::TextAlign::kCenter);
+        break;
+      case 2:
+        paragraph_style.setTextAlign(skia::textlayout::TextAlign::kRight);
+        break;
+      default:
+        paragraph_style.setTextAlign(skia::textlayout::TextAlign::kLeft);
+        break;
+    }
+
+    auto builder = skia::textlayout::ParagraphBuilder::make(
+        paragraph_style,
+        fonts,
+        unicode);
+    if (!builder) {
+      set_error("SkParagraph builder creation failed.");
+      return nullptr;
+    }
+    builder->addText(layout->text.data(), layout->text.size());
+    layout->paragraph = builder->Build();
+    if (!layout->paragraph) {
+      set_error("SkParagraph creation failed.");
+      return nullptr;
+    }
+    layout->paragraph->layout(static_cast<SkScalar>(
+        options->max_width * options->scale));
+    return layout.release();
+  } catch (const std::exception& error) {
+    set_error(error.what());
+    return nullptr;
+  } catch (...) {
+    set_error("Unknown native text layout creation error.");
+    return nullptr;
+  }
+}
+
+void dui_text_layout_destroy(DuiTextLayout* layout) {
+  clear_error();
+  delete layout;
+}
+
+int32_t dui_text_layout_measure(
+    DuiTextLayout* layout,
+    DuiTextMetrics* out_metrics) {
+  clear_error();
+  if (!layout || !layout->paragraph || !out_metrics) {
+    set_error("Invalid text measurement arguments.");
+    return 0;
+  }
+  try {
+    std::memset(out_metrics, 0, sizeof(*out_metrics));
+    out_metrics->struct_size = sizeof(*out_metrics);
+    const auto longest_line = layout->text.empty()
+                                  ? 0.0f
+                                  : layout->paragraph->getLongestLine();
+    out_metrics->width = longest_line / layout->scale;
+    out_metrics->height = layout->paragraph->getHeight() / layout->scale;
+    out_metrics->baseline =
+        layout->paragraph->getAlphabeticBaseline() / layout->scale;
+    return 1;
+  } catch (const std::exception& error) {
+    set_error(error.what());
+    return 0;
+  } catch (...) {
+    set_error("Unknown native text measurement error.");
+    return 0;
+  }
+}
+
+int32_t dui_text_layout_draw(
+    DuiWindow* window,
+    DuiTextLayout* layout,
+    double x,
+    double y,
+    uint32_t rgba) {
+  clear_error();
+  if (!window || !window->frame_active || !window->surface ||
+      !layout || !layout->paragraph ||
+      !std::isfinite(x) || !std::isfinite(y)) {
+    set_error("Invalid text drawing arguments or no active frame.");
+    return 0;
+  }
+  try {
+    SkPaint paint;
+    paint.setColor(static_cast<SkColor>(rgba));
+    paint.setAntiAlias(true);
+    layout->paragraph->updateForegroundPaint(
+        0,
+        layout->text.size(),
+        paint);
+
+    auto* canvas = window->surface->getCanvas();
+    SkAutoCanvasRestore restore(canvas, true);
+    const auto inverse_scale = static_cast<SkScalar>(1.0 / layout->scale);
+    canvas->scale(inverse_scale, inverse_scale);
+    layout->paragraph->paint(
+        canvas,
+        static_cast<SkScalar>(x * layout->scale),
+        static_cast<SkScalar>(y * layout->scale));
+    return 1;
+  } catch (const std::exception& error) {
+    set_error(error.what());
+    return 0;
+  } catch (...) {
+    set_error("Unknown native text drawing error.");
+    return 0;
+  }
+}
+
+int32_t dui_text_layout_hit_test(
+    DuiTextLayout* layout,
+    double x,
+    double y,
+    DuiTextPosition* out_position) {
+  clear_error();
+  if (!layout || !layout->paragraph || !out_position ||
+      !std::isfinite(x) || !std::isfinite(y)) {
+    set_error("Invalid text hit test arguments.");
+    return 0;
+  }
+  try {
+    const auto position = layout->paragraph->getGlyphPositionAtCoordinate(
+        static_cast<SkScalar>(x * layout->scale),
+        static_cast<SkScalar>(y * layout->scale));
+    // Current SkParagraph editing APIs return UTF-16 offsets despite the
+    // legacy "glyph position" comment in Paragraph.h.
+    const auto non_negative_position = std::max(position.position, 0);
+    const auto utf16_offset = static_cast<uint32_t>(std::min(
+        static_cast<uint64_t>(non_negative_position),
+        static_cast<uint64_t>(layout->utf16_length)));
+    std::memset(out_position, 0, sizeof(*out_position));
+    out_position->struct_size = sizeof(*out_position);
+    out_position->offset_utf16 = utf16_offset;
+    return 1;
+  } catch (const std::exception& error) {
+    set_error(error.what());
+    return 0;
+  } catch (...) {
+    set_error("Unknown native text hit test error.");
+    return 0;
+  }
+}
+
+int32_t dui_text_layout_caret_rect(
+    DuiTextLayout* layout,
+    uint32_t offset_utf16,
+    DuiRect* out_rect) {
+  clear_error();
+  if (!layout || !layout->paragraph || !out_rect) {
+    set_error("Invalid caret rectangle arguments.");
+    return 0;
+  }
+  try {
+    size_t byte_offset = 0;
+    if (!utf16_to_utf8_offset(*layout, offset_utf16, &byte_offset)) {
+      set_error("Caret offset is outside a UTF-16 text boundary.");
+      return 0;
+    }
+    const auto boxes = layout->paragraph->getRectsForRange(
+        byte_offset,
+        byte_offset,
+        skia::textlayout::RectHeightStyle::kMax,
+        skia::textlayout::RectWidthStyle::kTight);
+    if (boxes.empty()) {
+      write_rect(out_rect, SkRect::MakeWH(0, layout->paragraph->getHeight()), layout->scale);
+    } else {
+      write_rect(out_rect, boxes.front().rect, layout->scale);
+    }
+    return 1;
+  } catch (const std::exception& error) {
+    set_error(error.what());
+    return 0;
+  } catch (...) {
+    set_error("Unknown native caret rectangle error.");
+    return 0;
+  }
+}
+
+int32_t dui_text_layout_selection_rects(
+    DuiTextLayout* layout,
+    uint32_t start_utf16,
+    uint32_t end_utf16,
+    DuiRect* out_rects,
+    uint32_t rect_capacity,
+    uint32_t* out_count) {
+  clear_error();
+  if (!layout || !layout->paragraph || !out_count || start_utf16 > end_utf16) {
+    set_error("Invalid selection rectangle arguments.");
+    return 0;
+  }
+  *out_count = 0;
+  try {
+    size_t start = 0;
+    size_t end = 0;
+    if (!utf16_to_utf8_offset(*layout, start_utf16, &start) ||
+        !utf16_to_utf8_offset(*layout, end_utf16, &end)) {
+      set_error("Selection offsets are outside UTF-16 text boundaries.");
+      return 0;
+    }
+    const auto boxes = layout->paragraph->getRectsForRange(
+        start,
+        end,
+        skia::textlayout::RectHeightStyle::kMax,
+        skia::textlayout::RectWidthStyle::kTight);
+    if (boxes.size() > std::numeric_limits<uint32_t>::max()) {
+      set_error("Too many selection rectangles.");
+      return 0;
+    }
+    *out_count = static_cast<uint32_t>(boxes.size());
+    if (!out_rects) return 1;
+    if (rect_capacity < boxes.size()) {
+      set_error("Selection rectangle buffer is too small.");
+      return 0;
+    }
+    for (size_t index = 0; index < boxes.size(); ++index) {
+      write_rect(&out_rects[index], boxes[index].rect, layout->scale);
+    }
+    return 1;
+  } catch (const std::exception& error) {
+    set_error(error.what());
+    return 0;
+  } catch (...) {
+    set_error("Unknown native selection rectangle error.");
+    return 0;
+  }
 }
 
 int32_t dui_window_present(DuiWindow* window) {

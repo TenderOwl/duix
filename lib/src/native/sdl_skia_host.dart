@@ -3,10 +3,10 @@ import 'dart:ffi';
 
 import 'package:ffi/ffi.dart';
 
-import '../drawing.dart';
 import '../geometry.dart';
 import '../window.dart';
 import 'native_bindings.dart';
+import 'native_text_layout.dart';
 
 final class _NativeWindowSession {
   _NativeWindowSession(this.pointer, this.id);
@@ -58,6 +58,7 @@ final class SdlSkiaHost implements NativeHost {
   }
 
   final NativeBindings bindings;
+  late final textLayoutFactory = NativeTextLayoutFactory(bindings);
   final bool diagnosticsEnabled;
   final Pointer<DuiHostOpaque> _host;
   final _sessions = <Window, _NativeWindowSession>{};
@@ -99,6 +100,7 @@ final class SdlSkiaHost implements NativeHost {
   Future<void> showWindow(Window window) async {
     _checkNotDisposed();
     if (isOpen(window)) return;
+    window.textLayoutFactory = textLayoutFactory;
     final title = window.title.toNativeUtf8();
     try {
       final pointer = bindings.windowCreate(
@@ -210,10 +212,11 @@ final class SdlSkiaHost implements NativeHost {
   }
 }
 
-final class NativeDrawingContext implements DrawingContext {
+final class NativeDrawingContext implements NativeTextDrawingContext {
   NativeDrawingContext(this.bindings, this.window);
 
   final NativeBindings bindings;
+  @override
   final Pointer<DuiWindowOpaque> window;
 
   @override

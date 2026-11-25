@@ -171,13 +171,9 @@ def repair_skia_dependencies() -> None:
             remove_generated_tree(directory)
 
 
-def build_skia(repair: bool = False) -> Path:
+def build_skia(repair: bool = False) -> list[Path]:
     clone_pinned("https://skia.googlesource.com/skia.git", SKIA_BRANCH, SKIA_SOURCE)
     output = SKIA_SOURCE / "out" / "Release"
-    library = output / ("skia.lib" if platform.system() == "Windows" else "libskia.a")
-    if library.exists():
-        print(f"Using existing Skia library: {library}")
-        return library
     if repair:
         repair_skia_dependencies()
 
@@ -204,6 +200,11 @@ def build_skia(repair: bool = False) -> Path:
         "skia_enable_ganesh=false",
         "skia_enable_graphite=false",
         "skia_enable_tools=false",
+        "skia_enable_skparagraph=true",
+        "skia_enable_skshaper=true",
+        "skia_enable_skunicode=true",
+        "skia_use_harfbuzz=true",
+        "skia_use_icu=true",
         f'target_cpu="{target_cpu()}"',
     ]
     if platform.system() == "Windows":
@@ -212,10 +213,24 @@ def build_skia(repair: bool = False) -> Path:
         arguments += ['extra_cflags=["-fPIC"]', 'extra_cflags_cc=["-fPIC"]']
 
     run([str(gn), "gen", str(output), "--args=" + " ".join(arguments)], cwd=SKIA_SOURCE)
-    run(["ninja", "-C", str(output), "skia"])
-    if not library.exists():
-        raise RuntimeError(f"Skia build completed without producing {library}")
-    return library
+    run(["ninja", "-C", str(output), "skia", "skparagraph"])
+    names = [
+        "skia",
+        "skparagraph",
+        "skshaper",
+        "skunicode_core",
+        "skunicode_icu",
+        "harfbuzz",
+        "icu",
+    ]
+    libraries = [
+        output / (f"{name}.lib" if platform.system() == "Windows" else f"lib{name}.a")
+        for name in names
+    ]
+    missing = [library for library in libraries if not library.exists()]
+    if missing:
+        raise RuntimeError(f"Skia build completed without producing: {missing}")
+    return libraries
 
 
 def skia_extra_libraries() -> str:
@@ -228,7 +243,7 @@ def skia_extra_libraries() -> str:
     return ";".join(["fontconfig", "freetype", "pthread", "dl", "m"])
 
 
-def build_native(sdl_dir: Path, skia_library: Path) -> Path:
+def build_native(sdl_dir: Path, skia_libraries: list[Path]) -> Path:
     prepare_cmake_build(NATIVE_BUILD, ROOT / "native")
     command = [
         "cmake",
@@ -241,7 +256,7 @@ def build_native(sdl_dir: Path, skia_library: Path) -> Path:
         "-DCMAKE_BUILD_TYPE=Release",
         f"-DSDL3_DIR={sdl_dir}",
         f"-DSKIA_ROOT={SKIA_SOURCE}",
-        f"-DSKIA_LIBRARY={skia_library}",
+        f"-DSKIA_LIBRARY={';'.join(str(library) for library in skia_libraries)}",
         f"-DSKIA_EXTRA_LIBRARIES={skia_extra_libraries()}",
         "-DDUI_SDL_STATIC=ON",
     ]
@@ -258,12 +273,19 @@ def build_native(sdl_dir: Path, skia_library: Path) -> Path:
     library = NATIVE_BUILD / "bin" / names[platform.system()]
     if not library.exists():
         raise RuntimeError(f"Native build completed without producing {library}")
+    smoke_name = "dui_paragraph_smoke.exe" if platform.system() == "Windows" else "dui_paragraph_smoke"
+    icu_data = SKIA_SOURCE / "out" / "Release" / "icudtl.dat"
+    if not icu_data.exists():
+        raise RuntimeError(f"ICU data file was not produced: {icu_data}")
+    shutil.copy2(icu_data, NATIVE_BUILD / "bin" / "icudtl.dat")
+    run([str(NATIVE_BUILD / "bin" / smoke_name)])
     return library
 
 
 def run_example(
     library: Path,
     dart: str | None,
+    example: str = "native_counter.dart",
     smoke: bool = False,
     diagnostics: bool = False,
 ) -> None:
@@ -272,8 +294,9 @@ def run_example(
         raise RuntimeError("Dart SDK was not found. Pass --dart <path-to-dart>.")
     environment = os.environ.copy()
     environment["DUI_NATIVE_LIBRARY"] = str(library)
-    example = "native_smoke.dart" if smoke else "native_counter.dart"
     command = [executable, "run", f"example/{example}"]
+    if smoke and example == "native_text_gallery.dart":
+        command.append("--smoke")
     if diagnostics:
         command.append("--diagnostics")
     print("\n+ " + " ".join(command[1:]), flush=True)
@@ -286,9 +309,14 @@ def main() -> int:
     parser.add_argument("--skip-native", action="store_true", help="build dependencies only")
     parser.add_argument("--run", action="store_true", help="run the native counter example")
     parser.add_argument(
+        "--text-gallery",
+        action="store_true",
+        help="run the Unicode text gallery; combine with --smoke to close automatically",
+    )
+    parser.add_argument(
         "--smoke",
         action="store_true",
-        help="run the native smoke example with automatic shutdown",
+        help="run a native smoke example with automatic shutdown",
     )
     parser.add_argument(
         "--diagnostics",
@@ -315,10 +343,17 @@ def main() -> int:
             return 0
         library = build_native(sdl_dir, skia_library)
         print(f"\nNative library: {library}")
-        if args.run or args.smoke:
+        if args.run or args.smoke or args.text_gallery:
+            if args.text_gallery:
+                example = "native_text_gallery.dart"
+            elif args.smoke:
+                example = "native_smoke.dart"
+            else:
+                example = "native_counter.dart"
             run_example(
                 library,
                 args.dart,
+                example=example,
                 smoke=args.smoke,
                 diagnostics=args.diagnostics,
             )

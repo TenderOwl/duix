@@ -1,6 +1,8 @@
 import 'dart:ffi';
 
+import 'package:duix/dui.dart';
 import 'package:duix/src/native/native_bindings.dart';
+import 'package:duix/src/native/sdl_skia_host.dart';
 import 'package:ffi/ffi.dart';
 import 'package:test/test.dart';
 
@@ -51,8 +53,147 @@ void main() {
     });
   });
 
+  test('text layout measures Unicode and returns UTF-16 geometry', () {
+    using((arena) {
+      const text = 'A😀Б';
+      final layout = bindings.textLayoutCreate(
+        text: text,
+        fontSize: 16,
+        maxWidth: 240,
+        scale: 1.5,
+        arena: arena,
+      );
+      try {
+        final metrics = bindings.textLayoutMeasure(layout, arena);
+        expect(metrics.width, greaterThan(0));
+        expect(metrics.height, greaterThan(0));
+        expect(metrics.baseline, greaterThan(0));
+
+        expect(
+          bindings.textLayoutHitTest(
+            layout,
+            metrics.width + 10,
+            metrics.height / 2,
+            arena,
+          ),
+          text.length,
+        );
+
+        final caret = bindings.textLayoutCaretRect(
+          layout,
+          text.length,
+          arena,
+        );
+        expect(caret.left, greaterThanOrEqualTo(0));
+        expect(caret.height, greaterThan(0));
+
+        final selection = bindings.textLayoutSelectionRects(
+          layout,
+          1,
+          text.length,
+          arena,
+        );
+        expect(selection, isNotEmpty);
+        expect(selection.every((rect) => rect.width >= 0), isTrue);
+      } finally {
+        bindings.textLayoutDestroy(layout);
+      }
+    });
+  });
+
+  test('text layout rejects invalid handles and UTF-16 offsets', () {
+    using((arena) {
+      expect(
+        () => bindings.textLayoutMeasure(nullptr, arena),
+        throwsA(isA<StateError>()),
+      );
+      final layout = bindings.textLayoutCreate(
+        text: 'A😀',
+        fontSize: 16,
+        maxWidth: 240,
+        scale: 1,
+        arena: arena,
+      );
+      try {
+        expect(
+          () => bindings.textLayoutCaretRect(layout, 2, arena),
+          throwsA(
+            isA<StateError>().having(
+              (error) => error.message,
+              'message',
+              contains('UTF-16'),
+            ),
+          ),
+        );
+      } finally {
+        bindings.textLayoutDestroy(layout);
+      }
+    });
+  });
+
+  test('text layout draws into an active window frame', () {
+    final host = bindings.hostCreate();
+    expect(host, isNot(nullptr), reason: bindings.lastError);
+    if (host == nullptr) return;
+    var window = nullptr.cast<DuiWindowOpaque>();
+    var layout = nullptr.cast<DuiTextLayoutOpaque>();
+    try {
+      using((arena) {
+        final title = 'Text ABI'.toNativeUtf8(allocator: arena);
+        window = bindings.windowCreate(host, title, 160, 80);
+        expect(window, isNot(nullptr), reason: bindings.lastError);
+        if (window == nullptr) return;
+        layout = bindings.textLayoutCreate(
+          text: 'ASCII, кириллица',
+          fontSize: 16,
+          maxWidth: 150,
+          scale: 1,
+          arena: arena,
+        );
+        expect(bindings.windowBeginFrame(window), 1,
+            reason: bindings.lastError);
+        bindings.textLayoutDraw(window, layout, 4, 4, 0xFF000000);
+        expect(bindings.windowPresent(window), 1, reason: bindings.lastError);
+      });
+    } finally {
+      bindings.textLayoutDestroy(layout);
+      bindings.windowDestroy(host, window);
+      bindings.hostDestroy(host);
+    }
+  });
+
+  test('TextBlock uses native measurement, wrapping and drawing', () async {
+    final host = await SdlSkiaHost.initialize();
+    final text = TextBlock(
+      text: 'Native measurement',
+      fontSize: 16,
+    );
+    final window = Window(
+      width: 320,
+      height: 200,
+      content: text,
+    );
+    try {
+      await host.showWindow(window);
+      final initialHeight = text.desiredSize.height;
+      expect(text.desiredSize.width, greaterThan(0));
+      expect(initialHeight, greaterThan(0));
+
+      text.text = 'A much longer native text layout that must wrap';
+      window.resize(100, 200);
+      host.presentWindow(window);
+
+      expect(text.desiredSize.width, lessThanOrEqualTo(100));
+      expect(text.desiredSize.height, greaterThan(initialHeight));
+    } finally {
+      await host.closeWindow(window);
+      host.dispose();
+    }
+  });
+
   test('null destruction arguments are ignored', () {
     expect(() => bindings.hostDestroy(nullptr), returnsNormally);
     expect(() => bindings.windowDestroy(nullptr, nullptr), returnsNormally);
+    expect(() => bindings.textLayoutDestroy(nullptr), returnsNormally);
   });
 }

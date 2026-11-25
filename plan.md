@@ -107,11 +107,20 @@ Skia canvas масштабируется через `displayScale`. Backbuffer �
 - преобразование координат ввода и layout для Windows/macOS/Linux;
 - bootstrap `tools/bootstrap_native.py`;
 - закреплённые SDL3 3.4.20 и Skia `chrome/m148`;
+- SkParagraph со SkShaper, SkUnicode, HarfBuzz и ICU в нативной сборке;
 - нативный пример `example/native_counter.dart`;
 - native smoke-пример `example/native_smoke.dart` и команда `--smoke`;
+- Paragraph smoke с ASCII и кириллицей, автоматически запускаемый bootstrap;
 - отключаемые native diagnostics: scale, logical/physical size, render/present counters;
 - отдельные C ABI-тесты и задокументированная однопоточная модель вызовов;
-- 21 Dart-тест.
+- backend-independent `TextLayout`, `TextLayoutFactory` и `TextLayoutOptions`;
+- opaque `DuiTextLayout` и C ABI для create/destroy, measure, draw, hit test, caret и selection;
+- Dart FFI bindings для native text layout с UTF-16 offsets и caller-owned output buffers;
+- `NativeTextLayoutFactory` поверх SkParagraph и `HeadlessTextLayoutFactory` для unit-тестов;
+- `TextBlock` использует кэшированный `TextLayout` для measurement и drawing, освобождает его при замене и unmount;
+- Unicode/HiDPI-матрица native text layout с проверками measurement, hit test, caret, selection и масштабов 1.0/1.25/1.5/2.0;
+- интерактивная галерея `example/native_text_gallery.dart` с автоматическим smoke-режимом;
+- 41 Dart-тест.
 
 ### 3.2. Проверенное поведение
 
@@ -122,8 +131,16 @@ Skia canvas масштабируется через `displayScale`. Backbuffer �
 - Белый фон окна отображается корректно.
 - HiDPI-масштабирование подтверждено на 4K-дисплее.
 - `dart analyze` проходит без замечаний.
-- Все 21 Dart-тест проходят, включая C ABI version, host lifecycle и null arguments.
+- Все 41 Dart-теста проходят, включая C ABI, TextLayout cache/ownership, native text geometry, Unicode/HiDPI-матрицу и TextBlock integration.
+- Матрица проверяет ASCII, кириллицу, emoji, CJK, Arabic, Hebrew, multiline, пустую и очень длинную строки, а также стабильность logical metrics на масштабах 1.0, 1.25, 1.5 и 2.0.
+- Пустая строка имеет нулевую ширину и конечные неотрицательные metrics; учтён допустимый glyph overhang tight selection boxes за пределами advance width.
+- `TextBlock` на Windows получает реальные SkParagraph metrics, переносит длинный текст по доступной ширине и рисует тот же native layout.
+- Цвет не пересоздаёт layout; text, fontSize, alignment, maxWidth, scale и factory вызывают замену с disposal предыдущего layout.
+- Native text handles измеряют ASCII, кириллицу и emoji, возвращают UTF-16 hit-test/caret/selection geometry и рисуются в активном SDL/Skia frame.
+- Полный `python tools/bootstrap_native.py` успешно пересобирает Skia/SkParagraph и native library.
+- Paragraph smoke на Windows измеряет `ASCII, кириллица` через SkParagraph: width 124.945, height 21.
 - Native smoke автоматически завершается после 3 smoke-кадров.
+- Native text gallery smoke успешно рисует 3 кадра: scale 2.0, logical 960×800, physical 1920×1600, 4 renderFrame и 4 present.
 - Diagnostics подтверждены на Windows: scale 2.0, logical 320×200, physical 640×400, 4 renderFrame и 4 present.
 
 ### 3.3. Основные файлы
@@ -139,14 +156,19 @@ lib/src/observable.dart              — observable primitives
 lib/src/events.dart                  — routed events
 lib/src/window.dart                  — Application и Window
 lib/src/drawing.dart                 — DrawingContext
+lib/src/text_layout.dart             — текстовый контракт и cache key
+lib/src/headless_text_layout.dart    — deterministic headless text layout
 lib/src/native/native_bindings.dart  — FFI
+lib/src/native/native_text_layout.dart — SkParagraph TextLayout backend
 lib/src/native/sdl_skia_host.dart    — SDL/Skia Dart host
 native/include/dui_native.h          — C ABI
 native/src/dui_native.cpp            — SDL3 + Skia backend
+native/src/paragraph_smoke.cpp       — SkParagraph smoke-проверка
 native/CMakeLists.txt                — нативная сборка
 tools/bootstrap_native.py            — зависимости и сборка
 example/native_counter.dart          — нативный интерактивный пример
 example/native_smoke.dart            — native smoke с автоматическим завершением
+example/native_text_gallery.dart     — Unicode/HiDPI text gallery и её smoke-режим
 test/                                — автоматические тесты
 ```
 
@@ -168,6 +190,8 @@ python tools/bootstrap_native.py
 python tools/bootstrap_native.py --run
 python tools/bootstrap_native.py --smoke
 python tools/bootstrap_native.py --smoke --diagnostics
+python tools/bootstrap_native.py --text-gallery
+python tools/bootstrap_native.py --text-gallery --smoke --diagnostics
 ```
 
 Если Dart не в `PATH`:
@@ -183,9 +207,9 @@ python tools/bootstrap_native.py --smoke --dart "<путь-к-dart>"
 
 Приоритет указан в скобках: P0 — критично, P1 — следующий этап, P2 — позже.
 
-1. **P0:** `TextBlock.measureCore()` приблизительно считает ширину через `length * fontSize * 0.6`.
-2. **P0:** Skia рисует через `drawSimpleText`, без полноценного paragraph layout и shaping.
-3. **P0:** текстовая метрика в Dart и rasterization в Skia могут противоречить друг другу.
+1. **P0:** `TextBox.measureCore()` всё ещё приблизительно считает ширину через число символов.
+2. **P0:** legacy `drawText`, используемый `TextBox`, рисует через `drawSimpleText` без SkParagraph.
+3. **P1:** native text layout пока принимает только конечную положительную `maxWidth`; infinite constraints остаются задачей layout system.
 4. **P0:** `TextBox` не запускает SDL text input при focus.
 5. **P0:** нет IME composition, selection, clipboard и нормальной клавиатурной навигации.
 6. **P1:** нативный пример рисует кадр каждые 8 мс независимо от invalidate.
@@ -272,23 +296,32 @@ abstract interface class TextLayout {
 
 Требования:
 
-- [ ] `TextBlock` не рассчитывает ширину по числу символов.
-- [ ] Текстовая раскладка кэшируется.
-- [ ] Cache invalidation происходит при изменении text, font, fontSize, width и scale.
-- [ ] `TextLayout` не становится публичной Skia-сущностью.
-- [ ] Время жизни native handles определено явно.
+- [x] `TextBlock` не рассчитывает ширину по числу символов.
+- [x] Текстовая раскладка кэшируется.
+- [x] Cache invalidation происходит при изменении text, font, fontSize, width и scale.
+- [x] `TextLayout` не становится публичной Skia-сущностью.
+- [x] Время жизни native handles определено явно.
+
+Зафиксированный контракт:
+
+- `TextLayoutFactory.create()` возвращает объект с одним явным владельцем.
+- Владелец вызывает `dispose()` при замене layout и при окончательном уничтожении контрола или cache entry.
+- `dispose()` идемпотентен; остальные операции после него выбрасывают `StateError`.
+- Native handle скрыт внутри backend-реализации и не входит в публичный контракт.
+- `TextPosition.offset`, `caretRect()` и `selectionRects()` используют UTF-16 code unit offsets.
+- Cache key — `TextLayoutOptions`: text, fontFamily, fontSize, maxWidth, scale и alignment.
 
 ## 1.2. Расширить Skia-сборку
 
-- [ ] Включить SkParagraph.
-- [ ] Включить необходимые HarfBuzz/ICU зависимости.
-- [ ] Обновить GN args в bootstrap.
+- [x] Включить SkParagraph.
+- [x] Включить необходимые HarfBuzz/ICU зависимости.
+- [x] Обновить GN args в bootstrap.
 - [ ] Проверить Linux fontconfig/Freetype.
-- [ ] Проверить Windows system font manager.
+- [x] Проверить Windows system font manager.
 - [ ] Проверить macOS CoreText.
-- [ ] Зафиксировать получившиеся linker dependencies в CMake.
+- [x] Зафиксировать получившиеся linker dependencies в CMake.
 
-Критерий готовности: одинаковый текст строится и измеряется через SkParagraph на трёх ОС.
+Критерий готовности: одинаковый текст строится и измеряется через SkParagraph на трёх ОС. На Windows критерий выполнен. Для Linux и macOS добавлены platform-specific font manager/scanner, но реальные сборка и Paragraph smoke на этих ОС ещё не запускались, поэтому общий критерий готовности не подтверждён.
 
 ## 1.3. Добавить native text handles в C ABI
 
@@ -306,35 +339,35 @@ text_layout_selection_rects
 
 Требования:
 
-- [ ] Использовать opaque `DuiTextLayout*`.
-- [ ] Передавать UTF-8 и явную длину.
-- [ ] Не возвращать указатели на временные C++-строки.
-- [ ] Возвращать простые структуры с `struct_size`.
-- [ ] Обрабатывать ошибки без C++ exceptions за ABI boundary.
+- [x] Использовать opaque `DuiTextLayout*`.
+- [x] Передавать UTF-8 и явную длину.
+- [x] Не возвращать указатели на временные C++-строки.
+- [x] Возвращать простые структуры с `struct_size`.
+- [x] Обрабатывать ошибки без C++ exceptions за ABI boundary.
 
 ## 1.4. Перевести `TextBlock` на `TextLayout`
 
-- [ ] Получить реальные `width`, `height` и baseline.
-- [ ] Учитывать доступную ширину в `measureCore()`.
+- [x] Получить реальные `width`, `height` и baseline.
+- [x] Учитывать доступную ширину в `measureCore()`.
 - [ ] Добавить `maxLines`, overflow и wrapping позже отдельными свойствами.
-- [ ] Не пересоздавать layout, если параметры не изменились.
-- [ ] Реализовать headless text layout для unit-тестов.
+- [x] Не пересоздавать layout, если параметры не изменились.
+- [x] Реализовать headless text layout для unit-тестов.
 
-Критерий готовности: measurement совпадает с фактически нарисованным текстом, включая кириллицу и смешанный текст.
+Критерий готовности: measurement совпадает с фактически нарисованным текстом, включая кириллицу и смешанный текст. Выполнено и проверено на Windows; `maxLines` и overflow намеренно оставлены отдельной задачей.
 
 ## 1.5. Тестирование текста
 
-- [ ] ASCII.
-- [ ] Кириллица.
-- [ ] Emoji.
-- [ ] CJK.
-- [ ] Arabic/Hebrew.
-- [ ] Многострочный текст.
-- [ ] Пустая строка.
-- [ ] Очень длинная строка.
-- [ ] Масштабы 1.0, 1.25, 1.5 и 2.0.
+- [x] ASCII.
+- [x] Кириллица.
+- [x] Emoji.
+- [x] CJK.
+- [x] Arabic/Hebrew.
+- [x] Многострочный текст.
+- [x] Пустая строка.
+- [x] Очень длинная строка.
+- [x] Масштабы 1.0, 1.25, 1.5 и 2.0.
 
-Критерий готовности: нет clipping, неправильной ширины и скачков высоты при HiDPI.
+Критерий готовности: нет clipping, неправильной ширины и скачков высоты при HiDPI. Автоматические metrics/geometry-проверки и gallery smoke выполнены на Windows. Ручной визуальный контроль clipping на мониторах с разными масштабами ещё не выполнен; Linux и macOS не проверены.
 
 ---
 
@@ -600,12 +633,11 @@ default < inherited < style < binding < local < animation
 
 Порядок ближайших рабочих сессий:
 
-1. **Этап 1.1:** спроектировать `TextLayout` и ownership native handles.
-2. **Этап 1.2:** включить SkParagraph и зависимости в bootstrap.
-3. **Этап 1.3–1.4:** native text measurement и перевод `TextBlock`.
-4. **Этап 2:** TextBox input/IME/selection/clipboard.
-5. **Этап 3:** focus traversal.
-6. **Этап 4:** render on demand.
+1. **Этап 2:** TextBox input/IME/selection/clipboard.
+2. **Незавершённая часть этапа 1.2:** проверить сборку и Paragraph smoke на Linux (FontConfig/Freetype) и macOS (CoreText).
+3. **Ручная визуальная проверка этапа 1.5:** открыть text gallery на мониторах с разными масштабами и проверить clipping; автоматический smoke этого не заменяет.
+4. **Этап 3:** focus traversal.
+5. **Этап 4:** render on demand.
 
 Не начинать GPU, styles или virtualization до завершения этапов 1–4.
 
@@ -646,6 +678,134 @@ default < inherited < style < binding < local < animation
 ---
 
 ## 9. Журнал работ
+
+### 2026-11-25 — этап 1.5, Unicode/HiDPI-матрица и text gallery
+
+Сделано:
+
+- Добавлены 10 native text layout тестов для ASCII, кириллицы, emoji, CJK, Arabic, Hebrew, multiline, пустой и очень длинной строки, а также масштабов 1.0, 1.25, 1.5 и 2.0.
+- Проверяются конечные metrics, ограничение ширины, hit test, caret, selection и стабильность logical metrics между масштабами с допуском 0.51.
+- Исправлена ширина пустой строки: вместо отрицательного sentinel `SkParagraph::getLongestLine()` теперь возвращается 0.
+- В selection-проверках учтён небольшой glyph overhang tight boxes за advance width; ограничение ширины самого layout не ослаблено.
+- Добавлены интерактивная `example/native_text_gallery.dart` и её автоматический трёхкадровый smoke-режим.
+- В bootstrap добавлены команды `--text-gallery` и `--text-gallery --smoke`; прежние `--run` и `--smoke` сохранены.
+- C ABI не изменялся; native library пересобрана после исправления C++ measurement.
+
+Проверено:
+
+- `dart analyze` — без замечаний.
+- `dart test` — все 41 теста проходят.
+- `python -m unittest test/bootstrap_native_test.py -v` — 2 теста проходят.
+- Полный bootstrap с Paragraph smoke и `--text-gallery --smoke --diagnostics` — успешно: gallery рисует 3 кадра, displayScale 2.0, logical 960×800, physical 1920×1600, 4 renderFrame и 4 present.
+- Исходный `native_smoke.dart` с собранной библиотекой — успешно, 3 кадра.
+
+Не проверено:
+
+- Ручной визуальный контроль clipping на мониторах с разными масштабами; автоматические metrics/geometry-тесты и smoke его не заменяют.
+- Linux и macOS.
+
+Следующий шаг:
+
+- Этап 2: TextBox input/IME/selection/clipboard; отдельной задачей остаётся кроссплатформенная проверка этапа 1.2.
+
+### 2026-11-25 — этап 1.4, TextBlock через TextLayout
+
+Сделано:
+
+- Добавлены `NativeTextLayoutFactory`/`NativeTextLayout` поверх C ABI и SkParagraph с идемпотентным disposal и проверками операций после dispose.
+- Добавлены deterministic `HeadlessTextLayoutFactory`/`HeadlessTextLayout` для unit-тестов, включая measurement, hit test, caret и selection geometry.
+- `WindowHost` предоставляет `TextLayoutFactory` и display scale; `SdlSkiaHost` подключает native factory к `Window`.
+- `TextBlock` использует единый `TextLayout` для measurement и drawing, передаёт цвет только при paint и освобождает layout при замене или unmount.
+- Cache key включает text, fontSize, maxWidth, scale, alignment и identity factory; неизменённые параметры и color не пересоздают layout.
+- Исправлено обновление binding внутри `StackPanel`: `invalidateMeasure()` теперь распространяется вверх по retained-дереву.
+- C ABI и C++ на этом этапе не изменялись.
+
+Проверено:
+
+- `dart analyze` — без замечаний.
+- `dart test` — 31 тест проходит, включая cache reuse/invalidation, disposal, headless geometry, native TextBlock measurement/wrapping/drawing и обновление binding.
+- `python -m unittest test/bootstrap_native_test.py -v` — 2 теста проходят.
+- Paragraph smoke — успешно; native smoke с diagnostics и SkParagraph TextBlock — успешно, 4 renderFrame и 4 present.
+
+Следующий шаг:
+
+- Этап 1.5: расширить матрицу текстовых тестов и проверить разные displayScale.
+
+### 2026-11-25 — этап 1.3, native text handles
+
+Сделано:
+
+- В C ABI добавлены opaque `DuiTextLayout` и операции create/destroy, measure, draw, hit test, caret rect и selection rects.
+- Входной `DuiTextLayoutOptions` принимает UTF-8 text/font family с явными byte lengths; результаты возвращаются через caller-owned structs с `struct_size`.
+- Selection rects используют двухфазный протокол count/fill без возврата указателей на временные C++-данные.
+- Все новые C ABI entry points перехватывают C++ exceptions; ошибки доступны через `dui_last_error_message()`.
+- Добавлены проверка UTF-8 и преобразование UTF-16 offsets в UTF-8 для caret/selection; hit test учитывает актуальное UTF-16 поведение SkParagraph editing API.
+- Добавлены Dart FFI structs, typedefs, lookups и вызовы, включая scale-aware measurement/drawing.
+- `TextBlock` намеренно не изменялся; его перевод относится к этапу 1.4.
+
+Проверено:
+
+- Полный bootstrap и пересборка `dui_native.dll` — успешно.
+- `dart analyze` — без замечаний.
+- `dart test` — 27 тестов проходят, включая ASCII, кириллицу, emoji, UTF-16 offsets, measurement, hit test, caret, selection и drawing в активный frame.
+- `python -m unittest test/bootstrap_native_test.py -v` — 2 теста проходят.
+- Paragraph smoke — успешно; native smoke с diagnostics — успешно, 4 renderFrame и 4 present.
+
+Примечание:
+
+- При запуске через `dart.exe` Skia сначала выводит предупреждение об отсутствии `icudtl.dat` рядом с executable, затем использует копию рядом с `dui_native.dll`; текстовые тесты проходят. Не изменять Dart SDK ради подавления этого предупреждения.
+
+Следующий шаг:
+
+- Этап 1.4: реализовать backend `TextLayout` поверх native handles и перевести `TextBlock` на него.
+
+### 2026-11-25 — этап 1.2, SkParagraph и зависимости
+
+Сделано:
+
+- В GN args включены SkParagraph, SkShaper, SkUnicode, HarfBuzz и ICU.
+- `build_skia()` всегда синхронизирует зависимости, применяет GN args и собирает `skia skparagraph`, не завершаясь преждевременно при наличии старой `skia.lib`.
+- В CMake и bootstrap зафиксированы библиотеки `skia`, `skparagraph`, `skshaper`, `skunicode_core`, `skunicode_icu`, `harfbuzz` и `icu`.
+- `icudtl.dat` копируется в `native/build/bin` после сборки.
+- Добавлен автоматически запускаемый `dui_paragraph_smoke`: создаёт Paragraph для `ASCII, кириллица`, выполняет `layout(240)` и проверяет положительные width/height.
+- Добавлены Windows DirectWrite, macOS CoreText и Linux FontConfig/FreeType font manager/scanner.
+
+Проверено:
+
+- Полный `python tools/bootstrap_native.py` в настроенном native окружении — успешно, включая Skia/SkParagraph и `dui_native.dll`.
+- `dui_paragraph_smoke` на Windows — `SkParagraph smoke passed: width=124.945, height=21`.
+- `dart analyze` — без замечаний.
+- `dart test` — 24 теста проходят.
+- `python -m unittest test/bootstrap_native_test.py -v` — 2 теста проходят.
+- Native smoke с diagnostics — успешно: scale 2.0, logical 320×200, physical 640×400, 4 renderFrame и 4 present.
+
+Не проверено:
+
+- Реальные сборка и Paragraph smoke на Linux и macOS; общий кроссплатформенный критерий этапа 1.2 пока не подтверждён.
+
+Следующий шаг:
+
+- Этап 1.3: добавить opaque native text handles в C ABI.
+
+### 2026-11-25 — этап 1.1, контракт TextLayout
+
+Сделано:
+
+- Добавлен публичный backend-independent `TextLayout` с measurement, draw, hit test, caret и selection geometry.
+- Добавлены `TextLayoutFactory`, `TextPosition` и immutable `TextLayoutOptions`.
+- Зафиксированы UTF-16 offsets, единоличное владение layout, идемпотентный `dispose()` и запрет операций после disposal.
+- Полный cache key включает text, fontFamily, fontSize, maxWidth, scale и alignment.
+- Skia, FFI и native handles не входят в публичный текстовый контракт.
+- `TextBlock` и C ABI намеренно не изменялись; реализация отложена к этапам 1.3–1.4.
+
+Проверено:
+
+- `dart analyze` — без замечаний.
+- `dart test` — 24 теста проходят, включая равенство и изменение всех компонентов cache key.
+
+Следующий шаг:
+
+- Этап 1.2: включить SkParagraph и необходимые зависимости в bootstrap.
 
 ### 2026-11-25 — этап 0.3, базовые C ABI-тесты
 

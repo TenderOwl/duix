@@ -3,7 +3,9 @@ import 'dart:async';
 import 'drawing.dart';
 import 'events.dart';
 import 'geometry.dart';
+import 'headless_text_layout.dart';
 import 'observable.dart';
+import 'text_layout.dart';
 import 'ui_element.dart';
 
 abstract interface class NativeHost {
@@ -35,16 +37,19 @@ final class Window extends ObservableObject implements WindowHost {
     double width = 800,
     double height = 600,
     Color background = Color.white,
+    TextLayoutFactory textLayoutFactory = const HeadlessTextLayoutFactory(),
     UIElement? content,
   })  : _title = title,
         _logicalSize = Size(width, height),
-        _background = background {
+        _background = background,
+        _textLayoutFactory = textLayoutFactory {
     this.content = content;
   }
 
   String _title;
   Size _logicalSize;
   Color _background;
+  TextLayoutFactory _textLayoutFactory;
   double _devicePixelRatio = 1;
   UIElement? _content;
   Control? _focused;
@@ -73,6 +78,18 @@ final class Window extends ObservableObject implements WindowHost {
   bool get isVisible => _isVisible;
   Control? get focusedElement => _focused;
   bool get frameScheduled => _frameScheduled;
+
+  @override
+  double get displayScale => _devicePixelRatio;
+
+  @override
+  TextLayoutFactory get textLayoutFactory => _textLayoutFactory;
+  set textLayoutFactory(TextLayoutFactory value) {
+    if (identical(_textLayoutFactory, value)) return;
+    _textLayoutFactory = value;
+    _content?.invalidateMeasure();
+    requestFrame();
+  }
 
   void updateDevicePixelRatio(double value) {
     if (value <= 0 || value == _devicePixelRatio) return;

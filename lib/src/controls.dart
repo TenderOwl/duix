@@ -1,7 +1,9 @@
 import 'drawing.dart';
 import 'events.dart';
 import 'geometry.dart';
+import 'headless_text_layout.dart';
 import 'properties.dart';
+import 'text_layout.dart';
 import 'ui_element.dart';
 
 final class TextBlock extends Control {
@@ -34,7 +36,12 @@ final class TextBlock extends Control {
     affectsPaint: true,
   );
 
+  static const _headlessFactory = HeadlessTextLayoutFactory();
+
   TextAlignment _alignment;
+  TextLayout? _textLayout;
+  TextLayoutOptions? _textLayoutOptions;
+  TextLayoutFactory? _textLayoutFactory;
 
   String get text => getValue(textProperty);
   set text(String value) => setValue(textProperty, value);
@@ -49,7 +56,7 @@ final class TextBlock extends Control {
   set alignment(TextAlignment value) {
     if (_alignment == value) return;
     _alignment = value;
-    invalidatePaint();
+    invalidateMeasure();
   }
 
   @override
@@ -57,25 +64,62 @@ final class TextBlock extends Control {
 
   @override
   Size measureCore(Size availableSize) {
-    final lines = text.split('\n');
-    final width = lines.fold<double>(
-      0,
-      (maximum, line) => line.length * fontSize * 0.6 > maximum
-          ? line.length * fontSize * 0.6
-          : maximum,
-    );
-    return Size(width, lines.length * fontSize * 1.3);
+    final layout = _layoutFor(availableSize.width);
+    return Size(layout.width, layout.height);
   }
 
   @override
   void renderCore(DrawingContext context) {
-    context.drawText(
-      text,
+    final layout = _textLayout ?? _layoutFor(bounds.width);
+    layout.draw(
+      context,
       Point(bounds.left, bounds.top),
+      paint: Paint(color),
+    );
+  }
+
+  @override
+  void onMounted() {
+    invalidateMeasure();
+  }
+
+  @override
+  void onUnmounted() {
+    _clearTextLayout();
+    invalidateMeasure();
+  }
+
+  TextLayout _layoutFor(double maxWidth) {
+    final host = window;
+    final factory = host?.textLayoutFactory ?? _headlessFactory;
+    final options = TextLayoutOptions(
+      text: text,
       fontSize: fontSize,
-      color: color,
+      maxWidth: maxWidth,
+      scale: host?.displayScale ?? 1,
       alignment: alignment,
     );
+    final current = _textLayout;
+    if (current != null &&
+        !current.isDisposed &&
+        identical(_textLayoutFactory, factory) &&
+        _textLayoutOptions == options) {
+      return current;
+    }
+
+    _clearTextLayout();
+    final created = factory.create(options);
+    _textLayout = created;
+    _textLayoutOptions = options;
+    _textLayoutFactory = factory;
+    return created;
+  }
+
+  void _clearTextLayout() {
+    _textLayout?.dispose();
+    _textLayout = null;
+    _textLayoutOptions = null;
+    _textLayoutFactory = null;
   }
 }
 

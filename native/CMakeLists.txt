@@ -46,6 +46,23 @@ target_link_libraries(dui_native
     ${SKIA_EXTRA_LIBRARIES}
 )
 
+add_executable(dui_paragraph_smoke
+  src/paragraph_smoke.cpp
+)
+target_include_directories(dui_paragraph_smoke
+  PRIVATE
+    ${SKIA_ROOT}
+    ${SKIA_ROOT}/include
+)
+target_link_libraries(dui_paragraph_smoke
+  PRIVATE
+    ${SKIA_LIBRARY}
+    ${SKIA_EXTRA_LIBRARIES}
+)
+set_target_properties(dui_paragraph_smoke PROPERTIES
+  RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin
+)
+
 if(MSVC)
   target_compile_options(dui_native PRIVATE /W4 /EHsc)
 else()
