@@ -334,7 +334,11 @@ void dui_window_set_background(DuiWindow* window, uint32_t rgba) {
 
 int32_t dui_window_begin_frame(DuiWindow* window) {
   clear_error();
-  if (!window || !ensure_surface(window)) return 0;
+  if (!window) {
+    set_error("Invalid window frame arguments.");
+    return 0;
+  }
+  if (!ensure_surface(window)) return 0;
   window->frame_active = true;
   auto* canvas = window->surface->getCanvas();
   canvas->resetMatrix();

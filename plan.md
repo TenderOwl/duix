@@ -110,7 +110,8 @@ Skia canvas масштабируется через `displayScale`. Backbuffer �
 - нативный пример `example/native_counter.dart`;
 - native smoke-пример `example/native_smoke.dart` и команда `--smoke`;
 - отключаемые native diagnostics: scale, logical/physical size, render/present counters;
-- 16 Dart-тестов.
+- отдельные C ABI-тесты и задокументированная однопоточная модель вызовов;
+- 21 Dart-тест.
 
 ### 3.2. Проверенное поведение
 
@@ -121,7 +122,7 @@ Skia canvas масштабируется через `displayScale`. Backbuffer �
 - Белый фон окна отображается корректно.
 - HiDPI-масштабирование подтверждено на 4K-дисплее.
 - `dart analyze` проходит без замечаний.
-- Все 16 Dart-тестов проходят.
+- Все 21 Dart-тест проходят, включая C ABI version, host lifecycle и null arguments.
 - Native smoke автоматически завершается после 3 smoke-кадров.
 - Diagnostics подтверждены на Windows: scale 2.0, logical 320×200, physical 640×400, 4 renderFrame и 4 present.
 
@@ -192,9 +193,8 @@ python tools/bootstrap_native.py --smoke --dart "<путь-к-dart>"
 8. **P1:** нет `Grid`, `ScrollViewer`, alignment и min/max constraints.
 9. **P1:** binding lifecycle и отмена подписок требуют более строгой модели владения.
 10. **P1:** нет единого механизма `dispose()` для контролов и ресурсов.
-11. **P1:** тестируется только размер Dart ABI-структуры, нет native smoke-теста C ABI.
-12. **P2:** нет styles/templates, `ItemsControl`, виртуализации и accessibility.
-13. **P2:** нет packaging runtime dependencies и кроссплатформенной CI.
+11. **P2:** нет styles/templates, `ItemsControl`, виртуализации и accessibility.
+12. **P2:** нет packaging runtime dependencies и кроссплатформенной CI.
 
 ---
 
@@ -239,10 +239,10 @@ python tools/bootstrap_native.py --smoke --dart "<путь-к-dart>"
 
 ## 0.3. Добавить базовые ABI-тесты
 
-- [ ] Проверить `dui_abi_version()`.
-- [ ] Проверить создание/уничтожение host.
-- [ ] Проверить ошибки при нулевых указателях.
-- [ ] Документировать потоки, на которых разрешено вызывать функции.
+- [x] Проверить `dui_abi_version()`.
+- [x] Проверить создание/уничтожение host.
+- [x] Проверить ошибки при нулевых указателях.
+- [x] Документировать потоки, на которых разрешено вызывать функции.
 
 Критерий готовности: базовый C ABI проверяется отдельно от UI-контролов.
 
@@ -600,13 +600,12 @@ default < inherited < style < binding < local < animation
 
 Порядок ближайших рабочих сессий:
 
-1. **Этап 0.3:** базовые ABI-тесты и документация потоковой модели.
-2. **Этап 1.1:** спроектировать `TextLayout` и ownership native handles.
-3. **Этап 1.2:** включить SkParagraph и зависимости в bootstrap.
-4. **Этап 1.3–1.4:** native text measurement и перевод `TextBlock`.
-5. **Этап 2:** TextBox input/IME/selection/clipboard.
-6. **Этап 3:** focus traversal.
-7. **Этап 4:** render on demand.
+1. **Этап 1.1:** спроектировать `TextLayout` и ownership native handles.
+2. **Этап 1.2:** включить SkParagraph и зависимости в bootstrap.
+3. **Этап 1.3–1.4:** native text measurement и перевод `TextBlock`.
+4. **Этап 2:** TextBox input/IME/selection/clipboard.
+5. **Этап 3:** focus traversal.
+6. **Этап 4:** render on demand.
 
 Не начинать GPU, styles или virtualization до завершения этапов 1–4.
 
@@ -647,6 +646,27 @@ default < inherited < style < binding < local < animation
 ---
 
 ## 9. Журнал работ
+
+### 2026-11-25 — этап 0.3, базовые C ABI-тесты
+
+Сделано:
+
+- Добавлен `test/native_abi_test.dart`, не использующий UI-контролы.
+- Проверяются ABI version, повторные create/destroy host, null event/frame/metrics arguments и безопасный null destroy.
+- В `dui_native.h` задокументированы однопоточная модель host/window и thread-local lifetime `last_error`.
+- Исправлен `dui_window_begin_frame(nullptr)`: теперь устанавливается понятное `last_error`.
+- Native library пересобрана после C++ изменения.
+
+Проверено:
+
+- `dart analyze` — без замечаний.
+- `dart test` — 21 тест проходит.
+- `python -m unittest test/bootstrap_native_test.py -v` — 2 теста проходят.
+- Native smoke с diagnostics — успешно, 4 renderFrame и 4 present.
+
+Следующий шаг:
+
+- Этап 1.1: спроектировать `TextLayout` и ownership native handles.
 
 ### 2026-11-25 — этап 0.2, диагностические метрики
 

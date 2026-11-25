@@ -13,6 +13,17 @@
 extern "C" {
 #endif
 
+/*
+ * Threading contract:
+ * - Create, use and destroy a DuiHost on the same OS thread.
+ * - Call all functions for its DuiWindow objects on that same thread.
+ * - Do not call host or window functions concurrently; the API is not
+ *   internally synchronized.
+ * - dui_abi_version() may be called on any thread.
+ * - dui_last_error_message() reads thread-local error state. The returned
+ *   pointer remains valid until the next native call on that thread.
+ */
+
 typedef struct DuiHost DuiHost;
 typedef struct DuiWindow DuiWindow;
 
