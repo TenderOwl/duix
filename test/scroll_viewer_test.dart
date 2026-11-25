@@ -107,6 +107,25 @@ void main() {
 
     window.dispatchMouseWheel(const Point(20, 20), deltaY: 1);
     expect(viewer.verticalOffset, 0);
+
+    final nestedContent = _FixedControl(const Size(400, 300));
+    final nestedViewer = ScrollViewer(content: nestedContent);
+    final header = Label(text: 'Header');
+    DockPanel.setDock(header, Dock.top);
+    final nestedWindow = Window(
+      width: 200,
+      height: 100,
+      content: DockPanel(children: [header, nestedViewer]),
+    );
+    nestedWindow.updateLayout();
+    nestedWindow.dispatchMouseWheel(
+      Point(nestedViewer.bounds.left + 10, nestedViewer.bounds.top + 10),
+      deltaY: -1,
+    );
+    nestedWindow.updateLayout();
+
+    expect(nestedViewer.verticalOffset, 48);
+    expect(nestedContent.bounds.top, nestedViewer.bounds.top - 48);
   });
 
   test('keyboard scrolling bubbles from a focused descendant', () {

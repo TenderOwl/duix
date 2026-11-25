@@ -85,6 +85,13 @@ final class EdgeInsets {
         top = vertical,
         bottom = vertical;
 
+  const EdgeInsets.only({
+    this.left = 0,
+    this.top = 0,
+    this.right = 0,
+    this.bottom = 0,
+  });
+
   static const zero = EdgeInsets.all(0);
 
   final double left;

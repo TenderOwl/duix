@@ -599,7 +599,9 @@ text_layout_selection_rects
 - [x] Clip при render и hit test.
 - [x] Keyboard scrolling после focus scopes.
 
-`ScrollViewer` измеряет content с бесконечным constraint по каждой разрешённой оси и повторно разрешает Auto scrollbars с учётом их перекрёстного влияния на viewport. Поддерживаются `horizontalOffset`/`verticalOffset`, `scrollTo()`, `scrollBy()`, `scrollToStart()`/`scrollToEnd()`, четыре режима `ScrollBarVisibility` и пропорциональные thumbs с минимальным размером. Mouse wheel и клавиши arrows/PageUp/PageDown/Home/End проходят routed events от focused descendants. Scrollbar track выполняет page scrolling, thumb использует pointer capture. Content ограничен viewport и при render, и при hit test. Пример `example/native_scroll_viewer.dart` собирает окно настроек без абсолютного позиционирования и поддерживает `--smoke --diagnostics`.
+`ScrollViewer` измеряет content с бесконечным constraint по каждой разрешённой оси и повторно разрешает Auto scrollbars с учётом их перекрёстного влияния на viewport. Поддерживаются `horizontalOffset`/`verticalOffset`, `scrollTo()`, `scrollBy()`, `scrollToStart()`/`scrollToEnd()`, четыре режима `ScrollBarVisibility` и пропорциональные thumbs с минимальным размером. Mouse wheel и клавиши arrows/PageUp/PageDown/Home/End проходят routed events от focused descendants. Scrollbar track выполняет page scrolling, thumb использует pointer capture. Content ограничен viewport и при render, и при hit test.
+
+Критерий готовности этапа 5 выполнен: `example/native_scroll_viewer.dart` собирает типовое окно настроек без абсолютного позиционирования. Корневой `DockPanel` размещает header, footer и заполняющий `ScrollViewer`; каждая секция использует `DockPanel` и двухколоночный Auto/Star `Grid` с Label/TextBox. Пример поддерживает `--smoke --diagnostics`; smoke проверяет регионы layout, wheel, PageDown из focused TextBox и активацию footer Button. Для margin добавлен стандартный `EdgeInsets.only()`.
 
 ---
 
@@ -774,16 +776,18 @@ default < inherited < style < binding < local < animation
 - Добавлены `ScrollViewer` и `ScrollBarVisibility { disabled, hidden, auto, visible }`. Content измеряется с бесконечным constraint по разрешённым осям; viewport, extent, offsets и видимость Auto scrollbars пересчитываются с учётом перекрёстного влияния полос.
 - Реализованы программная прокрутка, mouse wheel с scroll chaining, клавиши arrows/PageUp/PageDown/Home/End через bubbling от focused descendants, page click по track и thumb dragging с pointer capture.
 - Исправлено падение при перетаскивании thumb перед началом track: вычисленный drag offset ограничивается нулём до вызова validating `scrollTo()`. Регрессионный сценарий проверяет обе оси на нижней и верхней границах.
+- Исправлено отсутствие визуальной прокрутки во вложенном примере: `UIElement.invalidateArrange()` теперь инвалидирует родительскую цепочку, поэтому закэшированный DockPanel повторно вызывает arrange детей. Регрессионный тест подтверждает не только offset, но и фактические content bounds.
 - Render помещает content в viewport clip, hit test отклоняет content вне viewport и направляет scrollbar input в `ScrollViewer`. Изменение offsets инвалидирует arrange и публикует property notifications.
 - В routed events добавлен `mouseWheel`; SDL `SDL_EVENT_MOUSE_WHEEL` передаёт позицию и обе delta через существующий `DuiEvent` без изменения его layout. Native key mapping дополнен arrows и PageUp/PageDown.
 - Добавлены `example/native_scroll_viewer.dart` с типовым окном настроек и 11 тестов `test/scroll_viewer_test.dart`: viewport/extent, visibility modes, offsets, wheel, keyboard, clipping, hit testing, thumb drag, track click и shrink.
+- Пример расширен до критерия готовности этапа 5: корневой DockPanel с header/footer, ScrollViewer как fill, секции на DockPanel и Auto/Star Grid, действия обновляют bound status. Абсолютное позиционирование не используется; добавлен `EdgeInsets.only()`.
 
 Проверено:
 
 - `dart format` и `dart analyze` — без замечаний.
 - Все 11 ScrollViewer-тестов проходят. Общий прогон с исключением двух clipboard-сценариев — все 164 теста проходят.
 - Native library успешно пересобрана через CMake/Ninja/Clang; SkParagraph smoke проходит.
-- `dart run example/native_scroll_viewer.dart --smoke --diagnostics` — успешно, 3 кадра, двунаправленная прокрутка подтверждена smoke-сценарием.
+- `dart run example/native_scroll_viewer.dart --smoke --diagnostics` — успешно, 3 кадра; проверены DockPanel regions, двунаправленный wheel, PageDown из TextBox, footer Button и соответствие фактических content bounds текущим offsets.
 - `git diff --check` — успешно, только известные LF→CRLF warnings.
 
 Не проверено / ограничение:

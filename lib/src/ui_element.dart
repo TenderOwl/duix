@@ -392,6 +392,7 @@ abstract class UIElement extends PropertyOwner {
 
   void invalidateArrange() {
     _arrangeValid = false;
+    _logicalParent?.invalidateArrange();
     _window?.requestFrame();
   }
 
