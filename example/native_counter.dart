@@ -41,6 +41,7 @@ Future<void> main(List<String> args) async {
     while (host.isOpen(window)) {
       host.waitForEvent(window);
       host.presentWindow(window);
+      await Future<void>.delayed(Duration.zero);
     }
   } finally {
     await application.shutdown(window);

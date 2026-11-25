@@ -115,6 +115,7 @@ DUI_API void dui_host_destroy(DuiHost* host);
 DUI_API int32_t dui_host_next_event(DuiHost* host, DuiEvent* out_event);
 DUI_API int32_t dui_host_wait_event(
     DuiHost* host, DuiEvent* out_event, int32_t timeout_ms);
+DUI_API int32_t dui_host_wake_up(DuiHost* host);
 
 DUI_API DuiWindow* dui_window_create(
     DuiHost* host,

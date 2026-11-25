@@ -25,14 +25,17 @@ void main() {
       logicalHeight: 600,
       physicalWidth: 1600,
       physicalHeight: 1200,
-      renderFrameCount: 4,
+      scheduledFrameCount: 4,
+      layoutPassCount: 4,
+      paintPassCount: 4,
       presentCount: 4,
     );
 
     expect(
       diagnostics.toString(),
       'Native diagnostics: displayScale=1.5, pixelDensity=2.0, '
-      'logical=800.0x600.0, physical=1600x1200, renderFrame=4, present=4',
+      'logical=800.0x600.0, physical=1600x1200, '
+      'scheduled=4, layout=4, painted=4, presented=4',
     );
   });
 }

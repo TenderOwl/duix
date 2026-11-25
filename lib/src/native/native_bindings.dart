@@ -221,6 +221,7 @@ typedef _HostWaitEventNative = Int32 Function(
   Pointer<DuiEventStruct>,
   Int32,
 );
+typedef _HostWakeUpNative = Int32 Function(Pointer<DuiHostOpaque>);
 typedef _WindowCreateNative = Pointer<DuiWindowOpaque> Function(
   Pointer<DuiHostOpaque>,
   Pointer<Utf8>,
@@ -319,6 +320,7 @@ typedef _HostWaitEventDart = int Function(
   Pointer<DuiEventStruct>,
   int,
 );
+typedef _HostWakeUpDart = int Function(Pointer<DuiHostOpaque>);
 typedef _WindowCreateDart = Pointer<DuiWindowOpaque> Function(
   Pointer<DuiHostOpaque>,
   Pointer<Utf8>,
@@ -449,6 +451,9 @@ final class NativeBindings {
             library.lookupFunction<_HostWaitEventNative, _HostWaitEventDart>(
           'dui_host_wait_event',
         ),
+        hostWakeUp = library.lookupFunction<_HostWakeUpNative, _HostWakeUpDart>(
+          'dui_host_wake_up',
+        ),
         windowCreate =
             library.lookupFunction<_WindowCreateNative, _WindowCreateDart>(
           'dui_window_create',
@@ -547,6 +552,7 @@ final class NativeBindings {
   final _HostDestroyDart hostDestroy;
   final _HostNextEventDart hostNextEvent;
   final _HostWaitEventDart hostWaitEvent;
+  final _HostWakeUpDart hostWakeUp;
   final _WindowCreateDart windowCreate;
   final _WindowDestroyDart windowDestroy;
   final _WindowIdDart windowGetId;
@@ -648,6 +654,12 @@ final class NativeBindings {
     final event = arena<DuiEventStruct>();
     final result = hostWaitEvent(host, event, timeoutMs);
     return _decodeEvent(event, result);
+  }
+
+  void wakeUp(Pointer<DuiHostOpaque> host) {
+    if (hostWakeUp(host) == 0) {
+      throw StateError('Could not wake up SDL host: $lastError');
+    }
   }
 
   NativeEvent? _decodeEvent(Pointer<DuiEventStruct> event, int result) {

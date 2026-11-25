@@ -3,6 +3,7 @@ import 'dart:async';
 import 'drawing.dart';
 import 'events.dart';
 import 'focus_manager.dart';
+import 'frame_scheduler.dart';
 import 'geometry.dart';
 import 'headless_text_layout.dart';
 import 'observable.dart';
@@ -50,7 +51,7 @@ final class Window extends ObservableObject implements WindowHost {
   Control? _pointerCapture;
   TextInputHandler? textInputHandler;
   ClipboardHandler? clipboardHandler;
-  bool _frameScheduled = false;
+  final _scheduler = FrameScheduler();
   bool _isVisible = false;
 
   String get title => _title;
@@ -74,7 +75,14 @@ final class Window extends ObservableObject implements WindowHost {
   double get devicePixelRatio => _devicePixelRatio;
   bool get isVisible => _isVisible;
   Control? get focusedElement => focusManager.focusedElement;
-  bool get frameScheduled => _frameScheduled;
+  bool get frameScheduled => _scheduler.frameScheduled;
+  int get scheduledFrameCount => _scheduler.scheduledFrameCount;
+  int get layoutPassCount => _scheduler.layoutPassCount;
+  int get paintPassCount => _scheduler.paintPassCount;
+
+  void setFrameRequestHandler(void Function()? handler) {
+    _scheduler.setFrameRequestHandler(handler);
+  }
 
   @override
   void startTextInput(Control control) {
@@ -158,9 +166,7 @@ final class Window extends ObservableObject implements WindowHost {
   }
 
   @override
-  void requestFrame() {
-    _frameScheduled = true;
-  }
+  void requestFrame() => _scheduler.requestFrame();
 
   @override
   bool requestFocus(Control control) => focusManager.requestFocus(control);
@@ -188,11 +194,8 @@ final class Window extends ObservableObject implements WindowHost {
     Point position, {
     PointerButton button = PointerButton.primary,
   }) {
-    final root = _content;
-    if (root == null) return;
-    root.measure(logicalSize);
-    root.arrange(Rect.fromLTWH(0, 0, logicalSize.width, logicalSize.height));
-    final target = root.hitTest(position);
+    updateLayout();
+    final target = _content?.hitTest(position);
     if (target == null) return;
     final preview = PointerEventArgs(
       pointerId: 1,
@@ -272,15 +275,20 @@ final class Window extends ObservableObject implements WindowHost {
     }
   }
 
-  void renderFrame(DrawingContext context) {
+  void updateLayout() {
     final root = _content;
-    if (root == null || !_isVisible) {
-      _frameScheduled = false;
-      return;
-    }
-    root.measure(logicalSize);
-    root.arrange(Rect.fromLTWH(0, 0, logicalSize.width, logicalSize.height));
-    root.render(context);
-    _frameScheduled = false;
+    if (root == null) return;
+    _scheduler.layout(() {
+      root.measure(logicalSize);
+      root.arrange(Rect.fromLTWH(0, 0, logicalSize.width, logicalSize.height));
+    });
+  }
+
+  void renderFrame(DrawingContext context) {
+    if (!_scheduler.tryBeginFrame()) return;
+    final root = _content;
+    if (root == null || !_isVisible) return;
+    updateLayout();
+    _scheduler.paint(() => root.render(context));
   }
 }

@@ -429,6 +429,22 @@ int32_t dui_host_wait_event(
   return translate_event(host, out_event, source);
 }
 
+int32_t dui_host_wake_up(DuiHost* host) {
+  clear_error();
+  if (!host) {
+    set_error("Invalid host.");
+    return 0;
+  }
+  SDL_Event event;
+  std::memset(&event, 0, sizeof(event));
+  event.type = SDL_EVENT_USER;
+  if (!SDL_PushEvent(&event)) {
+    set_sdl_error();
+    return 0;
+  }
+  return 1;
+}
+
 DuiWindow* dui_window_create(
     DuiHost* host,
     const char* title_utf8,

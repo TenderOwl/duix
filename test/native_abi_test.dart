@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:ffi';
 
 import 'package:duix/dui.dart';
@@ -32,6 +33,8 @@ void main() {
       expect(bindings.lastError, contains('Invalid event arguments'));
       expect(bindings.hostWaitEvent(nullptr, event, -1), -1);
       expect(bindings.lastError, contains('Invalid event arguments'));
+      expect(bindings.hostWakeUp(nullptr), 0);
+      expect(bindings.lastError, contains('Invalid host'));
     });
   });
 
@@ -237,6 +240,51 @@ void main() {
       diagnostics = host.diagnosticsFor(window)!;
       expect(diagnostics.renderFrameCount, 2);
       expect(diagnostics.presentCount, 2);
+    } finally {
+      await host.closeWindow(window);
+      host.dispose();
+    }
+  });
+
+  test('async Dart invalidation wakes the scheduler and renders one frame',
+      () async {
+    final host = await SdlSkiaHost.initialize(diagnosticsEnabled: true);
+    final text = TextBlock(text: 'Initial');
+    final window = Window(width: 320, height: 200, content: text);
+    try {
+      await host.showWindow(window);
+      host.pumpEvents();
+      host.presentWindow(window);
+      var diagnostics = host.diagnosticsFor(window)!;
+      final scheduledBaseline = diagnostics.scheduledFrameCount;
+      final layoutBaseline = diagnostics.layoutPassCount;
+      final paintBaseline = diagnostics.paintPassCount;
+      final presentBaseline = diagnostics.presentCount;
+
+      Timer(const Duration(milliseconds: 10), () => text.text = 'Async');
+      for (var iteration = 0;
+          iteration < 100 && text.text == 'Initial';
+          iteration++) {
+        host.waitForEvent(
+          window,
+          timeout: const Duration(milliseconds: 2),
+        );
+        host.presentWindow(window);
+        await Future<void>.delayed(Duration.zero);
+      }
+      for (var iteration = 0;
+          iteration < 100 && window.frameScheduled;
+          iteration++) {
+        host.presentWindow(window);
+        await Future<void>.delayed(Duration.zero);
+      }
+
+      expect(text.text, 'Async');
+      diagnostics = host.diagnosticsFor(window)!;
+      expect(diagnostics.scheduledFrameCount, scheduledBaseline + 1);
+      expect(diagnostics.layoutPassCount, layoutBaseline + 1);
+      expect(diagnostics.paintPassCount, paintBaseline + 1);
+      expect(diagnostics.presentCount, presentBaseline + 1);
     } finally {
       await host.closeWindow(window);
       host.dispose();

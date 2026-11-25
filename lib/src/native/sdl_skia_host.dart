@@ -15,7 +15,6 @@ final class _NativeWindowSession {
   final Pointer<DuiWindowOpaque> pointer;
   final int id;
   bool open = true;
-  int renderFrameCount = 0;
   int presentCount = 0;
 }
 
@@ -27,7 +26,9 @@ final class NativeWindowDiagnostics {
     required this.logicalHeight,
     required this.physicalWidth,
     required this.physicalHeight,
-    required this.renderFrameCount,
+    required this.scheduledFrameCount,
+    required this.layoutPassCount,
+    required this.paintPassCount,
     required this.presentCount,
   });
 
@@ -37,8 +38,12 @@ final class NativeWindowDiagnostics {
   final double logicalHeight;
   final int physicalWidth;
   final int physicalHeight;
-  final int renderFrameCount;
+  final int scheduledFrameCount;
+  final int layoutPassCount;
+  final int paintPassCount;
   final int presentCount;
+
+  int get renderFrameCount => paintPassCount;
 
   @override
   String toString() {
@@ -46,7 +51,8 @@ final class NativeWindowDiagnostics {
         'pixelDensity=$pixelDensity, '
         'logical=${logicalWidth}x$logicalHeight, '
         'physical=${physicalWidth}x$physicalHeight, '
-        'renderFrame=$renderFrameCount, present=$presentCount';
+        'scheduled=$scheduledFrameCount, layout=$layoutPassCount, '
+        'painted=$paintPassCount, presented=$presentCount';
   }
 }
 
@@ -92,7 +98,9 @@ final class SdlSkiaHost
         logicalHeight: window.logicalSize.height,
         physicalWidth: metrics.physicalWidth,
         physicalHeight: metrics.physicalHeight,
-        renderFrameCount: session.renderFrameCount,
+        scheduledFrameCount: window.scheduledFrameCount,
+        layoutPassCount: window.layoutPassCount,
+        paintPassCount: window.paintPassCount,
         presentCount: session.presentCount,
       );
     });
@@ -119,6 +127,7 @@ final class SdlSkiaHost
       _windowsById[id] = window;
       window.textInputHandler = this;
       window.clipboardHandler = this;
+      window.setFrameRequestHandler(_wakeUp);
       await window.show();
       presentWindow(window);
     } finally {
@@ -132,6 +141,7 @@ final class SdlSkiaHost
     _destroySession(window);
     window.textInputHandler = null;
     window.clipboardHandler = null;
+    window.setFrameRequestHandler(null);
   }
 
   @override
@@ -197,14 +207,25 @@ final class SdlSkiaHost
     });
   }
 
-  /// Waits for one SDL event without continuously polling an idle window.
-  void waitForEvent(Window window) {
+  /// Waits for SDL input while periodically returning control to Dart timers.
+  void waitForEvent(
+    Window window, {
+    Duration timeout = const Duration(milliseconds: 16),
+  }) {
     _checkNotDisposed();
-    if (!isOpen(window)) return;
+    if (!isOpen(window) || window.frameScheduled) return;
+    final timeoutMs = timeout.inMilliseconds;
+    if (timeoutMs < -1) {
+      throw ArgumentError.value(timeout, 'timeout', 'Must be -1 or greater.');
+    }
     using((arena) {
-      final event = bindings.waitEvent(_host, arena);
+      final event = bindings.waitEvent(_host, arena, timeoutMs: timeoutMs);
       if (event != null) _dispatchEvent(event);
     });
+  }
+
+  void _wakeUp() {
+    if (!_disposed) bindings.wakeUp(_host);
   }
 
   void presentWindow(Window window) {
@@ -224,7 +245,6 @@ final class SdlSkiaHost
       throw StateError('Could not begin native frame: ${bindings.lastError}');
     }
     try {
-      session.renderFrameCount++;
       window.renderFrame(NativeDrawingContext(bindings, session.pointer));
     } finally {
       if (bindings.windowPresent(session.pointer) == 0) {
@@ -300,6 +320,7 @@ final class SdlSkiaHost
     _destroySession(window);
     window.textInputHandler = null;
     window.clipboardHandler = null;
+    window.setFrameRequestHandler(null);
   }
 
   void _destroySession(Window window) {

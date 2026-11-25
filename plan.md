@@ -137,9 +137,12 @@ Skia canvas масштабируется через `displayScale`. Backbuffer �
 - `Button` активируется по Space/Enter через routed key-down и помечает событие обработанным;
 - `KeyEventArgs` содержит physical SDL scancode и layout-dependent logical SDL keycode;
 - `SdlSkiaHost.presentWindow()` пропускает render/present для закрытого, невидимого или не имеющего scheduled frame окна;
-- C ABI и Dart FFI поддерживают `dui_host_wait_event`/`waitForEvent()`; интерактивные примеры ждут SDL-событие вместо постоянного polling с задержкой 8 мс;
+- `FrameScheduler` объединяет invalidate, отделяет защищённый от рекурсии layout pass от paint и сохраняет invalidate, поступивший во время paint, для следующего кадра;
+- C ABI и Dart FFI поддерживают `dui_host_wait_event`/`waitForEvent()` и `dui_host_wake_up`; SDL user event пробуждает очередь при новом scheduled frame;
+- интерактивные примеры используют wait с пределом 16 мс и уступают Dart event loop, поэтому Timer/Future invalidate обрабатываются без постоянного render/present;
 - SDL renderer создаётся с включённым VSync;
-- 113 Dart-тестов, включая clipping/rendering, horizontal scrolling, mouse caret/selection, pointer capture, surrogate pairs, composition, clipboard и render-on-demand counters.
+- diagnostics включают `scheduled`, `layout`, `painted`, `presented`;
+- 117 Dart-тестов, включая clipping/rendering, horizontal scrolling, mouse caret/selection, pointer capture, surrogate pairs, composition, clipboard, render-on-demand и scheduler counters.
 
 ### 3.2. Проверенное поведение
 
@@ -150,8 +153,11 @@ Skia canvas масштабируется через `displayScale`. Backbuffer �
 - Белый фон окна отображается корректно.
 - HiDPI-масштабирование подтверждено на 4K-дисплее.
 - `dart analyze` проходит без замечаний.
-- Все 113 Dart-тестов проходят, включая render/clipping, native clip ABI, render-on-demand и восстановление прежнего Windows clipboard.
+- Все 117 Dart-тестов проходят, включая render/clipping, native clip ABI, render-on-demand, async scheduler и восстановление прежнего Windows clipboard.
 - Повторный `presentWindow()` без invalidate не увеличивает render/present counters; изменение `TextBlock.text` планирует ровно один следующий кадр. SDL expose/resize могут законно запланировать дополнительный кадр.
+- Несколько invalidate до кадра увеличивают `scheduled` и вызывают wake-up только один раз; `layout` и `painted` увеличиваются на каждом обработанном кадре, а пустой `renderFrame()` ничего не рисует.
+- Native integration-тест подтверждает `Timer → TextBlock.text → invalidate`: от стабильного baseline добавляется ровно один scheduled/layout/painted/presented.
+- Рекурсивный `Window.updateLayout()` во время measure выбрасывает `StateError`, сбрасывает guard через `finally` и не мешает следующему нормальному кадру.
 - На Windows подтверждены реальные SDL Start/Stop/SetTextInputArea и активное состояние ввода при focus; потеря focus и close останавливают ввод.
 - Input area и caret преобразуются из logical UI units в SDL window units; caret вычисляется через `TextLayout`.
 - `TextBox` при text input заменяет активное selection, сохраняет направление anchor/extent и обновляет source двустороннего binding.
@@ -173,10 +179,10 @@ Skia canvas масштабируется через `displayScale`. Backbuffer �
 - Native text handles измеряют ASCII, кириллицу и emoji, возвращают UTF-16 hit-test/caret/selection geometry и рисуются в активном SDL/Skia frame.
 - Полный `python tools/bootstrap_native.py` успешно пересобирает Skia/SkParagraph и native library.
 - Paragraph smoke на Windows измеряет `ASCII, кириллица` через SkParagraph: width 124.945, height 21.
-- Native smoke автоматически выполняет 3 event iterations: scale 2.0, logical 320×200, physical 640×400, 2 renderFrame и 2 present.
-- Native text gallery smoke выполняет 3 event iterations и рисует 2 кадра: scale 2.0, logical 960×800, physical 1920×1600, 2 renderFrame и 2 present.
-- TextBox smoke через `--textbox --smoke` рисует composition, обычный selection и caret в отдельных кадрах, проверяет `Smoke か😀`, mouse caret и captured drag, затем завершается после 3 кадров: logical 760×590, physical 1520×1180, 4 renderFrame и 4 present.
-- Diagnostics базового native smoke на Windows: scale 2.0, logical 320×200, physical 640×400, 2 renderFrame и 2 present.
+- Native smoke автоматически выполняет 3 event iterations: scale 2.0, logical 320×200, physical 640×400, scheduled=2, layout=2, painted=2, presented=2.
+- Native text gallery smoke выполняет 3 event iterations и рисует 2 кадра: scale 2.0, logical 960×800, physical 1920×1600, scheduled=2, layout=2, painted=2, presented=2.
+- TextBox smoke через `--textbox --smoke` рисует composition, обычный selection и caret в отдельных кадрах, проверяет `Smoke か😀`, mouse caret и captured drag, затем завершается после 3 кадров: logical 760×590, physical 1520×1180, scheduled=4, layout=6, painted=4, presented=4. Два дополнительных layout pass выполняет централизованный input hit-testing.
+- Diagnostics базового native smoke на Windows: scale 2.0, logical 320×200, physical 640×400, scheduled=2, layout=2, painted=2, presented=2.
 
 ### 3.3. Основные файлы
 
@@ -185,6 +191,7 @@ lib/dui.dart                         — публичный Dart API с явны
 lib/native.dart                      — публичный native API
 lib/src/application.dart             — Application
 lib/src/window.dart                  — Window и native host-контракты
+lib/src/frame_scheduler.dart         — invalidate coalescing, layout/paint passes и counters
 lib/src/focus_manager.dart           — FocusManager
 lib/src/focus_decoration.dart        — общий focus ring для контролов
 lib/src/ui_element.dart              — UIElement, Control и WindowHost lifecycle
@@ -260,7 +267,7 @@ python tools/bootstrap_native.py --smoke --dart "<путь-к-dart>"
 2. **P0:** legacy `drawText`, используемый `TextBox`, рисует через `drawSimpleText` без SkParagraph.
 3. **P1:** native text layout пока принимает только конечную положительную `maxWidth`; infinite constraints остаются задачей layout system.
 4. **P1:** Windows clipboard cleanup нестабилен при восстановлении пустого прежнего значения: SDL `Couldn't open clipboard`; round-trip и запись самого значения при этом успешны.
-5. **P1:** блокирующий `waitForEvent()` реагирует на SDL events, но программный Dart invalidate из async callback сам не пробуждает SDL event queue; требуется scheduler/wake-up модель этапа 4.2.
+5. **P1:** SDL wait ограничен 16 мс, чтобы Dart timers получали управление; это не полностью event-driven async integration. Idle CPU и задержку ввода нужно измерить при профилировании этапа 4.3.
 6. **P1:** нет `Grid`, `ScrollViewer`, alignment и min/max constraints.
 7. **P1:** binding lifecycle и отмена подписок требуют более строгой модели владения.
 8. **P1:** нет единого механизма `dispose()` для контролов и ресурсов.
@@ -522,10 +529,10 @@ text_layout_selection_rects
 
 ## 4.2. Централизовать scheduler
 
-- [ ] Объединять несколько invalidate в один кадр.
-- [ ] Отделять layout pass от paint pass.
-- [ ] Не допускать рекурсивного запуска layout во время layout.
-- [ ] Добавить diagnostics: scheduled/layout/painted/presented.
+- [x] Объединять несколько invalidate в один кадр.
+- [x] Отделять layout pass от paint pass.
+- [x] Не допускать рекурсивного запуска layout во время layout.
+- [x] Добавить diagnostics: scheduled/layout/painted/presented.
 
 ## 4.3. Кэширование
 
@@ -692,7 +699,7 @@ default < inherited < style < binding < local < animation
 
 Порядок ближайших рабочих сессий:
 
-1. **Этап 4.2:** централизованный scheduler, включая wake-up блокирующего event loop для программных Dart invalidate из async callback.
+1. **Этап 4.3:** профилирование idle CPU/input latency, подтверждение существующего TextLayout cache; paths/paints и damage rectangles добавлять только по результатам измерений.
 2. **Стабилизация Windows clipboard:** устранить сбой восстановления пустого прежнего значения в native ABI-тесте.
 3. **Незавершённая часть этапа 1.2:** проверить сборку и Paragraph smoke на Linux (FontConfig/Freetype) и macOS (CoreText).
 4. **Ручная визуальная проверка:** открыть text gallery и TextBox на мониторах с разными масштабами, проверить clipping, selection и caret; автоматический smoke этого не заменяет.
@@ -737,6 +744,35 @@ default < inherited < style < binding < local < animation
 ---
 
 ## 9. Журнал работ
+
+### 2026-11-25 — этап 4.2, централизованный scheduler
+
+Сделано:
+
+- Добавлен `lib/src/frame_scheduler.dart`: повторные invalidate объединяются, scheduled counter и wake-up callback срабатывают один раз на ожидающий кадр. `tryBeginFrame()` снимает запрос до layout/paint, поэтому invalidate во время paint сохраняется для следующего кадра.
+- `Window.updateLayout()` централизует measure/arrange для rendering и pointer hit-testing; guard запрещает рекурсивный layout и восстанавливается через `finally`. `renderFrame()` отдельно выполняет layout и paint passes и ничего не делает без scheduled frame.
+- Добавлены counters `scheduledFrameCount`, `layoutPassCount`, `paintPassCount`; `NativeWindowDiagnostics` выводит `scheduled/layout/painted/presented`, сохраняя `renderFrameCount` как alias painted.
+- Добавлены C ABI `dui_host_wake_up`, SDL user event через `SDL_PushEvent()`, Dart typedef/lookup/bindings и `SdlSkiaHost` frame request handler с отсоединением при close.
+- `waitForEvent()` по умолчанию ограничен 16 мс, чтобы вернуть управление Dart timers; он не ждёт, если кадр уже запланирован. Интерактивные примеры дополнительно уступают event loop через `await Future.delayed(Duration.zero)` без периодического render.
+- Добавлены 3 scheduler unit-теста и native async integration-тест `Timer → invalidate → один кадр`; null wake-up проверен в ABI-тесте. Исправлено сохранение прежнего headless pointer hit-testing для невидимого окна.
+
+Проверено:
+
+- `dart format` и `dart analyze` — без замечаний.
+- Native library пересобрана после изменения C ABI/C++; Paragraph smoke `width=124.945, height=21`.
+- Полный `dart test` — все 117 тестов проходят, включая Windows clipboard и async scheduler.
+- Базовый native smoke — успешно: 3 event iterations, 2 кадра; scheduled=2, layout=2, painted=2, presented=2.
+- Text gallery smoke — успешно: 3 event iterations, 2 кадра; scheduled=2, layout=2, painted=2, presented=2.
+- TextBox native smoke — успешно: 3 кадра; scheduled=4, layout=6, painted=4, presented=4. Дополнительные layout passes принадлежат pointer hit-testing.
+
+Не проверено / ограничение:
+
+- Ручной idle CPU/input latency, физический ввод, Linux и macOS не проверялись.
+- Ограниченный 16 мс wait обслуживает Dart timers, но не является полностью event-driven async integration; оценить необходимость дальнейшей оптимизации при профилировании 4.3.
+
+Следующий шаг:
+
+- Этап 4.3: профилирование и кэширование только по результатам измерений.
 
 ### 2026-11-25 — этап 4.1, render on demand
 
