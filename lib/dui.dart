@@ -1,6 +1,10 @@
 library;
 
-export 'src/controls.dart';
+export 'src/application.dart';
+export 'src/border.dart';
+export 'src/button.dart';
+export 'src/colors.dart';
+export 'src/content_control.dart';
 export 'src/drawing.dart';
 export 'src/events.dart';
 export 'src/geometry.dart';
@@ -9,6 +13,9 @@ export 'src/observable.dart';
 export 'src/panel.dart';
 export 'src/properties.dart';
 export 'src/recording_renderer.dart';
+export 'src/stack_panel.dart';
+export 'src/text_block.dart';
+export 'src/text_box.dart';
 export 'src/text_buffer.dart';
 export 'src/text_layout.dart';
 export 'src/ui_element.dart';

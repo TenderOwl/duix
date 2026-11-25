@@ -174,15 +174,23 @@ Skia canvas масштабируется через `displayScale`. Backbuffer �
 ### 3.3. Основные файлы
 
 ```text
-lib/dui.dart                         — публичный Dart API
+lib/dui.dart                         — публичный Dart API с явными exports
 lib/native.dart                      — публичный native API
-lib/src/ui_element.dart              — база дерева, layout, события
-lib/src/controls.dart                — базовые контролы
-lib/src/panel.dart                   — Panel и StackPanel
+lib/src/application.dart             — Application
+lib/src/window.dart                  — Window и native host-контракты
+lib/src/ui_element.dart              — UIElement, Control и WindowHost lifecycle
+lib/src/controls.dart                — compatibility barrel для контролов
+lib/src/content_control.dart         — ContentControl
+lib/src/button.dart                  — Button
+lib/src/text_block.dart              — TextBlock
+lib/src/text_box.dart                — TextBox, editing, scrolling и IME
+lib/src/border.dart                  — Border
+lib/src/colors.dart                  — Colors
+lib/src/panel.dart                   — Panel и ElementChildrenList
+lib/src/stack_panel.dart             — StackPanel
 lib/src/properties.dart              — свойства и bindings
 lib/src/observable.dart              — observable primitives
 lib/src/events.dart                  — routed events
-lib/src/window.dart                  — Application и Window
 lib/src/drawing.dart                 — DrawingContext
 lib/src/text_buffer.dart              — UTF-16 text/selection model и команды
 lib/src/text_layout.dart             — текстовый контракт и cache key
