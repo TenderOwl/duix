@@ -7,6 +7,7 @@ export 'src/colors.dart';
 export 'src/content_control.dart';
 export 'src/drawing.dart';
 export 'src/events.dart';
+export 'src/focus_manager.dart';
 export 'src/geometry.dart';
 export 'src/headless_text_layout.dart';
 export 'src/observable.dart';

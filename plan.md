@@ -133,7 +133,7 @@ Skia canvas масштабируется через `displayScale`. Backbuffer �
 - `SDL_EVENT_TEXT_EDITING` проходит через C ABI, Dart FFI и `Window` в focused `TextBox`; composition selection передаётся в UTF-16 offsets;
 - `TextBox` хранит composition text/range отдельно от подтверждённого `TextBuffer`, рисует composition через кэшированный `TextLayout` с подчёркиванием и подсветкой активного диапазона;
 - промежуточная composition не изменяет `text` и two-way binding; подтверждение через text input заменяет selection и обновляет модель;
-- 94 Dart-теста, включая clipping/rendering, horizontal scrolling, mouse caret/selection, pointer capture, surrogate pairs, composition и clipboard.
+- 99 Dart-теста, включая clipping/rendering, horizontal scrolling, mouse caret/selection, pointer capture, surrogate pairs, composition и clipboard.
 
 ### 3.2. Проверенное поведение
 
@@ -144,7 +144,7 @@ Skia canvas масштабируется через `displayScale`. Backbuffer �
 - Белый фон окна отображается корректно.
 - HiDPI-масштабирование подтверждено на 4K-дисплее.
 - `dart analyze` проходит без замечаний.
-- Все 94 Dart-теста проходят, включая render/clipping, native clip ABI и восстановление прежнего Windows clipboard.
+- Все 99 Dart-теста проходят, включая render/clipping, native clip ABI и восстановление прежнего Windows clipboard.
 - На Windows подтверждены реальные SDL Start/Stop/SetTextInputArea и активное состояние ввода при focus; потеря focus и close останавливают ввод.
 - Input area и caret преобразуются из logical UI units в SDL window units; caret вычисляется через `TextLayout`.
 - `TextBox` при text input заменяет активное selection, сохраняет направление anchor/extent и обновляет source двустороннего binding.
@@ -178,6 +178,7 @@ lib/dui.dart                         — публичный Dart API с явны
 lib/native.dart                      — публичный native API
 lib/src/application.dart             — Application
 lib/src/window.dart                  — Window и native host-контракты
+lib/src/focus_manager.dart           — FocusManager
 lib/src/ui_element.dart              — UIElement, Control и WindowHost lifecycle
 lib/src/controls.dart                — compatibility barrel для контролов
 lib/src/content_control.dart         — ContentControl
@@ -476,10 +477,12 @@ text_layout_selection_rects
 
 ## 3.1. FocusManager
 
-- [ ] Вынести focus из `Window` в отдельный `FocusManager`.
-- [ ] Отслеживать focused element и его mount state.
-- [ ] При unmount focused element корректно очищать или восстанавливать focus.
-- [ ] Запрещать focus невидимым и disabled контролам.
+- [x] Вынести focus из `Window` в отдельный `FocusManager`.
+- [x] Отслеживать focused element и его mount state.
+- [x] При unmount focused element корректно очищать или восстанавливать focus.
+- [x] Запрещать focus невидимым и disabled контролам.
+
+`FocusManager` проверяет mount state, принадлежность окну, `isFocusable`, а также видимость и доступность всей цепочки родителей. При unmount, disable или hide focus очищается без неявного восстановления; после remount требуется явный `focus()`. Очистка при unmount корректно завершает SDL text input.
 
 ## 3.2. Tab traversal
 
@@ -726,6 +729,30 @@ default < inherited < style < binding < local < animation
 ---
 
 ## 9. Журнал работ
+
+### 2026-11-25 — этап 3.1, FocusManager
+
+Сделано:
+
+- Focus вынесен из `Window` в `FocusManager` без изменения публичного API фокусировки контролов.
+- Проверяются mount state, принадлежность окну, `isFocusable`, видимость и доступность контрола и всех его родителей.
+- Unmount, disable и hide очищают focus; неявного восстановления после remount/show/enable нет, требуется явный `focus()`.
+- Очистка focus при unmount выполняется до `onUnmounted()` и однократно завершает SDL text input.
+- Добавлены 5 тестов `test/focus_manager_test.dart` на переключение focus, ограничения и lifecycle.
+
+Проверено:
+
+- `dart format lib test/focus_manager_test.dart` и `dart analyze` — без замечаний.
+- Полный `dart test` — все 99 тестов проходят, включая clipboard и существующие text input lifecycle/integration tests.
+- Полный bootstrap с `--textbox --smoke --diagnostics` — успешно: Paragraph smoke `width=124.945, height=21`; TextBox smoke 3 кадра, 4 renderFrame и 4 present при scale 2.0.
+
+Не проверено:
+
+- Ручная клавиатурная навигация и поведение на Linux/macOS; этот шаг проверен автоматическими тестами и native smoke на Windows.
+
+Следующий шаг:
+
+- Этап 3.2: Tab traversal по logical tree.
 
 ### 2026-11-25 — clipping и видимые selection/caret в TextBox
 

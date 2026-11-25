@@ -7,6 +7,7 @@ import 'text_layout.dart';
 abstract interface class WindowHost {
   void requestFrame();
   bool requestFocus(Control control);
+  void validateFocus() {}
   TextLayoutFactory get textLayoutFactory;
   double get displayScale;
   bool capturePointer(Control control) => false;
@@ -78,6 +79,7 @@ abstract class UIElement extends PropertyOwner {
     final oldValue = _isVisible;
     _isVisible = value;
     invalidateMeasure();
+    _window?.validateFocus();
     notifyPropertyChanged('isVisible', oldValue, value);
   }
 
@@ -87,6 +89,7 @@ abstract class UIElement extends PropertyOwner {
     final oldValue = _isEnabled;
     _isEnabled = value;
     invalidatePaint();
+    _window?.validateFocus();
     notifyPropertyChanged('isEnabled', oldValue, value);
   }
 
@@ -208,8 +211,10 @@ abstract class UIElement extends PropertyOwner {
 
   void mountTo(WindowHost? window) {
     if (_isMounted && identical(_window, window)) return;
+    final previousWindow = _window;
     _window = window;
     _isMounted = window != null;
+    if (!_isMounted) previousWindow?.validateFocus();
     if (_isMounted) {
       onMounted();
     } else {

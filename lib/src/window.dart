@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'drawing.dart';
 import 'events.dart';
+import 'focus_manager.dart';
 import 'geometry.dart';
 import 'headless_text_layout.dart';
 import 'observable.dart';
@@ -45,7 +46,7 @@ final class Window extends ObservableObject implements WindowHost {
   TextLayoutFactory _textLayoutFactory;
   double _devicePixelRatio = 1;
   UIElement? _content;
-  Control? _focused;
+  late final FocusManager focusManager = FocusManager(this);
   Control? _pointerCapture;
   TextInputHandler? textInputHandler;
   ClipboardHandler? clipboardHandler;
@@ -72,12 +73,12 @@ final class Window extends ObservableObject implements WindowHost {
   Size get logicalSize => _logicalSize;
   double get devicePixelRatio => _devicePixelRatio;
   bool get isVisible => _isVisible;
-  Control? get focusedElement => _focused;
+  Control? get focusedElement => focusManager.focusedElement;
   bool get frameScheduled => _frameScheduled;
 
   @override
   void startTextInput(Control control) {
-    if (_isVisible && identical(_focused, control)) {
+    if (_isVisible && identical(focusManager.focusedElement, control)) {
       textInputHandler?.startTextInput(this);
     }
   }
@@ -89,7 +90,7 @@ final class Window extends ObservableObject implements WindowHost {
 
   @override
   void updateTextInputArea(Control control, Rect area, double cursorX) {
-    if (_isVisible && identical(_focused, control)) {
+    if (_isVisible && identical(focusManager.focusedElement, control)) {
       textInputHandler?.setTextInputArea(this, area, cursorX);
     }
   }
@@ -135,7 +136,7 @@ final class Window extends ObservableObject implements WindowHost {
 
   Future<void> show() async {
     _isVisible = true;
-    final focused = _focused;
+    final focused = focusManager.focusedElement;
     if (focused != null) {
       startTextInput(focused);
       focused.onTextInputActivated();
@@ -160,13 +161,10 @@ final class Window extends ObservableObject implements WindowHost {
   }
 
   @override
-  bool requestFocus(Control control) {
-    if (!control.isFocusable || !control.isEnabled) return false;
-    _focused?.updateFocus(false);
-    _focused = control;
-    control.updateFocus(true);
-    return true;
-  }
+  bool requestFocus(Control control) => focusManager.requestFocus(control);
+
+  @override
+  void validateFocus() => focusManager.validate();
 
   @override
   bool capturePointer(Control control) {
@@ -231,7 +229,8 @@ final class Window extends ObservableObject implements WindowHost {
   }
 
   void dispatchTextInput(String text) {
-    _focused?.raiseEvent(UIElement.textInput, TextInputEventArgs(text));
+    focusManager.focusedElement
+        ?.raiseEvent(UIElement.textInput, TextInputEventArgs(text));
   }
 
   void dispatchTextEditing(
@@ -239,7 +238,7 @@ final class Window extends ObservableObject implements WindowHost {
     int compositionStart = -1,
     int compositionLength = -1,
   }) {
-    _focused?.raiseEvent(
+    focusManager.focusedElement?.raiseEvent(
       UIElement.textEditing,
       TextEditingEventArgs(
         text,
@@ -255,7 +254,7 @@ final class Window extends ObservableObject implements WindowHost {
     bool controlPressed = false,
     bool metaPressed = false,
   }) {
-    _focused?.raiseEvent(
+    focusManager.focusedElement?.raiseEvent(
       UIElement.keyDown,
       KeyEventArgs(
         key,
