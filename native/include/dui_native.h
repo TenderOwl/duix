@@ -113,6 +113,17 @@ DUI_API int32_t dui_window_get_metrics(
     const DuiWindow* window,
     DuiWindowMetrics* out_metrics);
 DUI_API void dui_window_set_background(DuiWindow* window, uint32_t rgba);
+DUI_API int32_t dui_window_start_text_input(DuiWindow* window);
+DUI_API int32_t dui_window_stop_text_input(DuiWindow* window);
+DUI_API int32_t dui_window_text_input_active(const DuiWindow* window);
+/* Area and cursor use logical UI units and are converted to SDL window units. */
+DUI_API int32_t dui_window_set_text_input_area(
+    DuiWindow* window,
+    double x,
+    double y,
+    double width,
+    double height,
+    double cursor_x);
 
 DUI_API int32_t dui_window_begin_frame(DuiWindow* window);
 DUI_API void dui_draw_rect(

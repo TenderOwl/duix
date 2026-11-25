@@ -122,7 +122,8 @@ Skia canvas масштабируется через `displayScale`. Backbuffer �
 - интерактивная галерея `example/native_text_gallery.dart` с автоматическим smoke-режимом;
 - `TextBuffer` и `TextSelection` с UTF-16 offsets, selection anchor/active end, проверкой диапазонов и командами редактирования;
 - `TextBox` вставляет text input в caret, заменяет selection и синхронизирует текст с two-way binding;
-- 53 Dart-теста.
+- SDL text input lifecycle: Start/Stop при focus, TextLayout-based input area/caret, cleanup при unmount/close;
+- 60 Dart-тестов.
 
 ### 3.2. Проверенное поведение
 
@@ -133,7 +134,9 @@ Skia canvas масштабируется через `displayScale`. Backbuffer �
 - Белый фон окна отображается корректно.
 - HiDPI-масштабирование подтверждено на 4K-дисплее.
 - `dart analyze` проходит без замечаний.
-- Все 53 Dart-теста проходят, включая C ABI, TextLayout, Unicode/HiDPI, TextBlock, text editing и two-way binding.
+- Все 60 Dart-тестов проходят, включая C ABI, TextLayout, Unicode/HiDPI, text editing и SDL text input lifecycle.
+- На Windows подтверждены реальные SDL Start/Stop/SetTextInputArea и активное состояние ввода при focus; потеря focus и close останавливают ввод.
+- Input area и caret преобразуются из logical UI units в SDL window units; caret вычисляется через `TextLayout`.
 - `TextBox` при text input заменяет активное selection, сохраняет направление anchor/extent и обновляет source двустороннего binding.
 - Backspace/Delete удаляют выделение или целую surrogate pair; внешнее сокращение текста ограничивает offsets новой длиной.
 - Матрица проверяет ASCII, кириллицу, emoji, CJK, Arabic, Hebrew, multiline, пустую и очень длинную строки, а также стабильность logical metrics на масштабах 1.0, 1.25, 1.5 и 2.0.
@@ -215,15 +218,14 @@ python tools/bootstrap_native.py --smoke --dart "<путь-к-dart>"
 1. **P0:** `TextBox.measureCore()` всё ещё приблизительно считает ширину через число символов.
 2. **P0:** legacy `drawText`, используемый `TextBox`, рисует через `drawSimpleText` без SkParagraph.
 3. **P1:** native text layout пока принимает только конечную положительную `maxWidth`; infinite constraints остаются задачей layout system.
-4. **P0:** `TextBox` не запускает SDL text input при focus.
-5. **P0:** нет IME composition, selection, clipboard и нормальной клавиатурной навигации.
-6. **P1:** нативный пример рисует кадр каждые 8 мс независимо от invalidate.
-7. **P1:** нет keyboard focus traversal и focus scopes.
-8. **P1:** нет `Grid`, `ScrollViewer`, alignment и min/max constraints.
-9. **P1:** binding lifecycle и отмена подписок требуют более строгой модели владения.
-10. **P1:** нет единого механизма `dispose()` для контролов и ресурсов.
-11. **P2:** нет styles/templates, `ItemsControl`, виртуализации и accessibility.
-12. **P2:** нет packaging runtime dependencies и кроссплатформенной CI.
+4. **P0:** нет IME composition, отрисовки selection/caret, clipboard и нормальной клавиатурной навигации.
+5. **P1:** нативный пример рисует кадр каждые 8 мс независимо от invalidate.
+6. **P1:** нет keyboard focus traversal и focus scopes.
+7. **P1:** нет `Grid`, `ScrollViewer`, alignment и min/max constraints.
+8. **P1:** binding lifecycle и отмена подписок требуют более строгой модели владения.
+9. **P1:** нет единого механизма `dispose()` для контролов и ресурсов.
+10. **P2:** нет styles/templates, `ItemsControl`, виртуализации и accessibility.
+11. **P2:** нет packaging runtime dependencies и кроссплатформенной CI.
 
 ---
 
@@ -392,11 +394,13 @@ text_layout_selection_rects
 
 ## 2.2. SDL text input lifecycle
 
-- [ ] При получении focus вызвать `SDL_StartTextInput()`.
-- [ ] Передавать text input area и cursor position.
-- [ ] При потере focus вызвать `SDL_StopTextInput()`.
-- [ ] При перемещении/изменении caret обновлять SDL text input area.
-- [ ] Обрабатывать close/unmount без оставления активного IME.
+- [x] При получении focus вызвать `SDL_StartTextInput()`.
+- [x] Передавать text input area и cursor position.
+- [x] При потере focus вызвать `SDL_StopTextInput()`.
+- [x] При перемещении/изменении caret обновлять SDL text input area.
+- [x] Обрабатывать close/unmount без оставления активного IME.
+
+Проверено на Windows через C ABI и высокоуровневый `TextBox`/`SdlSkiaHost` integration test. Ручная проверка системных IME на Linux/macOS не выполнялась.
 
 ## 2.3. Команды редактирования
 
@@ -640,8 +644,8 @@ default < inherited < style < binding < local < animation
 
 Порядок ближайших рабочих сессий:
 
-1. **Этап 2.2:** SDL text input lifecycle: start/stop при focus, input area, caret updates и cleanup при close/unmount.
-2. **Этап 2.3–2.5:** клавиатурные команды, IME composition, clipboard и mouse selection.
+1. **Этап 2.3:** клавиатурные команды редактирования: arrows, Home/End, Shift selection, Select All; clipboard после базовой навигации.
+2. **Этап 2.4–2.5:** IME composition и mouse selection.
 3. **Незавершённая часть этапа 1.2:** проверить сборку и Paragraph smoke на Linux (FontConfig/Freetype) и macOS (CoreText).
 4. **Ручная визуальная проверка этапа 1.5:** открыть text gallery на мониторах с разными масштабами и проверить clipping; автоматический smoke этого не заменяет.
 5. **Этап 3:** focus traversal.
@@ -686,6 +690,35 @@ default < inherited < style < binding < local < animation
 ---
 
 ## 9. Журнал работ
+
+### 2026-11-25 — этап 2.2, SDL text input lifecycle
+
+Сделано:
+
+- В C ABI и Dart FFI добавлены Start/Stop, запрос активного состояния и SetTextInputArea.
+- C++ вызывает `SDL_StartTextInput`, `SDL_StopTextInput`, `SDL_TextInputActive` и `SDL_SetTextInputArea`.
+- Input area и cursor преобразуются из logical UI units в SDL window units через displayScale/pixelDensity.
+- Добавлен backend-independent `TextInputHandler`; `WindowHost` маршрутизирует lifecycle без SDL/Skia типов в контролах.
+- `TextBox` запускает ввод при focus, останавливает при потере focus/unmount и обновляет area/caret через `TextLayout` при layout, текстовых и selection изменениях.
+- `SdlSkiaHost` закрывает UI и останавливает ввод до уничтожения native window; C++ destroy дополнительно останавливает активный text input.
+- Добавлены fake-host lifecycle тесты, null ABI checks и реальные SDL integration tests.
+
+Проверено:
+
+- `dart analyze` — без замечаний.
+- `dart test` — все 60 тестов проходят, включая 7 новых lifecycle/ABI проверок.
+- Native library пересобрана после изменения C ABI.
+- Полный bootstrap, Paragraph smoke и native smoke с diagnostics — успешно, 3 кадра.
+- Windows: реальное SDL text input активируется при focus, деактивируется при смене focus и закрытии.
+
+Не проверено:
+
+- Ручная работа системных IME; composition events относятся к этапу 2.4.
+- Linux и macOS.
+
+Следующий шаг:
+
+- Этап 2.3: клавиатурные команды редактирования и selection.
 
 ### 2026-11-25 — этап 2.1, модель текста и selection
 

@@ -236,6 +236,9 @@ bool ensure_surface(DuiWindow* window) {
 
 void destroy_window_resources(DuiWindow* window) {
   window->surface.reset();
+  if (window->window && SDL_TextInputActive(window->window)) {
+    SDL_StopTextInput(window->window);
+  }
   if (window->texture) SDL_DestroyTexture(window->texture);
   if (window->renderer) SDL_DestroyRenderer(window->renderer);
   if (window->window) SDL_DestroyWindow(window->window);
@@ -437,6 +440,73 @@ int32_t dui_window_get_metrics(
 
 void dui_window_set_background(DuiWindow* window, uint32_t rgba) {
   if (window) window->background_rgba = rgba;
+}
+
+int32_t dui_window_start_text_input(DuiWindow* window) {
+  clear_error();
+  if (!window || !window->window) {
+    set_error("Invalid text input window.");
+    return 0;
+  }
+  if (!SDL_StartTextInput(window->window)) {
+    set_sdl_error();
+    return 0;
+  }
+  return 1;
+}
+
+int32_t dui_window_stop_text_input(DuiWindow* window) {
+  clear_error();
+  if (!window || !window->window) {
+    set_error("Invalid text input window.");
+    return 0;
+  }
+  if (!SDL_StopTextInput(window->window)) {
+    set_sdl_error();
+    return 0;
+  }
+  return 1;
+}
+
+int32_t dui_window_text_input_active(const DuiWindow* window) {
+  clear_error();
+  if (!window || !window->window) {
+    set_error("Invalid text input window.");
+    return -1;
+  }
+  return SDL_TextInputActive(window->window) ? 1 : 0;
+}
+
+int32_t dui_window_set_text_input_area(
+    DuiWindow* window,
+    double x,
+    double y,
+    double width,
+    double height,
+    double cursor_x) {
+  clear_error();
+  if (!window || !window->window || !std::isfinite(x) ||
+      !std::isfinite(y) || !std::isfinite(width) ||
+      !std::isfinite(height) || !std::isfinite(cursor_x) || width < 0 ||
+      height < 0) {
+    set_error("Invalid text input area arguments.");
+    return 0;
+  }
+  SDL_Rect area{
+      static_cast<int>(std::lround(content_to_window_units(window->window, x))),
+      static_cast<int>(std::lround(content_to_window_units(window->window, y))),
+      static_cast<int>(
+          std::lround(content_to_window_units(window->window, width))),
+      static_cast<int>(
+          std::lround(content_to_window_units(window->window, height))),
+  };
+  const auto cursor = static_cast<int>(
+      std::lround(content_to_window_units(window->window, cursor_x)));
+  if (!SDL_SetTextInputArea(window->window, &area, cursor)) {
+    set_sdl_error();
+    return 0;
+  }
+  return 1;
 }
 
 int32_t dui_window_begin_frame(DuiWindow* window) {

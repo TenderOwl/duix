@@ -293,6 +293,22 @@ typedef _WindowMetricsDart = int Function(
   Pointer<DuiWindowMetricsStruct>,
 );
 typedef _WindowBackgroundDart = void Function(Pointer<DuiWindowOpaque>, int);
+typedef _WindowTextInputAreaNative = Int32 Function(
+  Pointer<DuiWindowOpaque>,
+  Double,
+  Double,
+  Double,
+  Double,
+  Double,
+);
+typedef _WindowTextInputAreaDart = int Function(
+  Pointer<DuiWindowOpaque>,
+  double,
+  double,
+  double,
+  double,
+  double,
+);
 typedef _FrameDart = int Function(Pointer<DuiWindowOpaque>);
 typedef _DrawRectDart = void Function(
   Pointer<DuiWindowOpaque>,
@@ -390,6 +406,20 @@ final class NativeBindings {
             .lookupFunction<_WindowBackgroundNative, _WindowBackgroundDart>(
           'dui_window_set_background',
         ),
+        windowStartTextInput = library.lookupFunction<_FrameNative, _FrameDart>(
+          'dui_window_start_text_input',
+        ),
+        windowStopTextInput = library.lookupFunction<_FrameNative, _FrameDart>(
+          'dui_window_stop_text_input',
+        ),
+        windowTextInputActive =
+            library.lookupFunction<_FrameNative, _FrameDart>(
+          'dui_window_text_input_active',
+        ),
+        windowSetTextInputArea = library.lookupFunction<
+            _WindowTextInputAreaNative, _WindowTextInputAreaDart>(
+          'dui_window_set_text_input_area',
+        ),
         windowBeginFrame = library.lookupFunction<_FrameNative, _FrameDart>(
           'dui_window_begin_frame',
         ),
@@ -446,6 +476,10 @@ final class NativeBindings {
   final _WindowContentScaleDart windowGetContentScale;
   final _WindowMetricsDart _windowGetMetrics;
   final _WindowBackgroundDart windowSetBackground;
+  final _FrameDart windowStartTextInput;
+  final _FrameDart windowStopTextInput;
+  final _FrameDart windowTextInputActive;
+  final _WindowTextInputAreaDart windowSetTextInputArea;
   final _FrameDart windowBeginFrame;
   final _DrawRectDart drawRect;
   final _DrawTextDart drawText;

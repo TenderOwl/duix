@@ -13,6 +13,12 @@ abstract interface class NativeHost {
   Future<void> closeWindow(Window window);
 }
 
+abstract interface class TextInputHandler {
+  void startTextInput(Window window);
+  void stopTextInput(Window window);
+  void setTextInputArea(Window window, Rect area, double cursorX);
+}
+
 final class Application {
   Application({required this.host});
 
@@ -53,6 +59,7 @@ final class Window extends ObservableObject implements WindowHost {
   double _devicePixelRatio = 1;
   UIElement? _content;
   Control? _focused;
+  TextInputHandler? textInputHandler;
   bool _frameScheduled = false;
   bool _isVisible = false;
 
@@ -78,6 +85,25 @@ final class Window extends ObservableObject implements WindowHost {
   bool get isVisible => _isVisible;
   Control? get focusedElement => _focused;
   bool get frameScheduled => _frameScheduled;
+
+  @override
+  void startTextInput(Control control) {
+    if (_isVisible && identical(_focused, control)) {
+      textInputHandler?.startTextInput(this);
+    }
+  }
+
+  @override
+  void stopTextInput(Control control) {
+    textInputHandler?.stopTextInput(this);
+  }
+
+  @override
+  void updateTextInputArea(Control control, Rect area, double cursorX) {
+    if (_isVisible && identical(_focused, control)) {
+      textInputHandler?.setTextInputArea(this, area, cursorX);
+    }
+  }
 
   @override
   double get displayScale => _devicePixelRatio;
@@ -113,6 +139,11 @@ final class Window extends ObservableObject implements WindowHost {
 
   Future<void> show() async {
     _isVisible = true;
+    final focused = _focused;
+    if (focused != null) {
+      startTextInput(focused);
+      focused.onTextInputActivated();
+    }
     requestFrame();
   }
 

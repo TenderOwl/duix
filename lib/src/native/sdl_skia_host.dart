@@ -49,7 +49,7 @@ final class NativeWindowDiagnostics {
   }
 }
 
-final class SdlSkiaHost implements NativeHost {
+final class SdlSkiaHost implements NativeHost, TextInputHandler {
   SdlSkiaHost._(this.bindings, {required this.diagnosticsEnabled})
       : _host = bindings.hostCreate() {
     if (_host == nullptr) {
@@ -115,6 +115,7 @@ final class SdlSkiaHost implements NativeHost {
       final id = bindings.windowGetId(pointer);
       _sessions[window] = _NativeWindowSession(pointer, id);
       _windowsById[id] = window;
+      window.textInputHandler = this;
       await window.show();
       presentWindow(window);
     } finally {
@@ -124,8 +125,55 @@ final class SdlSkiaHost implements NativeHost {
 
   @override
   Future<void> closeWindow(Window window) async {
-    _destroySession(window);
     window.close();
+    _destroySession(window);
+    window.textInputHandler = null;
+  }
+
+  @override
+  void startTextInput(Window window) {
+    final session = _sessions[window];
+    if (session == null || !session.open) return;
+    if (bindings.windowStartTextInput(session.pointer) == 0) {
+      throw StateError('Could not start SDL text input: ${bindings.lastError}');
+    }
+  }
+
+  @override
+  void stopTextInput(Window window) {
+    final session = _sessions[window];
+    if (session == null || !session.open) return;
+    if (bindings.windowStopTextInput(session.pointer) == 0) {
+      throw StateError('Could not stop SDL text input: ${bindings.lastError}');
+    }
+  }
+
+  bool isTextInputActive(Window window) {
+    final session = _sessions[window];
+    if (session == null || !session.open) return false;
+    final result = bindings.windowTextInputActive(session.pointer);
+    if (result < 0) {
+      throw StateError('Could not query SDL text input: ${bindings.lastError}');
+    }
+    return result == 1;
+  }
+
+  @override
+  void setTextInputArea(Window window, Rect area, double cursorX) {
+    final session = _sessions[window];
+    if (session == null || !session.open) return;
+    if (bindings.windowSetTextInputArea(
+          session.pointer,
+          area.left,
+          area.top,
+          area.width,
+          area.height,
+          cursorX,
+        ) ==
+        0) {
+      throw StateError(
+          'Could not set SDL text input area: ${bindings.lastError}');
+    }
   }
 
   void pumpEvents() {
@@ -165,8 +213,9 @@ final class SdlSkiaHost implements NativeHost {
   void dispose() {
     if (_disposed) return;
     for (final window in _sessions.keys.toList()) {
-      _destroySession(window);
       window.close();
+      _destroySession(window);
+      window.textInputHandler = null;
     }
     bindings.hostDestroy(_host);
     _disposed = true;
@@ -175,8 +224,9 @@ final class SdlSkiaHost implements NativeHost {
   void _dispatchEvent(NativeEvent event) {
     if (event.type == 1) {
       for (final window in _sessions.keys.toList()) {
-        _destroySession(window);
         window.close();
+        _destroySession(window);
+        window.textInputHandler = null;
       }
       return;
     }
@@ -185,8 +235,9 @@ final class SdlSkiaHost implements NativeHost {
     if (window == null || !isOpen(window)) return;
     switch (event.type) {
       case 2:
-        _destroySession(window);
         window.close();
+        _destroySession(window);
+        window.textInputHandler = null;
       case 3:
         window.resize(event.width, event.height);
       case 4:

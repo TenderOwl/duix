@@ -242,6 +242,7 @@ final class TextBox extends Control {
       if (event.property == TextBuffer.selectionProperty) {
         invalidatePaint();
       }
+      _syncTextInputArea();
     });
     addHandler(UIElement.textInput, _textInput);
   }
@@ -254,6 +255,7 @@ final class TextBox extends Control {
   );
 
   final TextBuffer buffer;
+  WindowHost? _mountedHost;
 
   String get text => getValue(textProperty);
   set text(String value) => setValue(textProperty, value);
@@ -274,6 +276,58 @@ final class TextBox extends Control {
   void _textInput(Object sender, TextInputEventArgs args) {
     insertText(args.text);
     args.handled = true;
+  }
+
+  @override
+  void onMounted() {
+    _mountedHost = window;
+    if (isFocused) window?.startTextInput(this);
+  }
+
+  @override
+  void onUnmounted() {
+    if (isFocused) _mountedHost?.stopTextInput(this);
+    _mountedHost = null;
+  }
+
+  @override
+  void onFocusChanged(bool value) {
+    if (value) {
+      window?.startTextInput(this);
+      _syncTextInputArea();
+    } else {
+      _mountedHost?.stopTextInput(this);
+    }
+  }
+
+  @override
+  void onTextInputActivated() => _syncTextInputArea();
+
+  @override
+  void arrangeCore(Rect finalRect) => _syncTextInputArea();
+
+  void _syncTextInputArea() {
+    final host = _mountedHost;
+    if (host == null || !isFocused) return;
+    final width = (bounds.width - 16).clamp(1.0, double.infinity);
+    final height = (bounds.height - 14).clamp(1.0, double.infinity);
+    final layout = host.textLayoutFactory.create(TextLayoutOptions(
+      text: text,
+      fontSize: 14,
+      maxWidth: width,
+      scale: host.displayScale,
+    ));
+    final double cursorX;
+    try {
+      cursorX = layout.caretRect(caretOffset).left;
+    } finally {
+      layout.dispose();
+    }
+    host.updateTextInputArea(
+      this,
+      Rect.fromLTWH(bounds.left + 8, bounds.top + 7, width, height),
+      cursorX,
+    );
   }
 
   @override

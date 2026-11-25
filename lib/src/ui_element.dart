@@ -9,6 +9,13 @@ abstract interface class WindowHost {
   bool requestFocus(Control control);
   TextLayoutFactory get textLayoutFactory;
   double get displayScale;
+  void startTextInput(Control control) {}
+  void stopTextInput(Control control) {}
+  void updateTextInputArea(
+    Control control,
+    Rect area,
+    double cursorX,
+  ) {}
 }
 
 abstract class UIElement extends PropertyOwner {
@@ -224,7 +231,11 @@ abstract class Control extends UIElement {
     if (_isFocused == value) return;
     _isFocused = value;
     invalidatePaint();
+    onFocusChanged(value);
   }
+
+  void onFocusChanged(bool value) {}
+  void onTextInputActivated() {}
 
   void updatePointerOver(bool value) {
     if (_isPointerOver == value) return;

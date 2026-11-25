@@ -191,6 +191,71 @@ void main() {
     }
   });
 
+  test('text input ABI rejects null handles and invalid areas', () {
+    expect(bindings.windowStartTextInput(nullptr), 0);
+    expect(bindings.lastError, contains('Invalid text input window'));
+    expect(bindings.windowStopTextInput(nullptr), 0);
+    expect(bindings.windowTextInputActive(nullptr), -1);
+    expect(bindings.windowSetTextInputArea(nullptr, 0, 0, 10, 20, 0), 0);
+    expect(bindings.lastError, contains('Invalid text input area'));
+  });
+
+  test('native text input starts, accepts an area and stops', () {
+    final host = bindings.hostCreate();
+    expect(host, isNot(nullptr), reason: bindings.lastError);
+    if (host == nullptr) return;
+    var window = nullptr.cast<DuiWindowOpaque>();
+    try {
+      using((arena) {
+        final title = 'Text input ABI'.toNativeUtf8(allocator: arena);
+        window = bindings.windowCreate(host, title, 200, 100);
+        expect(window, isNot(nullptr), reason: bindings.lastError);
+        if (window == nullptr) return;
+        expect(bindings.windowTextInputActive(window), 0);
+        expect(bindings.windowStartTextInput(window), 1,
+            reason: bindings.lastError);
+        expect(bindings.windowTextInputActive(window), 1);
+        expect(
+          bindings.windowSetTextInputArea(window, 8, 7, 120, 20, 24),
+          1,
+          reason: bindings.lastError,
+        );
+        expect(bindings.windowStopTextInput(window), 1,
+            reason: bindings.lastError);
+        expect(bindings.windowTextInputActive(window), 0);
+      });
+    } finally {
+      bindings.windowDestroy(host, window);
+      bindings.hostDestroy(host);
+    }
+  });
+
+  test('TextBox focus and close control real SDL text input', () async {
+    final host = await SdlSkiaHost.initialize();
+    final box = TextBox(text: 'abc');
+    final button = Button();
+    final window = Window(
+      content: StackPanel(children: [box, button]),
+    );
+    try {
+      await host.showWindow(window);
+      expect(host.isTextInputActive(window), isFalse);
+
+      box.focus();
+      expect(host.isTextInputActive(window), isTrue);
+      box.moveCaret(0);
+
+      button.focus();
+      expect(host.isTextInputActive(window), isFalse);
+      box.focus();
+      expect(host.isTextInputActive(window), isTrue);
+    } finally {
+      await host.closeWindow(window);
+      expect(host.isTextInputActive(window), isFalse);
+      host.dispose();
+    }
+  });
+
   test('null destruction arguments are ignored', () {
     expect(() => bindings.hostDestroy(nullptr), returnsNormally);
     expect(() => bindings.windowDestroy(nullptr, nullptr), returnsNormally);
