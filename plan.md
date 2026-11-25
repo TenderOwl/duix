@@ -143,7 +143,9 @@ Skia canvas масштабируется через `displayScale`. Backbuffer �
 - SDL renderer создаётся с включённым VSync;
 - diagnostics включают `scheduled`, `layout`, `painted`, `presented`;
 - `example/native_frame_benchmark.dart` измеряет process CPU на Windows через `GetProcessTimes`, idle counters и latency async invalidate→present;
-- 117 Dart-тестов, включая clipping/rendering, horizontal scrolling, mouse caret/selection, pointer capture, surrogate pairs, composition, clipboard, render-on-demand и scheduler counters.
+- `UIElement` поддерживает min/max width/height, margin, horizontal/vertical alignment, раздельные `desiredSize`, `arrangedSize` и `bounds`;
+- `StackPanel` измеряет детей с бесконечным главным направлением; measure cache учитывает изменение available constraints;
+- 128 Dart-тестов, включая layout constraints/alignment, infinite text width, clipping/rendering, horizontal scrolling, mouse caret/selection, pointer capture, surrogate pairs, composition, clipboard, render-on-demand и scheduler counters.
 
 ### 3.2. Проверенное поведение
 
@@ -154,7 +156,8 @@ Skia canvas масштабируется через `displayScale`. Backbuffer �
 - Белый фон окна отображается корректно.
 - HiDPI-масштабирование подтверждено на 4K-дисплее.
 - `dart analyze` проходит без замечаний.
-- Все 117 Dart-тестов проходят, включая render/clipping, native clip ABI, render-on-demand, async scheduler и восстановление прежнего Windows clipboard.
+- Все 128 Dart-тестов проходят, включая layout constraints/alignment, native infinite text width, render/clipping, native clip ABI, render-on-demand, async scheduler и восстановление прежнего Windows clipboard.
+- Margin включается в `desiredSize` и исключается из фактических `bounds`; start/center/end/stretch выравнивание проверено по координатам, а `arrangedSize` сохраняет размер исходного слота.
 - Повторный `presentWindow()` без invalidate не увеличивает render/present counters; изменение `Label.text` планирует ровно один следующий кадр. SDL expose/resize могут законно запланировать дополнительный кадр.
 - Несколько invalidate до кадра увеличивают `scheduled` и вызывают wake-up только один раз; `layout` и `painted` увеличиваются на каждом обработанном кадре, а пустой `renderFrame()` ничего не рисует.
 - Native integration-тест подтверждает `Timer → Label.text → invalidate`: от стабильного baseline добавляется ровно один scheduled/layout/painted/presented.
@@ -270,14 +273,13 @@ python tools/bootstrap_native.py --smoke --dart "<путь-к-dart>"
 
 1. **P0:** `TextBox.measureCore()` всё ещё приблизительно считает ширину через число символов.
 2. **P0:** legacy `drawText`, используемый `TextBox`, рисует через `drawSimpleText` без SkParagraph.
-3. **P1:** native text layout пока принимает только конечную положительную `maxWidth`; infinite constraints остаются задачей layout system.
-4. **P1:** Windows clipboard cleanup нестабилен при восстановлении пустого прежнего значения: SDL `Couldn't open clipboard`; round-trip и запись самого значения при этом успешны.
-5. **P2:** SDL wait ограничен 16 мс, чтобы Dart timers получали управление; это не полностью event-driven async integration. Измеренные 1.53–1.54% idle process CPU и медианная latency около 16.3–16.5 мс пока не оправдывают усложнение backend.
-6. **P1:** нет `Grid`, `ScrollViewer`, alignment и min/max constraints.
-7. **P1:** binding lifecycle и отмена подписок требуют более строгой модели владения.
-8. **P1:** нет единого механизма `dispose()` для контролов и ресурсов.
-9. **P2:** нет styles/templates, `ItemsControl`, виртуализации и accessibility.
-10. **P2:** нет packaging runtime dependencies и кроссплатформенной CI.
+3. **P1:** Windows clipboard cleanup нестабилен при восстановлении пустого прежнего значения: SDL `Couldn't open clipboard`; round-trip и запись самого значения при этом успешны.
+4. **P2:** SDL wait ограничен 16 мс, чтобы Dart timers получали управление; это не полностью event-driven async integration. Измеренные 1.53–1.54% idle process CPU и медианная latency около 16.3–16.5 мс пока не оправдывают усложнение backend.
+5. **P1:** нет `Grid` и `ScrollViewer`.
+6. **P1:** binding lifecycle и отмена подписок требуют более строгой модели владения.
+7. **P1:** нет единого механизма `dispose()` для контролов и ресурсов.
+8. **P2:** нет styles/templates, `ItemsControl`, виртуализации и accessibility.
+9. **P2:** нет packaging runtime dependencies и кроссплатформенной CI.
 
 ---
 
@@ -554,11 +556,13 @@ text_layout_selection_rects
 
 ## 5.1. Уточнить constraints
 
-- [ ] Добавить min/max width/height.
-- [ ] Добавить margin как attached/layout property.
-- [ ] Добавить horizontal/vertical alignment.
-- [ ] Различить desired size, arranged size и actual bounds.
-- [ ] Проверить поведение при infinite constraints.
+- [x] Добавить min/max width/height.
+- [x] Добавить margin как attached/layout property.
+- [x] Добавить horizontal/vertical alignment.
+- [x] Различить desired size, arranged size и actual bounds.
+- [x] Проверить поведение при infinite constraints.
+
+`desiredSize` включает margin, `arrangedSize` описывает выделенный слот, а `bounds` — фактический прямоугольник контрола после вычитания margin и выравнивания. Stretch остаётся режимом по умолчанию; min/max проверяются при установке, min может превышать доступный размер, но фактические bounds остаются внутри слота. Measure cache учитывает новые available constraints. `StackPanel` передаёт детям бесконечность по главной оси; headless и native text layouts сохраняют конечные metrics при бесконечной ширине.
 
 ## 5.2. DockPanel
 
@@ -704,7 +708,7 @@ default < inherited < style < binding < local < animation
 
 Порядок ближайших рабочих сессий:
 
-1. **Этап 5.1:** min/max constraints, margin и alignment; отдельно разрешить infinite constraints native text layout.
+1. **Этап 5.2:** DockPanel, attached `Dock` и last-child-fill.
 2. **Стабилизация Windows clipboard:** устранить сбой восстановления пустого прежнего значения в native ABI-тесте.
 3. **Незавершённая часть этапа 1.2:** проверить сборку и Paragraph smoke на Linux (FontConfig/Freetype) и macOS (CoreText).
 4. **Ручная визуальная проверка:** открыть text gallery и TextBox на мониторах с разными масштабами, проверить clipping, selection и caret; автоматический smoke этого не заменяет.
@@ -749,6 +753,32 @@ default < inherited < style < binding < local < animation
 ---
 
 ## 9. Журнал работ
+
+### 2026-11-26 — этап 5.1, layout constraints и alignment
+
+Сделано:
+
+- В `UIElement` добавлены `minWidth`/`maxWidth`, `minHeight`/`maxHeight`, `margin`, `horizontalAlignment` и `verticalAlignment`; значения проверяются, изменения constraints/margin вызывают invalidate measure, а alignment — invalidate arrange.
+- Разделены `desiredSize` (включая margin), `arrangedSize` (выделенный слот) и `bounds` (фактический прямоугольник после margin и выравнивания). Поддержаны left/top, center, right/bottom и stretch; stretch остаётся поведением по умолчанию.
+- Measure cache теперь зависит от `availableSize`; нарушения диапазонов, NaN и бесконечный arrange rect отклоняются. Минимальный desired size может превышать доступный размер, но arrange ограничивает фактические bounds слотом.
+- `StackPanel` передаёт бесконечность по главной оси при measure. `Label` при drawing использует layout для фактической ширины bounds.
+- Для `Point`, `Rect` и `EdgeInsets` добавлены value equality/hashCode. Добавлено 11 тестов `test/layout_constraints_test.dart` на constraints, margin, alignment, cache invalidation и infinite text width.
+- Подтверждено, что существующий native backend уже принимает `maxWidth = double.infinity`; C ABI/C++ не менялись.
+
+Проверено:
+
+- `dart format` и `dart analyze` — без замечаний.
+- Полный `dart test` — все 128 тестов проходят, включая native infinite-width layout.
+- `git diff --check` — успешно.
+
+Не проверено / ограничение:
+
+- `python tools/bootstrap_native.py --check` остановлен: в `PATH` отсутствуют `cmake` и `ninja`. Native-код не менялся, существующая native library использована полным тестовым набором.
+- Новых визуальных smoke-примеров для constraints не добавлено; поведение проверено координатными unit/integration-тестами. Linux/macOS и ручной визуальный контроль не выполнялись.
+
+Следующий шаг:
+
+- Этап 5.2: DockPanel, attached `Dock` и last-child-fill.
 
 ### 2026-11-25 — переименование TextBlock в Label
 

@@ -3,6 +3,13 @@ final class Point {
 
   final double x;
   final double y;
+
+  @override
+  bool operator ==(Object other) =>
+      other is Point && other.x == x && other.y == y;
+
+  @override
+  int get hashCode => Object.hash(x, y);
 }
 
 final class Size {
@@ -52,6 +59,17 @@ final class Rect {
         (width - padding.horizontal).clamp(0, double.infinity),
         (height - padding.vertical).clamp(0, double.infinity),
       );
+
+  @override
+  bool operator ==(Object other) =>
+      other is Rect &&
+      other.left == left &&
+      other.top == top &&
+      other.width == width &&
+      other.height == height;
+
+  @override
+  int get hashCode => Object.hash(left, top, width, height);
 }
 
 final class EdgeInsets {
@@ -79,6 +97,17 @@ final class EdgeInsets {
 
   Size inflateSize(Size size) =>
       Size(size.width + horizontal, size.height + vertical);
+
+  @override
+  bool operator ==(Object other) =>
+      other is EdgeInsets &&
+      other.left == left &&
+      other.top == top &&
+      other.right == right &&
+      other.bottom == bottom;
+
+  @override
+  int get hashCode => Object.hash(left, top, right, bottom);
 }
 
 final class Color {
@@ -100,3 +129,7 @@ final class Paint {
 enum Orientation { horizontal, vertical }
 
 enum TextAlignment { start, center, end }
+
+enum HorizontalAlignment { left, center, right, stretch }
+
+enum VerticalAlignment { top, center, bottom, stretch }

@@ -61,6 +61,15 @@ abstract class UIElement extends PropertyOwner {
   WindowHost? _window;
   Rect _bounds = Rect.zero;
   Size _desiredSize = Size.zero;
+  Size _arrangedSize = Size.zero;
+  Size? _previousAvailableSize;
+  double _minWidth = 0;
+  double _maxWidth = double.infinity;
+  double _minHeight = 0;
+  double _maxHeight = double.infinity;
+  EdgeInsets _margin = EdgeInsets.zero;
+  HorizontalAlignment _horizontalAlignment = HorizontalAlignment.stretch;
+  VerticalAlignment _verticalAlignment = VerticalAlignment.stretch;
   bool _isMounted = false;
   bool _isVisible = true;
   bool _isEnabled = true;
@@ -71,9 +80,99 @@ abstract class UIElement extends PropertyOwner {
 
   UIElement? get logicalParent => _logicalParent;
   WindowHost? get window => _window;
+
+  /// Actual control bounds, excluding margin and alignment slot space.
   Rect get bounds => _bounds;
+
+  /// Size requested during measure, including margin.
   Size get desiredSize => _desiredSize;
+
+  /// Size of the slot supplied to arrange, including margin.
+  Size get arrangedSize => _arrangedSize;
   bool get isMounted => _isMounted;
+
+  double get minWidth => _minWidth;
+  set minWidth(double value) {
+    _validateMinimum(value, _maxWidth, 'minWidth');
+    _setLayoutValue(
+      'minWidth',
+      _minWidth,
+      value,
+      (value) => _minWidth = value,
+    );
+  }
+
+  double get maxWidth => _maxWidth;
+  set maxWidth(double value) {
+    _validateMaximum(value, _minWidth, 'maxWidth');
+    _setLayoutValue(
+      'maxWidth',
+      _maxWidth,
+      value,
+      (value) => _maxWidth = value,
+    );
+  }
+
+  double get minHeight => _minHeight;
+  set minHeight(double value) {
+    _validateMinimum(value, _maxHeight, 'minHeight');
+    _setLayoutValue(
+      'minHeight',
+      _minHeight,
+      value,
+      (value) => _minHeight = value,
+    );
+  }
+
+  double get maxHeight => _maxHeight;
+  set maxHeight(double value) {
+    _validateMaximum(value, _minHeight, 'maxHeight');
+    _setLayoutValue(
+      'maxHeight',
+      _maxHeight,
+      value,
+      (value) => _maxHeight = value,
+    );
+  }
+
+  EdgeInsets get margin => _margin;
+  set margin(EdgeInsets value) {
+    for (final component in [
+      value.left,
+      value.top,
+      value.right,
+      value.bottom
+    ]) {
+      if (component < 0 || !component.isFinite) {
+        throw ArgumentError.value(
+            value, 'margin', 'Must be finite and non-negative.');
+      }
+    }
+    _setLayoutValue(
+      'margin',
+      _margin,
+      value,
+      (value) => _margin = value,
+    );
+  }
+
+  HorizontalAlignment get horizontalAlignment => _horizontalAlignment;
+  set horizontalAlignment(HorizontalAlignment value) {
+    if (_horizontalAlignment == value) return;
+    final oldValue = _horizontalAlignment;
+    _horizontalAlignment = value;
+    invalidateArrange();
+    notifyPropertyChanged('horizontalAlignment', oldValue, value);
+  }
+
+  VerticalAlignment get verticalAlignment => _verticalAlignment;
+  set verticalAlignment(VerticalAlignment value) {
+    if (_verticalAlignment == value) return;
+    final oldValue = _verticalAlignment;
+    _verticalAlignment = value;
+    invalidateArrange();
+    notifyPropertyChanged('verticalAlignment', oldValue, value);
+  }
 
   bool get isVisible => _isVisible;
   set isVisible(bool value) {
@@ -116,23 +215,117 @@ abstract class UIElement extends PropertyOwner {
       _dataContext ?? _logicalParent?.effectiveDataContext;
 
   Size measure(Size availableSize) {
+    _validateAvailableSize(availableSize);
     if (!_isVisible) {
       _desiredSize = Size.zero;
+      _previousAvailableSize = availableSize;
       _measureValid = true;
       return _desiredSize;
     }
-    if (!_measureValid) {
-      _desiredSize = measureCore(availableSize).constrain(availableSize);
-      _measureValid = true;
+    if (_measureValid && _previousAvailableSize == availableSize) {
+      return _desiredSize;
     }
+
+    final innerAvailable = Size(
+      (availableSize.width - margin.horizontal).clamp(0, double.infinity),
+      (availableSize.height - margin.vertical).clamp(0, double.infinity),
+    );
+    final coreConstraints = Size(
+      innerAvailable.width < maxWidth ? innerAvailable.width : maxWidth,
+      innerAvailable.height < maxHeight ? innerAvailable.height : maxHeight,
+    );
+    final measured = measureCore(coreConstraints).constrain(coreConstraints);
+    if (!measured.width.isFinite || !measured.height.isFinite) {
+      throw StateError('An element must report a finite desired size.');
+    }
+    final constrained = Size(
+      measured.width.clamp(minWidth, maxWidth),
+      measured.height.clamp(minHeight, maxHeight),
+    );
+    _desiredSize = margin.inflateSize(constrained);
+    _previousAvailableSize = availableSize;
+    _measureValid = true;
     return _desiredSize;
   }
 
   void arrange(Rect finalRect) {
-    if (!_arrangeValid || _bounds != finalRect) {
-      _bounds = finalRect;
-      arrangeCore(finalRect);
+    if (!finalRect.width.isFinite ||
+        !finalRect.height.isFinite ||
+        finalRect.width < 0 ||
+        finalRect.height < 0) {
+      throw ArgumentError.value(
+          finalRect, 'finalRect', 'Must be finite and non-negative.');
+    }
+
+    final contentRect = finalRect.deflate(margin);
+    final desiredContent = Size(
+      (desiredSize.width - margin.horizontal).clamp(0, double.infinity),
+      (desiredSize.height - margin.vertical).clamp(0, double.infinity),
+    );
+    final width = horizontalAlignment == HorizontalAlignment.stretch
+        ? contentRect.width
+        : (desiredContent.width < contentRect.width
+            ? desiredContent.width
+            : contentRect.width);
+    final height = verticalAlignment == VerticalAlignment.stretch
+        ? contentRect.height
+        : (desiredContent.height < contentRect.height
+            ? desiredContent.height
+            : contentRect.height);
+    final left = switch (horizontalAlignment) {
+      HorizontalAlignment.center =>
+        contentRect.left + (contentRect.width - width) / 2,
+      HorizontalAlignment.right => contentRect.right - width,
+      _ => contentRect.left,
+    };
+    final top = switch (verticalAlignment) {
+      VerticalAlignment.center =>
+        contentRect.top + (contentRect.height - height) / 2,
+      VerticalAlignment.bottom => contentRect.bottom - height,
+      _ => contentRect.top,
+    };
+    final actualBounds = Rect.fromLTWH(left, top, width, height);
+
+    if (!_arrangeValid ||
+        _bounds != actualBounds ||
+        _arrangedSize != finalRect.size) {
+      _bounds = actualBounds;
+      _arrangedSize = finalRect.size;
+      arrangeCore(actualBounds);
       _arrangeValid = true;
+    }
+  }
+
+  void _setLayoutValue<T>(
+    String name,
+    T oldValue,
+    T newValue,
+    void Function(T value) assign,
+  ) {
+    if (oldValue == newValue) return;
+    assign(newValue);
+    invalidateMeasure();
+    notifyPropertyChanged(name, oldValue, newValue);
+  }
+
+  static void _validateAvailableSize(Size value) {
+    if (value.width < 0 ||
+        value.height < 0 ||
+        value.width.isNaN ||
+        value.height.isNaN) {
+      throw ArgumentError.value(value, 'availableSize');
+    }
+  }
+
+  static void _validateMinimum(double value, double maximum, String name) {
+    if (value < 0 || !value.isFinite || value > maximum) {
+      throw ArgumentError.value(value, name);
+    }
+  }
+
+  static void _validateMaximum(double value, double minimum, String name) {
+    if (value < 0 || value.isNaN || value < minimum) {
+      throw ArgumentError.value(value, name);
     }
   }
 

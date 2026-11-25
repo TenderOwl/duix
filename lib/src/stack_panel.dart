@@ -54,7 +54,10 @@ final class StackPanel extends Panel {
 
     for (final child in children) {
       if (!child.isVisible) continue;
-      final size = child.measure(inner);
+      final childConstraints = _orientation == Orientation.vertical
+          ? Size(inner.width, double.infinity)
+          : Size(double.infinity, inner.height);
+      final size = child.measure(childConstraints);
       visibleCount++;
       if (_orientation == Orientation.vertical) {
         mainExtent += size.height;

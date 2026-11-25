@@ -70,7 +70,7 @@ final class Label extends Control {
 
   @override
   void renderCore(DrawingContext context) {
-    final layout = _textLayout ?? _layoutFor(bounds.width);
+    final layout = _layoutFor(bounds.width);
     layout.draw(
       context,
       Point(bounds.left, bounds.top),
