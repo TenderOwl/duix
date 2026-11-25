@@ -5,6 +5,7 @@ export 'src/border.dart';
 export 'src/button.dart';
 export 'src/colors.dart';
 export 'src/content_control.dart';
+export 'src/dock_panel.dart';
 export 'src/drawing.dart';
 export 'src/events.dart';
 export 'src/focus_manager.dart';
