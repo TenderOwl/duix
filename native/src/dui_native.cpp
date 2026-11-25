@@ -397,6 +397,7 @@ int32_t dui_host_next_event(DuiHost* host, DuiEvent* out_event) {
       out_event->type = DUI_EVENT_KEY_DOWN;
       out_event->window_id = source.key.windowID;
       out_event->key_code = static_cast<int32_t>(source.key.key);
+      out_event->scan_code = static_cast<int32_t>(source.key.scancode);
       out_event->modifiers = static_cast<uint16_t>(source.key.mod);
       break;
     default:

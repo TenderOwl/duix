@@ -57,6 +57,8 @@ typedef struct DuiEvent {
   /* Composition selection offsets are UTF-16 code units; negative means unset. */
   int32_t composition_start;
   int32_t composition_length;
+  /* SDL scancode for physical key position; key_code is layout-dependent. */
+  int32_t scan_code;
 } DuiEvent;
 
 typedef struct DuiWindowMetrics {

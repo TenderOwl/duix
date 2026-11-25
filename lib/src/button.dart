@@ -10,6 +10,7 @@ final class Button extends ContentControl {
     if (onClick != null) addClickHandler(onClick);
     addHandler(UIElement.pointerDown, _pointerDown);
     addHandler(UIElement.pointerUp, _pointerUp);
+    addHandler(UIElement.keyDown, _keyDown);
   }
 
   final _clickHandlers = <void Function()>[];
@@ -32,10 +33,24 @@ final class Button extends ContentControl {
     if (!_isPressed) return;
     _isPressed = false;
     invalidatePaint();
+    _activate();
+    args.handled = true;
+  }
+
+  void _keyDown(Object sender, KeyEventArgs args) {
+    if (!isEnabled ||
+        args.primaryShortcutPressed ||
+        (args.key != 'space' && args.key != 'enter')) {
+      return;
+    }
+    _activate();
+    args.handled = true;
+  }
+
+  void _activate() {
     for (final handler in List<void Function()>.of(_clickHandlers)) {
       handler();
     }
-    args.handled = true;
   }
 
   @override

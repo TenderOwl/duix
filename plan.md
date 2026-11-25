@@ -134,7 +134,9 @@ Skia canvas масштабируется через `displayScale`. Backbuffer �
 - `TextBox` хранит composition text/range отдельно от подтверждённого `TextBuffer`, рисует composition через кэшированный `TextLayout` с подчёркиванием и подсветкой активного диапазона;
 - промежуточная composition не изменяет `text` и two-way binding; подтверждение через text input заменяет selection и обновляет модель;
 - `Button` и `TextBox` рисуют двухпиксельный focus ring внутри своих bounds только при активном focus;
-- 108 Dart-тестов, включая clipping/rendering, horizontal scrolling, mouse caret/selection, pointer capture, surrogate pairs, composition и clipboard.
+- `Button` активируется по Space/Enter через routed key-down и помечает событие обработанным;
+- `KeyEventArgs` содержит physical SDL scancode и layout-dependent logical SDL keycode;
+- 112 Dart-тестов, включая clipping/rendering, horizontal scrolling, mouse caret/selection, pointer capture, surrogate pairs, composition и clipboard.
 
 ### 3.2. Проверенное поведение
 
@@ -145,7 +147,7 @@ Skia canvas масштабируется через `displayScale`. Backbuffer �
 - Белый фон окна отображается корректно.
 - HiDPI-масштабирование подтверждено на 4K-дисплее.
 - `dart analyze` проходит без замечаний.
-- Все 108 Dart-тестов проходят, включая render/clipping, native clip ABI и восстановление прежнего Windows clipboard.
+- Все 112 Dart-тестов проходят, включая render/clipping, native clip ABI и восстановление прежнего Windows clipboard.
 - На Windows подтверждены реальные SDL Start/Stop/SetTextInputArea и активное состояние ввода при focus; потеря focus и close останавливают ввод.
 - Input area и caret преобразуются из logical UI units в SDL window units; caret вычисляется через `TextLayout`.
 - `TextBox` при text input заменяет активное selection, сохраняет направление anchor/extent и обновляет source двустороннего binding.
@@ -158,7 +160,7 @@ Skia canvas масштабируется через `displayScale`. Backbuffer �
 - Исправлена native-геометрия: `getRectsForRange()` получает UTF-16 offsets без преобразования в UTF-8 bytes, а caret строится по `getGlyphInfoAtUTF16Offset()` или последнему text box для конца строки с учётом направления текста.
 - Регрессионный тест на `A😀B` при scale 2.0 проверяет строго возрастающие caret coordinates на offsets 0/1/3/4 и соответствие selection rects диапазонам `0..1`, `1..3` и всего текста. До исправления тест воспроизводил caret `x = 0` после `A`.
 - SDL clipboard на Windows выполняет Unicode round-trip, освобождает native string через C ABI и в последнем полном прогоне успешно восстанавливает прежнее значение; ранее наблюдавшаяся нестабильность `Couldn't open clipboard` требует наблюдения на повторных запусках.
-- `DuiEvent` с modifiers и composition range имеет ABI size 72 байта; SDL byte offsets преобразуются в UTF-16. OS key modifiers и маппинг SDL key codes покрыты косвенно, без синтеза системного keyboard input.
+- `DuiEvent` с modifiers, composition range и SDL scancode имеет ABI size 80 байт; SDL byte offsets преобразуются в UTF-16. `KeyEventArgs.logicalKeyCode` получает SDL keycode, `physicalKeyCode` — scancode. OS key modifiers и маппинг SDL key codes покрыты косвенно, без синтеза системного keyboard input.
 - Composition видна до commit, не меняет `TextBuffer`/binding, поддерживает CJK/emoji selection range и кириллицу без selection; пустой editing event, focus loss, unmount и editing commands очищают её.
 - Матрица проверяет ASCII, кириллицу, emoji, CJK, Arabic, Hebrew, multiline, пустую и очень длинную строки, а также стабильность logical metrics на масштабах 1.0, 1.25, 1.5 и 2.0.
 - Пустая строка имеет нулевую ширину и конечные неотрицательные metrics; учтён допустимый glyph overhang tight selection boxes за пределами advance width.
@@ -255,12 +257,11 @@ python tools/bootstrap_native.py --smoke --dart "<путь-к-dart>"
 3. **P1:** native text layout пока принимает только конечную положительную `maxWidth`; infinite constraints остаются задачей layout system.
 4. **P1:** Windows clipboard cleanup нестабилен при восстановлении пустого прежнего значения: SDL `Couldn't open clipboard`; round-trip и запись самого значения при этом успешны.
 5. **P1:** нативный пример рисует кадр каждые 8 мс независимо от invalidate.
-6. **P1:** нет keyboard focus traversal и focus scopes.
-7. **P1:** нет `Grid`, `ScrollViewer`, alignment и min/max constraints.
-8. **P1:** binding lifecycle и отмена подписок требуют более строгой модели владения.
-9. **P1:** нет единого механизма `dispose()` для контролов и ресурсов.
-10. **P2:** нет styles/templates, `ItemsControl`, виртуализации и accessibility.
-11. **P2:** нет packaging runtime dependencies и кроссплатформенной CI.
+6. **P1:** нет `Grid`, `ScrollViewer`, alignment и min/max constraints.
+7. **P1:** binding lifecycle и отмена подписок требуют более строгой модели владения.
+8. **P1:** нет единого механизма `dispose()` для контролов и ресурсов.
+9. **P2:** нет styles/templates, `ItemsControl`, виртуализации и accessibility.
+10. **P2:** нет packaging runtime dependencies и кроссплатформенной CI.
 
 ---
 
@@ -497,11 +498,11 @@ text_layout_selection_rects
 
 ## 3.3. Keyboard activation
 
-- [ ] Button активируется Space/Enter.
-- [ ] Key events имеют modifiers и physical/logical key.
-- [ ] Обработанное событие не вызывает повторную активацию родителя.
+- [x] Button активируется Space/Enter.
+- [x] Key events имеют modifiers и physical/logical key.
+- [x] Обработанное событие не вызывает повторную активацию родителя.
 
-Критерий готовности: пример можно полностью использовать без мыши.
+Критерий готовности: пример можно полностью использовать без мыши. Выполнено для текущих примеров: Tab/Shift+Tab выбирают контролы, Space/Enter активируют focused Button, TextBox сохраняет клавиатурное редактирование. Проверено автоматически и native smoke; физическая клавиатура вручную не проверялась.
 
 ---
 
@@ -688,11 +689,10 @@ default < inherited < style < binding < local < animation
 Порядок ближайших рабочих сессий:
 
 1. **Стабилизация Windows clipboard:** устранить сбой восстановления пустого прежнего значения в native ABI-тесте.
-2. **Этап 3.3:** keyboard activation для Button и physical/logical key.
+2. **Этап 4:** render on demand.
 3. **Незавершённая часть этапа 1.2:** проверить сборку и Paragraph smoke на Linux (FontConfig/Freetype) и macOS (CoreText).
 4. **Ручная визуальная проверка:** открыть text gallery и TextBox на мониторах с разными масштабами, проверить clipping, selection и caret; автоматический smoke этого не заменяет.
 5. **Ручная проверка этапа 2.4:** русский, китайский/японский ввод и emoji через реальные системные IME.
-6. **Этап 4:** render on demand.
 
 Не начинать GPU, styles или virtualization до завершения этапов 1–4.
 
@@ -733,6 +733,32 @@ default < inherited < style < binding < local < animation
 ---
 
 ## 9. Журнал работ
+
+### 2026-11-25 — этап 3.3, keyboard activation
+
+Сделано:
+
+- `Button` обрабатывает routed Space/Enter, вызывает click handlers один раз на событие и устанавливает `handled`; вложенный parent Button не активируется повторно. Disabled Button и Ctrl/Cmd-модифицированные комбинации игнорируются.
+- `KeyEventArgs` и `Window.dispatchKeyDown()` получили `physicalKeyCode` и `logicalKeyCode`; программные вызовы без кодов сохраняют прежнюю совместимость через значение 0.
+- В `DuiEvent` добавлен `scan_code`: C++ передаёт SDL scancode, Dart FFI читает его в `NativeEvent.scanCode`, а `SdlSkiaHost` передаёт оба кода в key event. `key_code` остаётся layout-dependent logical key.
+- SDL Space и Enter отображаются в имена `space`/`enter`; размер `DuiEvent` увеличен с 72 до 80 байт с учётом выравнивания.
+- Добавлены 4 теста `test/button_keyboard_test.dart`; `example/native_smoke.dart` теперь проверяет Enter и Space у реального native Button.
+
+Проверено:
+
+- `dart format` и `dart analyze` — без замечаний.
+- Native library пересобрана после изменения C ABI; `sizeOf<DuiEventStruct>() == 80`.
+- Полный `dart test` после пересборки — все 112 тестов проходят, включая clipboard.
+- Базовый native smoke — успешно: Button активирован по Enter и Space, 3 кадра, 4 renderFrame и 4 present при scale 2.0.
+- TextBox native smoke — успешно: 3 кадра, 4 renderFrame и 4 present; Paragraph smoke `width=124.945, height=21`.
+
+Не проверено:
+
+- Физическая клавиатура и реальные SDL key events вручную, Linux и macOS; key identity и активация проверены программной dispatch-последовательностью.
+
+Следующий шаг:
+
+- Этап 4: render on demand.
 
 ### 2026-11-25 — видимое focus-состояние контролов
 

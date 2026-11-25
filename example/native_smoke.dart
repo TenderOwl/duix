@@ -13,17 +13,32 @@ Future<void> main(List<String> args) async {
       diagnosticsEnabled: args.contains('--diagnostics'),
     );
     application = Application(host: host);
+    var activations = 0;
+    final button = Button(
+      content: TextBlock(text: 'Space / Enter', fontSize: 16),
+      onClick: () => activations++,
+    );
     window = Window(
       title: 'DUI — native smoke',
       width: 320,
       height: 200,
-      content: TextBlock(
-        text: 'Native smoke test',
-        fontSize: 20,
+      content: StackPanel(
+        spacing: 12,
+        padding: const EdgeInsets.all(20),
+        children: [
+          TextBlock(text: 'Native smoke test', fontSize: 20),
+          button,
+        ],
       ),
     );
 
+    button.focus();
     await application.run(window);
+    window.dispatchKeyDown('enter');
+    window.dispatchKeyDown('space');
+    if (activations != 2) {
+      throw StateError('Native Button keyboard activation failed.');
+    }
     for (var frame = 0; frame < 3 && host.isOpen(window); frame++) {
       host.pumpEvents();
       host.presentWindow(window);

@@ -255,12 +255,16 @@ final class Window extends ObservableObject implements WindowHost {
     bool shiftPressed = false,
     bool controlPressed = false,
     bool metaPressed = false,
+    int physicalKeyCode = 0,
+    int logicalKeyCode = 0,
   }) {
     final args = KeyEventArgs(
       key,
       shiftPressed: shiftPressed,
       controlPressed: controlPressed,
       metaPressed: metaPressed,
+      physicalKeyCode: physicalKeyCode,
+      logicalKeyCode: logicalKeyCode,
     );
     focusManager.focusedElement?.raiseEvent(UIElement.keyDown, args);
     if (!args.handled && key == 'tab' && !controlPressed && !metaPressed) {

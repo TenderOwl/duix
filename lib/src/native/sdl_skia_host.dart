@@ -265,6 +265,8 @@ final class SdlSkiaHost
           shiftPressed: event.modifiers & 0x0003 != 0,
           controlPressed: event.modifiers & 0x00C0 != 0,
           metaPressed: event.modifiers & 0x0C00 != 0,
+          physicalKeyCode: event.scanCode,
+          logicalKeyCode: event.keyCode,
         );
       case 9:
         final text = event.text;
@@ -307,6 +309,8 @@ PointerButton _pointerButton(int button) => switch (button) {
 String _keyName(int keyCode) => switch (keyCode) {
       0x00000008 => 'backspace',
       0x00000009 => 'tab',
+      0x0000000D => 'enter',
+      0x00000020 => 'space',
       0x00000061 => 'a',
       0x00000063 => 'c',
       0x00000076 => 'v',

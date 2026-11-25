@@ -47,6 +47,9 @@ final class DuiEventStruct extends Struct {
 
   @Int32()
   external int compositionLength;
+
+  @Int32()
+  external int scanCode;
 }
 
 final class DuiWindowMetricsStruct extends Struct {
@@ -171,6 +174,7 @@ final class NativeEvent {
     required this.text,
     required this.compositionStart,
     required this.compositionLength,
+    required this.scanCode,
   });
 
   final int type;
@@ -184,6 +188,7 @@ final class NativeEvent {
   final String? text;
   final int compositionStart;
   final int compositionLength;
+  final int scanCode;
 }
 
 final class NativeWindowMetrics {
@@ -632,6 +637,7 @@ final class NativeBindings {
       text: value.textUtf8 == nullptr ? null : value.textUtf8.toDartString(),
       compositionStart: value.compositionStart,
       compositionLength: value.compositionLength,
+      scanCode: value.scanCode,
     );
   }
 

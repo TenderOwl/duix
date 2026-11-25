@@ -40,9 +40,17 @@ final class KeyEventArgs extends RoutedEventArgs {
     this.shiftPressed = false,
     this.controlPressed = false,
     this.metaPressed = false,
+    this.physicalKeyCode = 0,
+    this.logicalKeyCode = 0,
   });
 
   final String key;
+
+  /// Backend scancode identifying the physical key position.
+  final int physicalKeyCode;
+
+  /// Backend keycode after applying the active keyboard layout.
+  final int logicalKeyCode;
   final bool shiftPressed;
   final bool controlPressed;
   final bool metaPressed;
