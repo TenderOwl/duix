@@ -9,6 +9,7 @@ abstract interface class WindowHost {
   bool requestFocus(Control control);
   void validateFocus() {}
   UIElement? get rootElement => null;
+  Control? get focusedElement => null;
   TextLayoutFactory get textLayoutFactory;
   double get displayScale;
   bool capturePointer(Control control) => false;
@@ -40,6 +41,10 @@ abstract class UIElement extends PropertyOwner {
   );
   static const pointerUp = RoutedEvent<PointerEventArgs>(
     'pointerUp',
+    RoutingStrategy.bubble,
+  );
+  static const mouseWheel = RoutedEvent<MouseWheelEventArgs>(
+    'mouseWheel',
     RoutingStrategy.bubble,
   );
   static const keyDown = RoutedEvent<KeyEventArgs>(

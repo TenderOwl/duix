@@ -416,6 +416,12 @@ final class SdlSkiaHost
             compositionLength: event.compositionLength,
           );
         }
+      case 10:
+        window.dispatchMouseWheel(
+          Point(event.x, event.y),
+          deltaX: event.width,
+          deltaY: event.height,
+        );
     }
   }
 
@@ -457,9 +463,13 @@ String _keyName(int keyCode) => switch (keyCode) {
       0x00000078 => 'x',
       0x0000007F => 'delete',
       0x4000004A => 'home',
+      0x4000004B => 'pageup',
       0x4000004D => 'end',
+      0x4000004E => 'pagedown',
       0x4000004F => 'right',
       0x40000050 => 'left',
+      0x40000051 => 'down',
+      0x40000052 => 'up',
       _ => keyCode.toString(),
     };
 

@@ -34,6 +34,18 @@ final class PointerEventArgs extends RoutedEventArgs {
 
 enum PointerButton { primary, secondary, middle }
 
+final class MouseWheelEventArgs extends RoutedEventArgs {
+  MouseWheelEventArgs({
+    required this.position,
+    required this.deltaX,
+    required this.deltaY,
+  });
+
+  final Point position;
+  final double deltaX;
+  final double deltaY;
+}
+
 final class KeyEventArgs extends RoutedEventArgs {
   KeyEventArgs(
     this.key, {

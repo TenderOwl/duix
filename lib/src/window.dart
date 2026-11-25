@@ -74,6 +74,7 @@ final class Window extends ObservableObject implements WindowHost {
   Size get logicalSize => _logicalSize;
   double get devicePixelRatio => _devicePixelRatio;
   bool get isVisible => _isVisible;
+  @override
   Control? get focusedElement => focusManager.focusedElement;
   bool get frameScheduled => _scheduler.frameScheduled;
   int get scheduledFrameCount => _scheduler.scheduledFrameCount;
@@ -233,6 +234,26 @@ final class Window extends ObservableObject implements WindowHost {
         ..originalSource = target,
     );
     if (button == PointerButton.primary) _pointerCapture = null;
+  }
+
+  void dispatchMouseWheel(
+    Point position, {
+    double deltaX = 0,
+    double deltaY = 0,
+  }) {
+    if (!deltaX.isFinite || !deltaY.isFinite) {
+      throw ArgumentError('Mouse wheel deltas must be finite.');
+    }
+    updateLayout();
+    final target = _content?.hitTest(position);
+    target?.raiseEvent(
+      UIElement.mouseWheel,
+      MouseWheelEventArgs(
+        position: position,
+        deltaX: deltaX,
+        deltaY: deltaY,
+      )..originalSource = target,
+    );
   }
 
   void dispatchTextInput(String text) {

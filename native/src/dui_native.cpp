@@ -422,6 +422,18 @@ static int32_t translate_event(
       out_event->y = window_units_to_content(event_window, source.motion.y);
       break;
     }
+    case SDL_EVENT_MOUSE_WHEEL: {
+      out_event->type = DUI_EVENT_MOUSE_WHEEL;
+      out_event->window_id = source.wheel.windowID;
+      auto* event_window = SDL_GetWindowFromID(source.wheel.windowID);
+      out_event->x = window_units_to_content(event_window, source.wheel.mouse_x);
+      out_event->y = window_units_to_content(event_window, source.wheel.mouse_y);
+      const float direction =
+          source.wheel.direction == SDL_MOUSEWHEEL_FLIPPED ? -1.0F : 1.0F;
+      out_event->width = source.wheel.x * direction;
+      out_event->height = source.wheel.y * direction;
+      break;
+    }
     case SDL_EVENT_TEXT_INPUT:
       out_event->type = DUI_EVENT_TEXT_INPUT;
       out_event->window_id = source.text.windowID;

@@ -16,6 +16,7 @@ export 'src/observable.dart';
 export 'src/panel.dart';
 export 'src/properties.dart';
 export 'src/recording_renderer.dart';
+export 'src/scroll_viewer.dart';
 export 'src/stack_panel.dart';
 export 'src/label.dart';
 export 'src/text_box.dart';

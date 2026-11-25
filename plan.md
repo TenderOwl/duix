@@ -150,7 +150,8 @@ Skia canvas масштабируется через `displayScale`. Backbuffer �
 - `StackPanel` измеряет детей с бесконечным главным направлением; measure cache учитывает изменение available constraints;
 - `DockPanel` поддерживает attached `Dock.left/top/right/bottom`, последовательное уменьшение remaining rect и `lastChildFill` для последнего видимого ребёнка;
 - `Grid` поддерживает Auto/Pixel/weighted Star tracks, наблюдаемые row/column definitions, attached row/column и rowSpan/columnSpan, spacing и physical-pixel rounding границ;
-- 155 Dart-тестов, включая Grid tracks/span/gap/invalidate/HiDPI, DockPanel measure/arrange/invalidate, diagnostics FPS/render-on-demand, synchronous live-resize frame с увеличением physical backbuffer, layout constraints/alignment, infinite text width, clipping/rendering, horizontal scrolling, mouse caret/selection, pointer capture, surrogate pairs, composition, clipboard, render-on-demand и scheduler counters.
+- `ScrollViewer` поддерживает viewport/extent, двунаправленные offsets, Auto/Hidden/Visible/Disabled scrollbars, mouse wheel, keyboard scrolling, pointer capture для thumbs и clipping при render/hit test;
+- 166 Dart-тестов, включая ScrollViewer measure/scroll/input/clip, Grid tracks/span/gap/invalidate/HiDPI, DockPanel measure/arrange/invalidate, diagnostics FPS/render-on-demand, synchronous live-resize frame с увеличением physical backbuffer, layout constraints/alignment, infinite text width, clipping/rendering, horizontal scrolling, mouse caret/selection, pointer capture, surrogate pairs, composition, clipboard, render-on-demand и scheduler counters.
 
 ### 3.2. Проверенное поведение
 
@@ -161,7 +162,7 @@ Skia canvas масштабируется через `displayScale`. Backbuffer �
 - Белый фон окна отображается корректно.
 - HiDPI-масштабирование подтверждено на 4K-дисплее.
 - `dart analyze` проходит без замечаний.
-- Все 153 теста при исключении двух clipboard-сценариев проходят, включая 18 Grid-тестов, 7 DockPanel-тестов и FPS/render-on-demand. Два прежних полных прогона остановились только на Windows clipboard `Couldn't open clipboard`.
+- Все 164 теста при исключении двух clipboard-сценариев проходят, включая 11 ScrollViewer-тестов, 18 Grid-тестов, 7 DockPanel-тестов и FPS/render-on-demand. Два прежних полных прогона остановились только на Windows clipboard `Couldn't open clipboard`.
 - Native integration-тест подтверждает, что Dart callback выполняет `beginFrame/present` до возврата из `SDL_SetWindowSize`, получает logical size 240×120 и увеличенный physical backbuffer. Непрерывный drag и maximize двойным щелчком по рамке подтверждены пользователем.
 - Margin включается в `desiredSize` и исключается из фактических `bounds`; start/center/end/stretch выравнивание проверено по координатам, а `arrangedSize` сохраняет размер исходного слота.
 - Повторный `presentWindow()` без invalidate не увеличивает render/present counters; изменение `Label.text` планирует ровно один следующий кадр. SDL expose/resize могут законно запланировать дополнительный кадр.
@@ -592,13 +593,13 @@ text_layout_selection_rects
 
 ## 5.4. ScrollViewer
 
-- [ ] Viewport и content extent.
-- [ ] Mouse wheel.
-- [ ] Scrollbars.
-- [ ] Clip при render и hit test.
-- [ ] Keyboard scrolling после focus scopes.
+- [x] Viewport и content extent.
+- [x] Mouse wheel.
+- [x] Scrollbars.
+- [x] Clip при render и hit test.
+- [x] Keyboard scrolling после focus scopes.
 
-Критерий готовности: можно собрать типовое окно настроек без абсолютного позиционирования.
+`ScrollViewer` измеряет content с бесконечным constraint по каждой разрешённой оси и повторно разрешает Auto scrollbars с учётом их перекрёстного влияния на viewport. Поддерживаются `horizontalOffset`/`verticalOffset`, `scrollTo()`, `scrollBy()`, `scrollToStart()`/`scrollToEnd()`, четыре режима `ScrollBarVisibility` и пропорциональные thumbs с минимальным размером. Mouse wheel и клавиши arrows/PageUp/PageDown/Home/End проходят routed events от focused descendants. Scrollbar track выполняет page scrolling, thumb использует pointer capture. Content ограничен viewport и при render, и при hit test. Пример `example/native_scroll_viewer.dart` собирает окно настроек без абсолютного позиционирования и поддерживает `--smoke --diagnostics`.
 
 ---
 
@@ -721,7 +722,7 @@ default < inherited < style < binding < local < animation
 Порядок ближайших рабочих сессий:
 
 1. **Стабилизация Windows clipboard:** устранить повторяемый сбой `Couldn't open clipboard` в native ABI-тесте.
-2. **Этап 5.4:** ScrollViewer — viewport, extent, wheel, scrollbars и clipping.
+2. **Ручная проверка ScrollViewer:** запустить `example/native_scroll_viewer.dart`, проверить реальное SDL wheel, клавиатурную прокрутку из focused TextBox/Button, track/thumb dragging, clipping и resize при разных display scales.
 3. **Незавершённая часть этапа 1.2:** проверить сборку и Paragraph smoke на Linux (FontConfig/Freetype) и macOS (CoreText).
 4. **Ручная визуальная проверка:** открыть text gallery и TextBox на мониторах с разными масштабами, проверить clipping, selection и caret; автоматический smoke этого не заменяет.
 5. **Ручная проверка этапа 2.4:** русский, китайский/японский ввод и emoji через реальные системные IME.
@@ -765,6 +766,33 @@ default < inherited < style < binding < local < animation
 ---
 
 ## 9. Журнал работ
+
+### 2026-11-26 — этап 5.4, ScrollViewer
+
+Сделано:
+
+- Добавлены `ScrollViewer` и `ScrollBarVisibility { disabled, hidden, auto, visible }`. Content измеряется с бесконечным constraint по разрешённым осям; viewport, extent, offsets и видимость Auto scrollbars пересчитываются с учётом перекрёстного влияния полос.
+- Реализованы программная прокрутка, mouse wheel с scroll chaining, клавиши arrows/PageUp/PageDown/Home/End через bubbling от focused descendants, page click по track и thumb dragging с pointer capture.
+- Исправлено падение при перетаскивании thumb перед началом track: вычисленный drag offset ограничивается нулём до вызова validating `scrollTo()`. Регрессионный сценарий проверяет обе оси на нижней и верхней границах.
+- Render помещает content в viewport clip, hit test отклоняет content вне viewport и направляет scrollbar input в `ScrollViewer`. Изменение offsets инвалидирует arrange и публикует property notifications.
+- В routed events добавлен `mouseWheel`; SDL `SDL_EVENT_MOUSE_WHEEL` передаёт позицию и обе delta через существующий `DuiEvent` без изменения его layout. Native key mapping дополнен arrows и PageUp/PageDown.
+- Добавлены `example/native_scroll_viewer.dart` с типовым окном настроек и 11 тестов `test/scroll_viewer_test.dart`: viewport/extent, visibility modes, offsets, wheel, keyboard, clipping, hit testing, thumb drag, track click и shrink.
+
+Проверено:
+
+- `dart format` и `dart analyze` — без замечаний.
+- Все 11 ScrollViewer-тестов проходят. Общий прогон с исключением двух clipboard-сценариев — все 164 теста проходят.
+- Native library успешно пересобрана через CMake/Ninja/Clang; SkParagraph smoke проходит.
+- `dart run example/native_scroll_viewer.dart --smoke --diagnostics` — успешно, 3 кадра, двунаправленная прокрутка подтверждена smoke-сценарием.
+- `git diff --check` — успешно, только известные LF→CRLF warnings.
+
+Не проверено / ограничение:
+
+- Реальные SDL wheel и ручное перетаскивание thumbs ещё не подтверждены пользователем; native smoke использует Dart dispatch и проверяет реальное native render/present. Известный Windows clipboard-сбой не исправлялся.
+
+Следующий шаг:
+
+- Ручная проверка ScrollViewer; затем стабилизация Windows clipboard согласно порядку ближайших задач.
 
 ### 2026-11-26 — этап 5.3, RowSpan и ColumnSpan
 
