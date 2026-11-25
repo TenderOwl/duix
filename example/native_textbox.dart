@@ -120,6 +120,24 @@ Future<void> main(List<String> args) async {
         throw StateError('TextBox smoke mouse caret positioning failed.');
       }
 
+      window.dispatchKeyDown('tab');
+      if (identical(window.focusedElement, editor)) {
+        throw StateError('TextBox smoke forward Tab traversal failed.');
+      }
+      window.dispatchKeyDown('tab');
+      window.dispatchKeyDown('tab');
+      if (!identical(window.focusedElement, editor)) {
+        throw StateError('TextBox smoke Tab wrap-around failed.');
+      }
+      window.dispatchKeyDown('tab', shiftPressed: true);
+      if (identical(window.focusedElement, editor)) {
+        throw StateError('TextBox smoke reverse Tab traversal failed.');
+      }
+      window.dispatchKeyDown('tab');
+      if (!identical(window.focusedElement, editor)) {
+        throw StateError('TextBox smoke did not restore the editor focus.');
+      }
+
       for (var frame = 0; frame < 1 && host.isOpen(window); frame++) {
         host.pumpEvents();
         host.presentWindow(window);

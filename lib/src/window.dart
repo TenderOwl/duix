@@ -124,6 +124,8 @@ final class Window extends ObservableObject implements WindowHost {
   }
 
   UIElement? get content => _content;
+  @override
+  UIElement? get rootElement => _content;
   set content(UIElement? value) {
     if (identical(_content, value)) return;
     _content?.attachToParent(null);
@@ -254,15 +256,16 @@ final class Window extends ObservableObject implements WindowHost {
     bool controlPressed = false,
     bool metaPressed = false,
   }) {
-    focusManager.focusedElement?.raiseEvent(
-      UIElement.keyDown,
-      KeyEventArgs(
-        key,
-        shiftPressed: shiftPressed,
-        controlPressed: controlPressed,
-        metaPressed: metaPressed,
-      ),
+    final args = KeyEventArgs(
+      key,
+      shiftPressed: shiftPressed,
+      controlPressed: controlPressed,
+      metaPressed: metaPressed,
     );
+    focusManager.focusedElement?.raiseEvent(UIElement.keyDown, args);
+    if (!args.handled && key == 'tab' && !controlPressed && !metaPressed) {
+      focusManager.moveFocus(reverse: shiftPressed);
+    }
   }
 
   void renderFrame(DrawingContext context) {

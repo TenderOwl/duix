@@ -29,10 +29,54 @@ final class FocusManager {
     previous.updateFocus(false);
   }
 
+  /// Moves focus through the logical tree, wrapping at either end.
+  bool moveFocus({bool reverse = false}) {
+    validate();
+    final focused = _focused;
+    final scope = focused == null ? null : _nearestFocusScope(focused);
+    final root = scope ?? _host.rootElement;
+    if (root == null) return false;
+
+    final candidates = <Control>[];
+    _collectFocusable(root, candidates, includeRoot: scope == null);
+    if (candidates.isEmpty) return false;
+
+    final currentIndex = focused == null
+        ? -1
+        : candidates.indexWhere((control) => identical(control, focused));
+    final nextIndex = currentIndex < 0
+        ? (reverse ? candidates.length - 1 : 0)
+        : (currentIndex + (reverse ? -1 : 1)) % candidates.length;
+    return requestFocus(candidates[nextIndex]);
+  }
+
   /// Drops focus if mount, visibility or enabled state no longer permits it.
   void validate() {
     final focused = _focused;
     if (focused != null && !_canFocus(focused)) clearFocus(focused);
+  }
+
+  UIElement? _nearestFocusScope(Control control) {
+    UIElement? current = control;
+    while (current != null) {
+      if (current.isFocusScope) return current;
+      current = current.logicalParent;
+    }
+    return null;
+  }
+
+  void _collectFocusable(
+    UIElement element,
+    List<Control> controls, {
+    bool includeRoot = true,
+  }) {
+    if (!element.isVisible || !element.isEnabled) return;
+    if (includeRoot && element is Control && _canFocus(element)) {
+      controls.add(element);
+    }
+    for (final child in element.logicalChildren) {
+      _collectFocusable(child, controls);
+    }
   }
 
   bool _canFocus(Control control) {

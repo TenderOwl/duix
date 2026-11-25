@@ -8,10 +8,12 @@ final class StackPanel extends Panel {
     Orientation orientation = Orientation.vertical,
     double spacing = 0,
     EdgeInsets padding = EdgeInsets.zero,
+    bool isFocusScope = false,
     Iterable<UIElement> children = const [],
   })  : _orientation = orientation,
         _spacing = spacing,
         _padding = padding {
+    this.isFocusScope = isFocusScope;
     this.children.addAll(children);
   }
 

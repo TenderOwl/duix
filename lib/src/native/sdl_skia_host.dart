@@ -306,6 +306,7 @@ PointerButton _pointerButton(int button) => switch (button) {
 
 String _keyName(int keyCode) => switch (keyCode) {
       0x00000008 => 'backspace',
+      0x00000009 => 'tab',
       0x00000061 => 'a',
       0x00000063 => 'c',
       0x00000076 => 'v',

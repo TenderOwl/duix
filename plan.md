@@ -133,7 +133,7 @@ Skia canvas масштабируется через `displayScale`. Backbuffer �
 - `SDL_EVENT_TEXT_EDITING` проходит через C ABI, Dart FFI и `Window` в focused `TextBox`; composition selection передаётся в UTF-16 offsets;
 - `TextBox` хранит composition text/range отдельно от подтверждённого `TextBuffer`, рисует composition через кэшированный `TextLayout` с подчёркиванием и подсветкой активного диапазона;
 - промежуточная composition не изменяет `text` и two-way binding; подтверждение через text input заменяет selection и обновляет модель;
-- 99 Dart-теста, включая clipping/rendering, horizontal scrolling, mouse caret/selection, pointer capture, surrogate pairs, composition и clipboard.
+- 106 Dart-тестов, включая clipping/rendering, horizontal scrolling, mouse caret/selection, pointer capture, surrogate pairs, composition и clipboard.
 
 ### 3.2. Проверенное поведение
 
@@ -144,7 +144,7 @@ Skia canvas масштабируется через `displayScale`. Backbuffer �
 - Белый фон окна отображается корректно.
 - HiDPI-масштабирование подтверждено на 4K-дисплее.
 - `dart analyze` проходит без замечаний.
-- Все 99 Dart-теста проходят, включая render/clipping, native clip ABI и восстановление прежнего Windows clipboard.
+- Все 106 Dart-тестов проходят, включая render/clipping, native clip ABI и восстановление прежнего Windows clipboard.
 - На Windows подтверждены реальные SDL Start/Stop/SetTextInputArea и активное состояние ввода при focus; потеря focus и close останавливают ввод.
 - Input area и caret преобразуются из logical UI units в SDL window units; caret вычисляется через `TextLayout`.
 - `TextBox` при text input заменяет активное selection, сохраняет направление anchor/extent и обновляет source двустороннего binding.
@@ -486,10 +486,12 @@ text_layout_selection_rects
 
 ## 3.2. Tab traversal
 
-- [ ] Построить порядок обхода по logical tree.
-- [ ] Реализовать Tab и Shift+Tab.
-- [ ] Добавить `focusable`, `tabIndex` только при необходимости.
-- [ ] Реализовать focus scope для будущих dialogs/popups.
+- [x] Построить порядок обхода по logical tree.
+- [x] Реализовать Tab и Shift+Tab.
+- [x] Добавить `focusable`, `tabIndex` только при необходимости.
+- [x] Реализовать focus scope для будущих dialogs/popups.
+
+Обход выполняется в прямом порядке logical tree с wrap-around и пропускает non-focusable, disabled и невидимые ветви. Используется существующий `Control.isFocusable`; `tabIndex` не добавлен за ненадобностью. `UIElement.isFocusScope` ограничивает обход потомками ближайшей области focused control; вложенные scope имеют приоритет. Обработанный routed `keyDown` отменяет автоматический переход, Ctrl/Cmd+Tab его не запускают.
 
 ## 3.3. Keyboard activation
 
@@ -684,7 +686,7 @@ default < inherited < style < binding < local < animation
 Порядок ближайших рабочих сессий:
 
 1. **Стабилизация Windows clipboard:** устранить сбой восстановления пустого прежнего значения в native ABI-тесте.
-2. **Этап 3:** focus traversal.
+2. **Этап 3.3:** keyboard activation для Button и physical/logical key.
 3. **Незавершённая часть этапа 1.2:** проверить сборку и Paragraph smoke на Linux (FontConfig/Freetype) и macOS (CoreText).
 4. **Ручная визуальная проверка:** открыть text gallery и TextBox на мониторах с разными масштабами, проверить clipping, selection и caret; автоматический smoke этого не заменяет.
 5. **Ручная проверка этапа 2.4:** русский, китайский/японский ввод и emoji через реальные системные IME.
@@ -729,6 +731,31 @@ default < inherited < style < binding < local < animation
 ---
 
 ## 9. Журнал работ
+
+### 2026-11-25 — этап 3.2, Tab traversal
+
+Сделано:
+
+- `FocusManager.moveFocus()` обходит logical tree в прямом порядке с wrap-around; без focused control Tab выбирает первый, Shift+Tab — последний доступный контрол.
+- Non-focusable, disabled и невидимые контролы и ветви пропускаются. Используется существующий `Control.isFocusable`; `tabIndex` не добавлен.
+- `UIElement.isFocusScope` ограничивает обход ближайшей областью focused control; поддержаны вложенные scope.
+- `Window.dispatchKeyDown()` сначала маршрутизирует событие, затем запускает Tab traversal только для необработанного Tab без Ctrl/Cmd. SDL `SDLK_TAB` отображается в `tab`.
+- Добавлены 7 тестов `test/focus_traversal_test.dart`; native TextBox smoke проверяет прямой, обратный и циклический переход между тремя полями.
+- C ABI и C++ не изменялись.
+
+Проверено:
+
+- `dart format lib example/native_textbox.dart test/focus_traversal_test.dart` и `dart analyze` — без замечаний.
+- Первый полный `dart test` завершился известным сбоем Windows clipboard cleanup; отдельный clipboard-тест и повторный полный прогон прошли — все 106 тестов.
+- Полный bootstrap с `--textbox --smoke --diagnostics` — успешно: Paragraph smoke `width=124.945, height=21`; TextBox smoke 3 кадра, 4 renderFrame и 4 present при scale 2.0.
+
+Не проверено:
+
+- Физическая клавиатура вручную, Linux и macOS; native smoke использует программную key dispatch-последовательность.
+
+Следующий шаг:
+
+- Этап 3.3: keyboard activation и physical/logical key.
 
 ### 2026-11-25 — этап 3.1, FocusManager
 

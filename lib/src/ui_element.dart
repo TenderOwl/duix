@@ -8,6 +8,7 @@ abstract interface class WindowHost {
   void requestFrame();
   bool requestFocus(Control control);
   void validateFocus() {}
+  UIElement? get rootElement => null;
   TextLayoutFactory get textLayoutFactory;
   double get displayScale;
   bool capturePointer(Control control) => false;
@@ -63,6 +64,7 @@ abstract class UIElement extends PropertyOwner {
   bool _isMounted = false;
   bool _isVisible = true;
   bool _isEnabled = true;
+  bool _isFocusScope = false;
   Object? _dataContext;
   bool _measureValid = false;
   bool _arrangeValid = false;
@@ -91,6 +93,15 @@ abstract class UIElement extends PropertyOwner {
     invalidatePaint();
     _window?.validateFocus();
     notifyPropertyChanged('isEnabled', oldValue, value);
+  }
+
+  /// Limits Tab traversal to this element's descendants.
+  bool get isFocusScope => _isFocusScope;
+  set isFocusScope(bool value) {
+    if (_isFocusScope == value) return;
+    final oldValue = _isFocusScope;
+    _isFocusScope = value;
+    notifyPropertyChanged('isFocusScope', oldValue, value);
   }
 
   Object? get dataContext => _dataContext;
