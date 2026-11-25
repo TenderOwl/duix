@@ -123,7 +123,9 @@ Skia canvas масштабируется через `displayScale`. Backbuffer �
 - `TextBuffer` и `TextSelection` с UTF-16 offsets, selection anchor/active end, проверкой диапазонов и командами редактирования;
 - `TextBox` вставляет text input в caret, заменяет selection и синхронизирует текст с two-way binding;
 - SDL text input lifecycle: Start/Stop при focus, TextLayout-based input area/caret, cleanup при unmount/close;
-- 60 Dart-тестов.
+- routed key-down с Shift/Ctrl/Cmd modifiers, команды навигации и редактирования `TextBox`, включая word navigation и selection;
+- backend-independent `ClipboardHandler` и SDL clipboard с UTF-8 copy/cut/paste;
+- 70 Dart-тестов.
 
 ### 3.2. Проверенное поведение
 
@@ -134,11 +136,14 @@ Skia canvas масштабируется через `displayScale`. Backbuffer �
 - Белый фон окна отображается корректно.
 - HiDPI-масштабирование подтверждено на 4K-дисплее.
 - `dart analyze` проходит без замечаний.
-- Все 60 Dart-тестов проходят, включая C ABI, TextLayout, Unicode/HiDPI, text editing и SDL text input lifecycle.
+- Все 70 Dart-тестов проходят, включая C ABI, TextLayout, Unicode/HiDPI, text editing, SDL text input lifecycle, keyboard commands и clipboard.
 - На Windows подтверждены реальные SDL Start/Stop/SetTextInputArea и активное состояние ввода при focus; потеря focus и close останавливают ввод.
 - Input area и caret преобразуются из logical UI units в SDL window units; caret вычисляется через `TextLayout`.
 - `TextBox` при text input заменяет активное selection, сохраняет направление anchor/extent и обновляет source двустороннего binding.
 - Backspace/Delete удаляют выделение или целую surrogate pair; внешнее сокращение текста ограничивает offsets новой длиной.
+- Routed Left/Right, Home/End, Shift selection, Ctrl/Cmd word navigation, Select All и Cut/Copy/Paste проходят через `Window.dispatchKeyDown()`; направление selection и two-way binding проверены.
+- SDL clipboard на Windows выполняет Unicode round-trip и освобождает native string через C ABI; тест восстанавливает прежнее содержимое clipboard.
+- `DuiEvent` с modifiers сохраняет 64-битный ABI size 64 байта; OS key modifiers и маппинг SDL key codes покрыты косвенно, без синтеза системного keyboard input.
 - Матрица проверяет ASCII, кириллицу, emoji, CJK, Arabic, Hebrew, multiline, пустую и очень длинную строки, а также стабильность logical metrics на масштабах 1.0, 1.25, 1.5 и 2.0.
 - Пустая строка имеет нулевую ширину и конечные неотрицательные metrics; учтён допустимый glyph overhang tight selection boxes за пределами advance width.
 - `TextBlock` на Windows получает реальные SkParagraph metrics, переносит длинный текст по доступной ширине и рисует тот же native layout.
@@ -218,7 +223,7 @@ python tools/bootstrap_native.py --smoke --dart "<путь-к-dart>"
 1. **P0:** `TextBox.measureCore()` всё ещё приблизительно считает ширину через число символов.
 2. **P0:** legacy `drawText`, используемый `TextBox`, рисует через `drawSimpleText` без SkParagraph.
 3. **P1:** native text layout пока принимает только конечную положительную `maxWidth`; infinite constraints остаются задачей layout system.
-4. **P0:** нет IME composition, отрисовки selection/caret, clipboard и нормальной клавиатурной навигации.
+4. **P0:** нет IME composition, отрисовки selection/caret и mouse interaction для текста.
 5. **P1:** нативный пример рисует кадр каждые 8 мс независимо от invalidate.
 6. **P1:** нет keyboard focus traversal и focus scopes.
 7. **P1:** нет `Grid`, `ScrollViewer`, alignment и min/max constraints.
@@ -404,17 +409,19 @@ text_layout_selection_rects
 
 ## 2.3. Команды редактирования
 
-- [ ] Вставка текста.
-- [ ] Backspace/Delete.
-- [ ] Left/Right.
-- [ ] Home/End.
-- [ ] Ctrl/Cmd+Left/Right.
-- [ ] Selection с Shift.
-- [ ] Select All.
-- [ ] Cut/Copy/Paste.
-- [ ] Отмена selection при обычном перемещении.
+- [x] Вставка текста.
+- [x] Backspace/Delete.
+- [x] Left/Right.
+- [x] Home/End.
+- [x] Ctrl/Cmd+Left/Right.
+- [x] Selection с Shift.
+- [x] Select All.
+- [x] Cut/Copy/Paste.
+- [x] Отмена selection при обычном перемещении.
 
 Важно: не формировать вводимый Unicode-текст из key-down событий. Key events нужны для команд, `SDL_EVENT_TEXT_INPUT` — для вставки текста.
+
+Проверено unit/integration-тестами на Windows, включая реальный SDL clipboard. Ручная проверка физической клавиатуры и системных IME не выполнялась; навигация работает по code points и упрощённым word runs, не по grapheme clusters.
 
 ## 2.4. IME
 
@@ -644,8 +651,8 @@ default < inherited < style < binding < local < animation
 
 Порядок ближайших рабочих сессий:
 
-1. **Этап 2.3:** клавиатурные команды редактирования: arrows, Home/End, Shift selection, Select All; clipboard после базовой навигации.
-2. **Этап 2.4–2.5:** IME composition и mouse selection.
+1. **Этап 2.4:** IME composition: обработка `SDL_EVENT_TEXT_EDITING`, composition state/range и отдельная отрисовка.
+2. **Этап 2.5:** mouse selection и caret positioning через `TextLayout`.
 3. **Незавершённая часть этапа 1.2:** проверить сборку и Paragraph smoke на Linux (FontConfig/Freetype) и macOS (CoreText).
 4. **Ручная визуальная проверка этапа 1.5:** открыть text gallery на мониторах с разными масштабами и проверить clipping; автоматический smoke этого не заменяет.
 5. **Этап 3:** focus traversal.
@@ -690,6 +697,34 @@ default < inherited < style < binding < local < animation
 ---
 
 ## 9. Журнал работ
+
+### 2026-11-25 — этап 2.3, клавиатурные команды и clipboard
+
+Сделано:
+
+- `KeyEventArgs` и `Window.dispatchKeyDown()` передают Shift/Ctrl/Cmd; native `DuiEvent` получил modifiers, а SDL host маппит editing key codes в команды.
+- `TextBuffer` поддерживает Left/Right, Home/End, Shift selection и Ctrl/Cmd word navigation без разрыва surrogate pairs; обычные стрелки сворачивают selection к краю.
+- `TextBox` обрабатывает Backspace/Delete, Select All и Copy/Cut/Paste через routed key-down; Unicode-ввод остаётся на `SDL_EVENT_TEXT_INPUT`.
+- Добавлен backend-independent `ClipboardHandler`; `SdlSkiaHost` назначает и очищает его вместе с text input lifecycle.
+- В C ABI/C++/Dart FFI добавлены clipboard set/get/free; SDL-строка всегда освобождается, пустой clipboard не удаляет selection.
+- Добавлены `test/text_editing_commands_test.dart` и реальный Unicode clipboard ABI-тест с восстановлением прежнего значения.
+
+Проверено:
+
+- `dart analyze` — без замечаний.
+- `dart test` — все 70 тестов проходят.
+- Native library пересобрана после C ABI изменений; `sizeOf<DuiEventStruct>() == 64`.
+- Полный bootstrap, Paragraph smoke (`width=124.945, height=21`) и native smoke — успешно, 3 кадра, 4 renderFrame и 4 present.
+- `git diff --check` — ошибок нет; предупреждения Git относятся только к будущей нормализации LF в CRLF.
+
+Не проверено:
+
+- Физическая клавиатура и системные IME вручную; OS key events не синтезировались. Word navigation не является grapheme-cluster/полным Unicode word-break алгоритмом.
+- Linux и macOS.
+
+Следующий шаг:
+
+- Этап 2.4: IME composition и `SDL_EVENT_TEXT_EDITING`.
 
 ### 2026-11-25 — этап 2.2, SDL text input lifecycle
 

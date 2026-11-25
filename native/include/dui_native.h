@@ -51,6 +51,7 @@ typedef struct DuiEvent {
   double width;
   double height;
   int32_t key_code;
+  uint16_t modifiers;
   const char* text_utf8;
 } DuiEvent;
 
@@ -96,6 +97,12 @@ typedef struct DuiRect {
 
 DUI_API uint32_t dui_abi_version(void);
 DUI_API const char* dui_last_error_message(void);
+
+/* Clipboard text is UTF-8. Returned strings must be freed with
+ * dui_clipboard_free_text(). An empty clipboard returns NULL. */
+DUI_API int32_t dui_clipboard_set_text(const char* text_utf8);
+DUI_API char* dui_clipboard_get_text(void);
+DUI_API void dui_clipboard_free_text(char* text);
 
 DUI_API DuiHost* dui_host_create(void);
 DUI_API void dui_host_destroy(DuiHost* host);

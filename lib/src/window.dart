@@ -19,6 +19,11 @@ abstract interface class TextInputHandler {
   void setTextInputArea(Window window, Rect area, double cursorX);
 }
 
+abstract interface class ClipboardHandler {
+  String? readClipboardText();
+  bool writeClipboardText(String text);
+}
+
 final class Application {
   Application({required this.host});
 
@@ -60,6 +65,7 @@ final class Window extends ObservableObject implements WindowHost {
   UIElement? _content;
   Control? _focused;
   TextInputHandler? textInputHandler;
+  ClipboardHandler? clipboardHandler;
   bool _frameScheduled = false;
   bool _isVisible = false;
 
@@ -104,6 +110,13 @@ final class Window extends ObservableObject implements WindowHost {
       textInputHandler?.setTextInputArea(this, area, cursorX);
     }
   }
+
+  @override
+  String? readClipboardText() => clipboardHandler?.readClipboardText();
+
+  @override
+  bool writeClipboardText(String text) =>
+      clipboardHandler?.writeClipboardText(text) ?? false;
 
   @override
   double get displayScale => _devicePixelRatio;
@@ -201,6 +214,23 @@ final class Window extends ObservableObject implements WindowHost {
 
   void dispatchTextInput(String text) {
     _focused?.raiseEvent(UIElement.textInput, TextInputEventArgs(text));
+  }
+
+  void dispatchKeyDown(
+    String key, {
+    bool shiftPressed = false,
+    bool controlPressed = false,
+    bool metaPressed = false,
+  }) {
+    _focused?.raiseEvent(
+      UIElement.keyDown,
+      KeyEventArgs(
+        key,
+        shiftPressed: shiftPressed,
+        controlPressed: controlPressed,
+        metaPressed: metaPressed,
+      ),
+    );
   }
 
   void renderFrame(DrawingContext context) {

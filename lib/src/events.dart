@@ -35,9 +35,19 @@ final class PointerEventArgs extends RoutedEventArgs {
 enum PointerButton { primary, secondary, middle }
 
 final class KeyEventArgs extends RoutedEventArgs {
-  KeyEventArgs(this.key);
+  KeyEventArgs(
+    this.key, {
+    this.shiftPressed = false,
+    this.controlPressed = false,
+    this.metaPressed = false,
+  });
 
   final String key;
+  final bool shiftPressed;
+  final bool controlPressed;
+  final bool metaPressed;
+
+  bool get primaryShortcutPressed => controlPressed || metaPressed;
 }
 
 final class TextInputEventArgs extends RoutedEventArgs {

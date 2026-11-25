@@ -37,6 +37,9 @@ final class DuiEventStruct extends Struct {
   @Int32()
   external int keyCode;
 
+  @Uint16()
+  external int modifiers;
+
   external Pointer<Utf8> textUtf8;
 }
 
@@ -158,6 +161,7 @@ final class NativeEvent {
     required this.width,
     required this.height,
     required this.keyCode,
+    required this.modifiers,
     required this.text,
   });
 
@@ -168,6 +172,7 @@ final class NativeEvent {
   final double width;
   final double height;
   final int keyCode;
+  final int modifiers;
   final String? text;
 }
 
@@ -187,6 +192,9 @@ final class NativeWindowMetrics {
 
 typedef _AbiVersionNative = Uint32 Function();
 typedef _LastErrorNative = Pointer<Utf8> Function();
+typedef _ClipboardSetNative = Int32 Function(Pointer<Utf8>);
+typedef _ClipboardGetNative = Pointer<Utf8> Function();
+typedef _ClipboardFreeNative = Void Function(Pointer<Utf8>);
 typedef _HostCreateNative = Pointer<DuiHostOpaque> Function();
 typedef _HostDestroyNative = Void Function(Pointer<DuiHostOpaque>);
 typedef _HostNextEventNative = Int32 Function(
@@ -270,6 +278,9 @@ typedef _TextLayoutSelectionRectsNative = Int32 Function(
 
 typedef _AbiVersionDart = int Function();
 typedef _LastErrorDart = Pointer<Utf8> Function();
+typedef _ClipboardSetDart = int Function(Pointer<Utf8>);
+typedef _ClipboardGetDart = Pointer<Utf8> Function();
+typedef _ClipboardFreeDart = void Function(Pointer<Utf8>);
 typedef _HostCreateDart = Pointer<DuiHostOpaque> Function();
 typedef _HostDestroyDart = void Function(Pointer<DuiHostOpaque>);
 typedef _HostNextEventDart = int Function(
@@ -372,6 +383,18 @@ final class NativeBindings {
         _lastError = library.lookupFunction<_LastErrorNative, _LastErrorDart>(
           'dui_last_error_message',
         ),
+        _clipboardSet =
+            library.lookupFunction<_ClipboardSetNative, _ClipboardSetDart>(
+          'dui_clipboard_set_text',
+        ),
+        _clipboardGet =
+            library.lookupFunction<_ClipboardGetNative, _ClipboardGetDart>(
+          'dui_clipboard_get_text',
+        ),
+        _clipboardFree =
+            library.lookupFunction<_ClipboardFreeNative, _ClipboardFreeDart>(
+          'dui_clipboard_free_text',
+        ),
         hostCreate = library.lookupFunction<_HostCreateNative, _HostCreateDart>(
           'dui_host_create',
         ),
@@ -467,6 +490,9 @@ final class NativeBindings {
 
   final _AbiVersionDart abiVersion;
   final _LastErrorDart _lastError;
+  final _ClipboardSetDart _clipboardSet;
+  final _ClipboardGetDart _clipboardGet;
+  final _ClipboardFreeDart _clipboardFree;
   final _HostCreateDart hostCreate;
   final _HostDestroyDart hostDestroy;
   final _HostNextEventDart hostNextEvent;
@@ -499,6 +525,29 @@ final class NativeBindings {
         : pointer.toDartString();
   }
 
+  bool writeClipboardText(String text) {
+    final pointer = text.toNativeUtf8();
+    try {
+      if (_clipboardSet(pointer) == 0) {
+        throw StateError('Could not write clipboard text: $lastError');
+      }
+      return true;
+    } finally {
+      calloc.free(pointer);
+    }
+  }
+
+  String? readClipboardText() {
+    final pointer = _clipboardGet();
+    if (pointer == nullptr) return null;
+    try {
+      final text = pointer.toDartString();
+      return text.isEmpty ? null : text;
+    } finally {
+      _clipboardFree(pointer);
+    }
+  }
+
   NativeWindowMetrics windowMetrics(
       Pointer<DuiWindowOpaque> window, Arena arena) {
     final metrics = arena<DuiWindowMetricsStruct>();
@@ -528,6 +577,7 @@ final class NativeBindings {
       width: value.width,
       height: value.height,
       keyCode: value.keyCode,
+      modifiers: value.modifiers,
       text: value.textUtf8 == nullptr ? null : value.textUtf8.toDartString(),
     );
   }

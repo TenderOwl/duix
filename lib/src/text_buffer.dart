@@ -125,6 +125,36 @@ final class TextBuffer extends ObservableObject {
     );
   }
 
+  void moveCaretLeft({bool byWord = false, bool extendSelection = false}) {
+    if (!extendSelection && !selection.isCollapsed) {
+      moveCaret(selection.start);
+      return;
+    }
+    moveCaret(
+      byWord
+          ? _previousWordOffset(caretOffset)
+          : _previousCodePointOffset(caretOffset),
+      extendSelection: extendSelection,
+    );
+  }
+
+  void moveCaretRight({bool byWord = false, bool extendSelection = false}) {
+    if (!extendSelection && !selection.isCollapsed) {
+      moveCaret(selection.end);
+      return;
+    }
+    moveCaret(
+      byWord ? _nextWordOffset(caretOffset) : _nextCodePointOffset(caretOffset),
+      extendSelection: extendSelection,
+    );
+  }
+
+  void moveCaretToStart({bool extendSelection = false}) =>
+      moveCaret(0, extendSelection: extendSelection);
+
+  void moveCaretToEnd({bool extendSelection = false}) =>
+      moveCaret(_text.length, extendSelection: extendSelection);
+
   void selectAll() {
     selection = TextSelection(baseOffset: 0, extentOffset: _text.length);
   }
@@ -152,7 +182,79 @@ final class TextBuffer extends ObservableObject {
     }
     return offset + 1;
   }
+
+  int _previousWordOffset(int offset) {
+    var current = offset;
+    while (current > 0) {
+      final previous = _previousCodePointOffset(current);
+      if (!_isWhitespace(_codePointAt(previous))) break;
+      current = previous;
+    }
+    if (current == 0) return 0;
+    final isWord = _isWordCodePoint(
+      _codePointAt(_previousCodePointOffset(current)),
+    );
+    while (current > 0) {
+      final previous = _previousCodePointOffset(current);
+      final codePoint = _codePointAt(previous);
+      if (_isWhitespace(codePoint) || _isWordCodePoint(codePoint) != isWord) {
+        break;
+      }
+      current = previous;
+    }
+    return current;
+  }
+
+  int _nextWordOffset(int offset) {
+    var current = offset;
+    while (current < _text.length && _isWhitespace(_codePointAt(current))) {
+      current = _nextCodePointOffset(current);
+    }
+    if (current == _text.length) return current;
+    final isWord = _isWordCodePoint(_codePointAt(current));
+    while (current < _text.length) {
+      final codePoint = _codePointAt(current);
+      if (_isWhitespace(codePoint) || _isWordCodePoint(codePoint) != isWord) {
+        break;
+      }
+      current = _nextCodePointOffset(current);
+    }
+    return current;
+  }
+
+  int _codePointAt(int offset) {
+    final first = _text.codeUnitAt(offset);
+    if (_isHighSurrogate(first) &&
+        offset + 1 < _text.length &&
+        _isLowSurrogate(_text.codeUnitAt(offset + 1))) {
+      return 0x10000 +
+          ((first - 0xD800) << 10) +
+          _text.codeUnitAt(offset + 1) -
+          0xDC00;
+    }
+    return first;
+  }
 }
 
 bool _isHighSurrogate(int codeUnit) => codeUnit >= 0xD800 && codeUnit <= 0xDBFF;
 bool _isLowSurrogate(int codeUnit) => codeUnit >= 0xDC00 && codeUnit <= 0xDFFF;
+
+bool _isWordCodePoint(int codePoint) =>
+    codePoint > 127 ||
+    codePoint == 0x5F ||
+    (codePoint >= 0x30 && codePoint <= 0x39) ||
+    (codePoint >= 0x41 && codePoint <= 0x5A) ||
+    (codePoint >= 0x61 && codePoint <= 0x7A);
+
+bool _isWhitespace(int codePoint) =>
+    (codePoint >= 0x09 && codePoint <= 0x0D) ||
+    codePoint == 0x20 ||
+    codePoint == 0x85 ||
+    codePoint == 0xA0 ||
+    codePoint == 0x1680 ||
+    (codePoint >= 0x2000 && codePoint <= 0x200A) ||
+    codePoint == 0x2028 ||
+    codePoint == 0x2029 ||
+    codePoint == 0x202F ||
+    codePoint == 0x205F ||
+    codePoint == 0x3000;

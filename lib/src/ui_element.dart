@@ -16,6 +16,8 @@ abstract interface class WindowHost {
     Rect area,
     double cursorX,
   ) {}
+  String? readClipboardText() => null;
+  bool writeClipboardText(String text) => false;
 }
 
 abstract class UIElement extends PropertyOwner {

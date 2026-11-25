@@ -256,6 +256,25 @@ void main() {
     }
   });
 
+  test('clipboard round-trips Unicode and restores the previous value', () {
+    final host = bindings.hostCreate();
+    expect(host, isNot(nullptr), reason: bindings.lastError);
+    if (host == nullptr) return;
+    final previous = bindings.readClipboardText();
+    const value = 'Clipboard: ASCII, кириллица, 😀';
+    try {
+      expect(bindings.writeClipboardText(value), isTrue);
+      expect(bindings.readClipboardText(), value);
+    } finally {
+      if (previous != null) {
+        bindings.writeClipboardText(previous);
+      } else {
+        bindings.writeClipboardText('');
+      }
+      bindings.hostDestroy(host);
+    }
+  });
+
   test('null destruction arguments are ignored', () {
     expect(() => bindings.hostDestroy(nullptr), returnsNormally);
     expect(() => bindings.windowDestroy(nullptr, nullptr), returnsNormally);

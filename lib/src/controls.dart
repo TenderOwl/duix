@@ -245,6 +245,7 @@ final class TextBox extends Control {
       _syncTextInputArea();
     });
     addHandler(UIElement.textInput, _textInput);
+    addHandler(UIElement.keyDown, _keyDown);
   }
 
   static const textProperty = DuiProperty<TextBox, String>(
@@ -273,8 +274,61 @@ final class TextBox extends Control {
       buffer.moveCaret(offset, extendSelection: extendSelection);
   void selectAll() => buffer.selectAll();
 
+  bool copySelection() {
+    if (selection.isCollapsed) return false;
+    return _mountedHost?.writeClipboardText(selectedText) ?? false;
+  }
+
+  bool cutSelection() {
+    if (selection.isCollapsed || !copySelection()) return false;
+    buffer.replaceSelection('');
+    return true;
+  }
+
+  bool paste() {
+    final value = _mountedHost?.readClipboardText();
+    if (value == null || value.isEmpty) return false;
+    buffer.replaceSelection(value);
+    return true;
+  }
+
   void _textInput(Object sender, TextInputEventArgs args) {
     insertText(args.text);
+    args.handled = true;
+  }
+
+  void _keyDown(Object sender, KeyEventArgs args) {
+    final shortcut = args.primaryShortcutPressed;
+    switch (args.key) {
+      case 'left':
+        buffer.moveCaretLeft(
+          byWord: shortcut,
+          extendSelection: args.shiftPressed,
+        );
+      case 'right':
+        buffer.moveCaretRight(
+          byWord: shortcut,
+          extendSelection: args.shiftPressed,
+        );
+      case 'home':
+        buffer.moveCaretToStart(extendSelection: args.shiftPressed);
+      case 'end':
+        buffer.moveCaretToEnd(extendSelection: args.shiftPressed);
+      case 'backspace':
+        buffer.deleteBackward();
+      case 'delete':
+        buffer.deleteForward();
+      case 'a' when shortcut:
+        selectAll();
+      case 'c' when shortcut:
+        copySelection();
+      case 'x' when shortcut:
+        cutSelection();
+      case 'v' when shortcut:
+        paste();
+      default:
+        return;
+    }
     args.handled = true;
   }
 

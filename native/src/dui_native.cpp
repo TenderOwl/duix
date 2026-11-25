@@ -253,6 +253,29 @@ uint32_t dui_abi_version(void) { return 1; }
 
 const char* dui_last_error_message(void) { return last_error.c_str(); }
 
+int32_t dui_clipboard_set_text(const char* text_utf8) {
+  clear_error();
+  if (!text_utf8) {
+    set_error("Clipboard text must not be null.");
+    return 0;
+  }
+  if (!SDL_SetClipboardText(text_utf8)) {
+    set_sdl_error();
+    return 0;
+  }
+  return 1;
+}
+
+char* dui_clipboard_get_text(void) {
+  clear_error();
+  if (!SDL_HasClipboardText()) return nullptr;
+  char* text = SDL_GetClipboardText();
+  if (!text) set_sdl_error();
+  return text;
+}
+
+void dui_clipboard_free_text(char* text) { SDL_free(text); }
+
 DuiHost* dui_host_create(void) {
   clear_error();
   try {
@@ -341,6 +364,7 @@ int32_t dui_host_next_event(DuiHost* host, DuiEvent* out_event) {
       out_event->type = DUI_EVENT_KEY_DOWN;
       out_event->window_id = source.key.windowID;
       out_event->key_code = static_cast<int32_t>(source.key.key);
+      out_event->modifiers = static_cast<uint16_t>(source.key.mod);
       break;
     default:
       out_event->type = DUI_EVENT_NONE;

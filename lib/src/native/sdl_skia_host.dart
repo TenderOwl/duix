@@ -49,7 +49,8 @@ final class NativeWindowDiagnostics {
   }
 }
 
-final class SdlSkiaHost implements NativeHost, TextInputHandler {
+final class SdlSkiaHost
+    implements NativeHost, TextInputHandler, ClipboardHandler {
   SdlSkiaHost._(this.bindings, {required this.diagnosticsEnabled})
       : _host = bindings.hostCreate() {
     if (_host == nullptr) {
@@ -116,6 +117,7 @@ final class SdlSkiaHost implements NativeHost, TextInputHandler {
       _sessions[window] = _NativeWindowSession(pointer, id);
       _windowsById[id] = window;
       window.textInputHandler = this;
+      window.clipboardHandler = this;
       await window.show();
       presentWindow(window);
     } finally {
@@ -128,6 +130,7 @@ final class SdlSkiaHost implements NativeHost, TextInputHandler {
     window.close();
     _destroySession(window);
     window.textInputHandler = null;
+    window.clipboardHandler = null;
   }
 
   @override
@@ -176,6 +179,12 @@ final class SdlSkiaHost implements NativeHost, TextInputHandler {
     }
   }
 
+  @override
+  String? readClipboardText() => bindings.readClipboardText();
+
+  @override
+  bool writeClipboardText(String text) => bindings.writeClipboardText(text);
+
   void pumpEvents() {
     _checkNotDisposed();
     using((arena) {
@@ -213,9 +222,7 @@ final class SdlSkiaHost implements NativeHost, TextInputHandler {
   void dispose() {
     if (_disposed) return;
     for (final window in _sessions.keys.toList()) {
-      window.close();
-      _destroySession(window);
-      window.textInputHandler = null;
+      _closeSession(window);
     }
     bindings.hostDestroy(_host);
     _disposed = true;
@@ -224,9 +231,7 @@ final class SdlSkiaHost implements NativeHost, TextInputHandler {
   void _dispatchEvent(NativeEvent event) {
     if (event.type == 1) {
       for (final window in _sessions.keys.toList()) {
-        window.close();
-        _destroySession(window);
-        window.textInputHandler = null;
+        _closeSession(window);
       }
       return;
     }
@@ -235,9 +240,7 @@ final class SdlSkiaHost implements NativeHost, TextInputHandler {
     if (window == null || !isOpen(window)) return;
     switch (event.type) {
       case 2:
-        window.close();
-        _destroySession(window);
-        window.textInputHandler = null;
+        _closeSession(window);
       case 3:
         window.resize(event.width, event.height);
       case 4:
@@ -247,7 +250,21 @@ final class SdlSkiaHost implements NativeHost, TextInputHandler {
       case 7:
         final text = event.text;
         if (text != null) window.dispatchTextInput(text);
+      case 8:
+        window.dispatchKeyDown(
+          _keyName(event.keyCode),
+          shiftPressed: event.modifiers & 0x0003 != 0,
+          controlPressed: event.modifiers & 0x00C0 != 0,
+          metaPressed: event.modifiers & 0x0C00 != 0,
+        );
     }
+  }
+
+  void _closeSession(Window window) {
+    window.close();
+    _destroySession(window);
+    window.textInputHandler = null;
+    window.clipboardHandler = null;
   }
 
   void _destroySession(Window window) {
@@ -262,6 +279,20 @@ final class SdlSkiaHost implements NativeHost, TextInputHandler {
     if (_disposed) throw StateError('The SDL host is disposed.');
   }
 }
+
+String _keyName(int keyCode) => switch (keyCode) {
+      0x00000008 => 'backspace',
+      0x00000061 => 'a',
+      0x00000063 => 'c',
+      0x00000076 => 'v',
+      0x00000078 => 'x',
+      0x0000007F => 'delete',
+      0x4000004A => 'home',
+      0x4000004D => 'end',
+      0x4000004F => 'right',
+      0x40000050 => 'left',
+      _ => keyCode.toString(),
+    };
 
 final class NativeDrawingContext implements NativeTextDrawingContext {
   NativeDrawingContext(this.bindings, this.window);
