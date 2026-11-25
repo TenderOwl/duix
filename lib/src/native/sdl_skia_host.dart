@@ -63,14 +63,31 @@ final class SdlSkiaHost
     if (_host == nullptr) {
       throw StateError('Could not create SDL host: ${bindings.lastError}');
     }
+    _liveResizeCallable = NativeCallable<LiveResizeCallbackNative>.isolateLocal(
+      _handleLiveResize,
+    );
+    if (bindings.hostSetLiveResizeCallback(
+          _host,
+          _liveResizeCallable.nativeFunction,
+          nullptr,
+        ) ==
+        0) {
+      final error = bindings.lastError;
+      _liveResizeCallable.close();
+      bindings.hostDestroy(_host);
+      throw StateError('Could not register SDL resize callback: $error');
+    }
   }
 
   final NativeBindings bindings;
   late final textLayoutFactory = NativeTextLayoutFactory(bindings);
   final bool diagnosticsEnabled;
   final Pointer<DuiHostOpaque> _host;
+  late final NativeCallable<LiveResizeCallbackNative> _liveResizeCallable;
   final _sessions = <Window, _NativeWindowSession>{};
   final _windowsById = <int, Window>{};
+  Object? _nativeCallbackError;
+  StackTrace? _nativeCallbackStack;
   bool _disposed = false;
 
   static Future<SdlSkiaHost> initialize({
@@ -198,6 +215,7 @@ final class SdlSkiaHost
 
   void pumpEvents() {
     _checkNotDisposed();
+    _throwNativeCallbackError();
     using((arena) {
       while (true) {
         final event = bindings.nextEvent(_host, arena);
@@ -205,6 +223,7 @@ final class SdlSkiaHost
         _dispatchEvent(event);
       }
     });
+    _throwNativeCallbackError();
   }
 
   /// Waits for SDL input while periodically returning control to Dart timers.
@@ -213,6 +232,7 @@ final class SdlSkiaHost
     Duration timeout = const Duration(milliseconds: 16),
   }) {
     _checkNotDisposed();
+    _throwNativeCallbackError();
     if (!isOpen(window) || window.frameScheduled) return;
     final timeoutMs = timeout.inMilliseconds;
     if (timeoutMs < -1) {
@@ -222,6 +242,7 @@ final class SdlSkiaHost
       final event = bindings.waitEvent(_host, arena, timeoutMs: timeoutMs);
       if (event != null) _dispatchEvent(event);
     });
+    _throwNativeCallbackError();
   }
 
   void _wakeUp() {
@@ -230,6 +251,7 @@ final class SdlSkiaHost
 
   void presentWindow(Window window) {
     _checkNotDisposed();
+    _throwNativeCallbackError();
     final session = _sessions[window];
     if (session == null ||
         !session.open ||
@@ -255,13 +277,45 @@ final class SdlSkiaHost
     }
   }
 
+  void _handleLiveResize(
+    Pointer<Void> userData,
+    int windowId,
+    double width,
+    double height,
+  ) {
+    if (_disposed) return;
+    final window = _windowsById[windowId];
+    if (window == null || !isOpen(window)) return;
+    try {
+      window.resize(width, height);
+      // Live expose can repeat the current size but still requires a frame.
+      window.requestFrame();
+      presentWindow(window);
+    } catch (error, stackTrace) {
+      // Dart exceptions must not unwind through the SDL C callback.
+      _nativeCallbackError ??= error;
+      _nativeCallbackStack ??= stackTrace;
+    }
+  }
+
+  void _throwNativeCallbackError() {
+    final error = _nativeCallbackError;
+    if (error == null) return;
+    final stackTrace = _nativeCallbackStack ?? StackTrace.current;
+    _nativeCallbackError = null;
+    _nativeCallbackStack = null;
+    Error.throwWithStackTrace(error, stackTrace);
+  }
+
   void dispose() {
     if (_disposed) return;
+    _disposed = true;
+    bindings.hostSetLiveResizeCallback(_host, nullptr, nullptr);
     for (final window in _sessions.keys.toList()) {
       _closeSession(window);
     }
     bindings.hostDestroy(_host);
-    _disposed = true;
+    _liveResizeCallable.close();
   }
 
   void _dispatchEvent(NativeEvent event) {

@@ -222,6 +222,28 @@ typedef _HostWaitEventNative = Int32 Function(
   Int32,
 );
 typedef _HostWakeUpNative = Int32 Function(Pointer<DuiHostOpaque>);
+typedef LiveResizeCallbackNative = Void Function(
+  Pointer<Void>,
+  Uint64,
+  Double,
+  Double,
+);
+typedef LiveResizeCallbackDart = void Function(
+  Pointer<Void>,
+  int,
+  double,
+  double,
+);
+typedef _HostSetLiveResizeCallbackNative = Int32 Function(
+  Pointer<DuiHostOpaque>,
+  Pointer<NativeFunction<LiveResizeCallbackNative>>,
+  Pointer<Void>,
+);
+typedef _HostSetLiveResizeCallbackDart = int Function(
+  Pointer<DuiHostOpaque>,
+  Pointer<NativeFunction<LiveResizeCallbackNative>>,
+  Pointer<Void>,
+);
 typedef _WindowCreateNative = Pointer<DuiWindowOpaque> Function(
   Pointer<DuiHostOpaque>,
   Pointer<Utf8>,
@@ -231,6 +253,11 @@ typedef _WindowCreateNative = Pointer<DuiWindowOpaque> Function(
 typedef _WindowDestroyNative = Void Function(
   Pointer<DuiHostOpaque>,
   Pointer<DuiWindowOpaque>,
+);
+typedef _WindowSetSizeNative = Int32 Function(
+  Pointer<DuiWindowOpaque>,
+  Int32,
+  Int32,
 );
 typedef _WindowIdNative = Uint64 Function(Pointer<DuiWindowOpaque>);
 typedef _WindowContentScaleNative = Double Function(Pointer<DuiWindowOpaque>);
@@ -330,6 +357,11 @@ typedef _WindowCreateDart = Pointer<DuiWindowOpaque> Function(
 typedef _WindowDestroyDart = void Function(
   Pointer<DuiHostOpaque>,
   Pointer<DuiWindowOpaque>,
+);
+typedef _WindowSetSizeDart = int Function(
+  Pointer<DuiWindowOpaque>,
+  int,
+  int,
 );
 typedef _WindowIdDart = int Function(Pointer<DuiWindowOpaque>);
 typedef _WindowContentScaleDart = double Function(Pointer<DuiWindowOpaque>);
@@ -454,6 +486,10 @@ final class NativeBindings {
         hostWakeUp = library.lookupFunction<_HostWakeUpNative, _HostWakeUpDart>(
           'dui_host_wake_up',
         ),
+        hostSetLiveResizeCallback = library.lookupFunction<
+            _HostSetLiveResizeCallbackNative, _HostSetLiveResizeCallbackDart>(
+          'dui_host_set_live_resize_callback',
+        ),
         windowCreate =
             library.lookupFunction<_WindowCreateNative, _WindowCreateDart>(
           'dui_window_create',
@@ -461,6 +497,10 @@ final class NativeBindings {
         windowDestroy =
             library.lookupFunction<_WindowDestroyNative, _WindowDestroyDart>(
           'dui_window_destroy',
+        ),
+        windowSetSize =
+            library.lookupFunction<_WindowSetSizeNative, _WindowSetSizeDart>(
+          'dui_window_set_size',
         ),
         windowGetId = library.lookupFunction<_WindowIdNative, _WindowIdDart>(
           'dui_window_get_id',
@@ -553,8 +593,10 @@ final class NativeBindings {
   final _HostNextEventDart hostNextEvent;
   final _HostWaitEventDart hostWaitEvent;
   final _HostWakeUpDart hostWakeUp;
+  final _HostSetLiveResizeCallbackDart hostSetLiveResizeCallback;
   final _WindowCreateDart windowCreate;
   final _WindowDestroyDart windowDestroy;
+  final _WindowSetSizeDart windowSetSize;
   final _WindowIdDart windowGetId;
   final _WindowContentScaleDart windowGetContentScale;
   final _WindowMetricsDart _windowGetMetrics;

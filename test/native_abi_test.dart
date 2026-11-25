@@ -26,6 +26,89 @@ void main() {
     }
   });
 
+  test('live resize callback can render synchronously', () {
+    final host = bindings.hostCreate();
+    expect(host, isNot(nullptr), reason: bindings.lastError);
+    if (host == nullptr) return;
+
+    var window = nullptr.cast<DuiWindowOpaque>();
+    NativeCallable<LiveResizeCallbackNative>? callback;
+    var callbackCount = 0;
+    final frameResults = <int>[];
+    final callbackSizes = <Size>[];
+    try {
+      using((arena) {
+        window = bindings.windowCreate(
+          host,
+          'Live resize'.toNativeUtf8(allocator: arena),
+          160,
+          80,
+        );
+      });
+      expect(window, isNot(nullptr), reason: bindings.lastError);
+      if (window == nullptr) return;
+
+      callback = NativeCallable<LiveResizeCallbackNative>.isolateLocal((
+        Pointer<Void> userData,
+        int windowId,
+        double width,
+        double height,
+      ) {
+        callbackCount++;
+        callbackSizes.add(Size(width, height));
+        frameResults.add(bindings.windowBeginFrame(window));
+        frameResults.add(bindings.windowPresent(window));
+      });
+      expect(
+        bindings.hostSetLiveResizeCallback(
+          host,
+          callback.nativeFunction,
+          nullptr,
+        ),
+        1,
+      );
+
+      final initialMetrics = using(
+        (arena) => bindings.windowMetrics(window, arena),
+      );
+      expect(bindings.windowSetSize(window, 240, 120), 1);
+      expect(
+        callbackCount,
+        greaterThan(0),
+        reason: 'The callback must run inside the native resize call.',
+      );
+      expect(
+        callbackSizes.every((size) => size.width > 0 && size.height > 0),
+        isTrue,
+      );
+      expect(
+        callbackSizes.any(
+          (size) =>
+              (size.width - 240).abs() < 0.01 &&
+              (size.height - 120).abs() < 0.01,
+        ),
+        isTrue,
+        reason: 'Pixel-size events must report logical window units.',
+      );
+      final resizedMetrics = using(
+        (arena) => bindings.windowMetrics(window, arena),
+      );
+      expect(resizedMetrics.physicalWidth,
+          greaterThan(initialMetrics.physicalWidth));
+      expect(resizedMetrics.physicalHeight,
+          greaterThan(initialMetrics.physicalHeight));
+      expect(frameResults, everyElement(1), reason: bindings.lastError);
+      expect(bindings.hostSetLiveResizeCallback(nullptr, nullptr, nullptr), 0);
+    } finally {
+      if (host != nullptr) {
+        bindings.hostSetLiveResizeCallback(host, nullptr, nullptr);
+      }
+      callback?.close();
+      bindings.windowDestroy(host, window);
+      bindings.hostDestroy(host);
+    }
+  });
+
   test('null event arguments return an error', () {
     using((arena) {
       final event = arena<DuiEventStruct>();

@@ -63,6 +63,10 @@ struct DuiWindow {
 struct DuiHost {
   std::vector<std::unique_ptr<DuiWindow>> windows;
   std::string text_storage;
+  SDL_ThreadID thread_id = 0;
+  DuiLiveResizeCallback live_resize_callback = nullptr;
+  void* live_resize_user_data = nullptr;
+  bool live_resize_active = false;
 };
 
 namespace {
@@ -197,6 +201,41 @@ double content_to_window_units(SDL_Window* window, double value) {
   return value * window_display_scale(window) / window_pixel_density(window);
 }
 
+bool SDLCALL live_resize_event_watch(void* user_data, SDL_Event* event) {
+  auto* host = static_cast<DuiHost*>(user_data);
+  if (!host || !event || !host->live_resize_callback ||
+      host->live_resize_active ||
+      SDL_GetCurrentThreadID() != host->thread_id) {
+    return true;
+  }
+
+  const bool resized = event->type == SDL_EVENT_WINDOW_RESIZED;
+  const bool pixel_size_changed =
+      event->type == SDL_EVENT_WINDOW_PIXEL_SIZE_CHANGED;
+  const bool live_expose = event->type == SDL_EVENT_WINDOW_EXPOSED &&
+                           event->window.data1 == 1;
+  if (!resized && !pixel_size_changed && !live_expose) return true;
+
+  auto* window = SDL_GetWindowFromID(event->window.windowID);
+  if (!window) return true;
+  int width = event->window.data1;
+  int height = event->window.data2;
+  if ((pixel_size_changed || live_expose) &&
+      !SDL_GetWindowSize(window, &width, &height)) {
+    return true;
+  }
+  if (width <= 0 || height <= 0) return true;
+
+  host->live_resize_active = true;
+  host->live_resize_callback(
+      host->live_resize_user_data,
+      event->window.windowID,
+      window_units_to_content(window, width),
+      window_units_to_content(window, height));
+  host->live_resize_active = false;
+  return true;
+}
+
 bool ensure_surface(DuiWindow* window) {
   int width = 0;
   int height = 0;
@@ -299,7 +338,14 @@ DuiHost* dui_host_create(void) {
       set_sdl_error();
       return nullptr;
     }
-    return new DuiHost();
+    auto host = std::make_unique<DuiHost>();
+    host->thread_id = SDL_GetCurrentThreadID();
+    if (!SDL_AddEventWatch(live_resize_event_watch, host.get())) {
+      set_sdl_error();
+      SDL_Quit();
+      return nullptr;
+    }
+    return host.release();
   } catch (const std::exception& error) {
     set_error(error.what());
     SDL_Quit();
@@ -313,10 +359,25 @@ DuiHost* dui_host_create(void) {
 
 void dui_host_destroy(DuiHost* host) {
   if (!host) return;
+  SDL_RemoveEventWatch(live_resize_event_watch, host);
   for (auto& window : host->windows) destroy_window_resources(window.get());
   host->windows.clear();
   delete host;
   SDL_Quit();
+}
+
+int32_t dui_host_set_live_resize_callback(
+    DuiHost* host,
+    DuiLiveResizeCallback callback,
+    void* user_data) {
+  clear_error();
+  if (!host) {
+    set_error("Invalid host.");
+    return 0;
+  }
+  host->live_resize_callback = callback;
+  host->live_resize_user_data = callback ? user_data : nullptr;
+  return 1;
 }
 
 static int32_t translate_event(
@@ -505,6 +566,27 @@ void dui_window_destroy(DuiHost* host, DuiWindow* window) {
   if (found == host->windows.end()) return;
   destroy_window_resources(window);
   host->windows.erase(found);
+}
+
+int32_t dui_window_set_size(
+    DuiWindow* window,
+    int32_t logical_width,
+    int32_t logical_height) {
+  clear_error();
+  if (!window || !window->window || logical_width <= 0 || logical_height <= 0) {
+    set_error("Invalid window size arguments.");
+    return 0;
+  }
+  if (!SDL_SetWindowSize(
+          window->window,
+          static_cast<int>(std::lround(
+              content_to_window_units(window->window, logical_width))),
+          static_cast<int>(std::lround(
+              content_to_window_units(window->window, logical_height))))) {
+    set_sdl_error();
+    return 0;
+  }
+  return 1;
 }
 
 uint64_t dui_window_get_id(const DuiWindow* window) {
@@ -1071,7 +1153,11 @@ int32_t dui_window_present(DuiWindow* window) {
   }
   SDL_UnlockTexture(window->texture);
 
-  if (!SDL_RenderClear(window->renderer) ||
+  // Resize notifications can arrive before SDL resets the renderer output.
+  // Always present to the full current target, not the previous viewport.
+  if (!SDL_SetRenderViewport(window->renderer, nullptr) ||
+      !SDL_SetRenderClipRect(window->renderer, nullptr) ||
+      !SDL_RenderClear(window->renderer) ||
       !SDL_RenderTexture(window->renderer, window->texture, nullptr, nullptr) ||
       !SDL_RenderPresent(window->renderer)) {
     set_sdl_error();

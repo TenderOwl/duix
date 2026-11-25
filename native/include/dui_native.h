@@ -21,6 +21,8 @@ extern "C" {
  * - Create, use and destroy each DuiTextLayout on that same thread.
  * - Do not call host, window or text layout functions concurrently; the API
  *   is not internally synchronized.
+ * - The live resize callback runs synchronously on the host thread inside SDL
+ *   event processing. It may render and present, but must not throw across ABI.
  * - dui_abi_version() may be called on any thread.
  * - dui_last_error_message() reads thread-local error state. The returned
  *   pointer remains valid until the next native call on that thread.
@@ -60,6 +62,12 @@ typedef struct DuiEvent {
   /* SDL scancode for physical key position; key_code is layout-dependent. */
   int32_t scan_code;
 } DuiEvent;
+
+typedef void (*DuiLiveResizeCallback)(
+    void* user_data,
+    uint64_t window_id,
+    double logical_width,
+    double logical_height);
 
 typedef struct DuiWindowMetrics {
   uint32_t struct_size;
@@ -116,6 +124,11 @@ DUI_API int32_t dui_host_next_event(DuiHost* host, DuiEvent* out_event);
 DUI_API int32_t dui_host_wait_event(
     DuiHost* host, DuiEvent* out_event, int32_t timeout_ms);
 DUI_API int32_t dui_host_wake_up(DuiHost* host);
+/* Pass NULL to disable. The queued resize event is still delivered normally. */
+DUI_API int32_t dui_host_set_live_resize_callback(
+    DuiHost* host,
+    DuiLiveResizeCallback callback,
+    void* user_data);
 
 DUI_API DuiWindow* dui_window_create(
     DuiHost* host,
@@ -123,6 +136,10 @@ DUI_API DuiWindow* dui_window_create(
     int32_t width,
     int32_t height);
 DUI_API void dui_window_destroy(DuiHost* host, DuiWindow* window);
+DUI_API int32_t dui_window_set_size(
+    DuiWindow* window,
+    int32_t logical_width,
+    int32_t logical_height);
 DUI_API uint64_t dui_window_get_id(const DuiWindow* window);
 DUI_API double dui_window_get_content_scale(const DuiWindow* window);
 DUI_API int32_t dui_window_get_metrics(

@@ -160,7 +160,9 @@ final class Window extends ObservableObject implements WindowHost {
   }
 
   void resize(double width, double height) {
-    _logicalSize = Size(width, height);
+    final size = Size(width, height);
+    if (_logicalSize == size) return;
+    _logicalSize = size;
     _content?.invalidateMeasure();
     requestFrame();
   }

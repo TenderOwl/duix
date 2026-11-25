@@ -1,6 +1,6 @@
 # План разработки retained-mode UI framework на Dart
 
-Дата последнего обновления: 2026-11-25
+Дата последнего обновления: 2026-11-26
 
 Этот документ — основная точка восстановления контекста после перерыва. Перед продолжением работы сначала прочитать разделы «Текущее состояние», «Ближайшие задачи» и «Протокол продолжения после перерыва».
 
@@ -139,13 +139,15 @@ Skia canvas масштабируется через `displayScale`. Backbuffer �
 - `SdlSkiaHost.presentWindow()` пропускает render/present для закрытого, невидимого или не имеющего scheduled frame окна;
 - `FrameScheduler` объединяет invalidate, отделяет защищённый от рекурсии layout pass от paint и сохраняет invalidate, поступивший во время paint, для следующего кадра;
 - C ABI и Dart FFI поддерживают `dui_host_wait_event`/`waitForEvent()` и `dui_host_wake_up`; SDL user event пробуждает очередь при новом scheduled frame;
+- SDL event watch синхронно вызывает native→Dart live-resize callback на host thread для `RESIZED`, `PIXEL_SIZE_CHANGED` и live `EXPOSED`; `SdlSkiaHost` обновляет logical size и выполняет render/present внутри модального resize, не дожидаясь возврата главного цикла;
+- перед native present сбрасываются SDL renderer viewport и clip rect, чтобы прежние размеры не обрезали увеличенный backbuffer;
 - интерактивные примеры используют wait с пределом 16 мс и уступают Dart event loop, поэтому Timer/Future invalidate обрабатываются без постоянного render/present;
 - SDL renderer создаётся с включённым VSync;
 - diagnostics включают `scheduled`, `layout`, `painted`, `presented`;
 - `example/native_frame_benchmark.dart` измеряет process CPU на Windows через `GetProcessTimes`, idle counters и latency async invalidate→present;
 - `UIElement` поддерживает min/max width/height, margin, horizontal/vertical alignment, раздельные `desiredSize`, `arrangedSize` и `bounds`;
 - `StackPanel` измеряет детей с бесконечным главным направлением; measure cache учитывает изменение available constraints;
-- 128 Dart-тестов, включая layout constraints/alignment, infinite text width, clipping/rendering, horizontal scrolling, mouse caret/selection, pointer capture, surrogate pairs, composition, clipboard, render-on-demand и scheduler counters.
+- 129 Dart-тестов, включая synchronous live-resize frame с увеличением physical backbuffer, layout constraints/alignment, infinite text width, clipping/rendering, horizontal scrolling, mouse caret/selection, pointer capture, surrogate pairs, composition, clipboard, render-on-demand и scheduler counters.
 
 ### 3.2. Проверенное поведение
 
@@ -156,7 +158,8 @@ Skia canvas масштабируется через `displayScale`. Backbuffer �
 - Белый фон окна отображается корректно.
 - HiDPI-масштабирование подтверждено на 4K-дисплее.
 - `dart analyze` проходит без замечаний.
-- Все 128 Dart-тестов проходят, включая layout constraints/alignment, native infinite text width, render/clipping, native clip ABI, render-on-demand, async scheduler и восстановление прежнего Windows clipboard.
+- Все 128 тестов вне известного clipboard-сценария проходят. Два полных прогона после первоначального live-resize изменения остановились только на Windows clipboard `Couldn't open clipboard`; после обработки `PIXEL_SIZE_CHANGED` и сброса viewport/clip выполнен целевой resize-тест и повторный прогон 128 тестов без clipboard.
+- Native integration-тест подтверждает, что Dart callback выполняет `beginFrame/present` до возврата из `SDL_SetWindowSize`, получает logical size 240×120 и увеличенный physical backbuffer. Непрерывный drag границы окна подтверждён пользователем; maximize двойным щелчком по рамке после последнего исправления вручную ещё не проверен.
 - Margin включается в `desiredSize` и исключается из фактических `bounds`; start/center/end/stretch выравнивание проверено по координатам, а `arrangedSize` сохраняет размер исходного слота.
 - Повторный `presentWindow()` без invalidate не увеличивает render/present counters; изменение `Label.text` планирует ровно один следующий кадр. SDL expose/resize могут законно запланировать дополнительный кадр.
 - Несколько invalidate до кадра увеличивают `scheduled` и вызывают wake-up только один раз; `layout` и `painted` увеличиваются на каждом обработанном кадре, а пустой `renderFrame()` ничего не рисует.
@@ -186,7 +189,7 @@ Skia canvas масштабируется через `displayScale`. Backbuffer �
 - Полный `python tools/bootstrap_native.py` успешно пересобирает Skia/SkParagraph и native library.
 - Paragraph smoke на Windows измеряет `ASCII, кириллица` через SkParagraph: width 124.945, height 21.
 - Native smoke автоматически выполняет 3 event iterations: scale 2.0, logical 320×200, physical 640×400, scheduled=2, layout=2, painted=2, presented=2.
-- Native text gallery smoke выполняет 3 event iterations и рисует 2 кадра: scale 2.0, logical 960×800, physical 1920×1600, scheduled=2, layout=2, painted=2, presented=2.
+- После устранения повторного resize того же размера native text gallery smoke выполняет 3 event iterations и рисует 1 кадр: scale 2.0, logical 960×800, physical 1920×1600, scheduled=1, layout=1, painted=1, presented=1.
 - TextBox smoke через `--textbox --smoke` рисует composition, обычный selection и caret в отдельных кадрах, проверяет `Smoke か😀`, mouse caret и captured drag, затем завершается после 3 кадров: logical 760×590, physical 1520×1180, scheduled=4, layout=6, painted=4, presented=4. Два дополнительных layout pass выполняет централизованный input hit-testing.
 - Diagnostics базового native smoke на Windows: scale 2.0, logical 320×200, physical 640×400, scheduled=2, layout=2, painted=2, presented=2.
 
@@ -708,11 +711,12 @@ default < inherited < style < binding < local < animation
 
 Порядок ближайших рабочих сессий:
 
-1. **Этап 5.2:** DockPanel, attached `Dock` и last-child-fill.
-2. **Стабилизация Windows clipboard:** устранить сбой восстановления пустого прежнего значения в native ABI-тесте.
-3. **Незавершённая часть этапа 1.2:** проверить сборку и Paragraph smoke на Linux (FontConfig/Freetype) и macOS (CoreText).
-4. **Ручная визуальная проверка:** открыть text gallery и TextBox на мониторах с разными масштабами, проверить clipping, selection и caret; автоматический smoke этого не заменяет.
-5. **Ручная проверка этапа 2.4:** русский, китайский/японский ввод и emoji через реальные системные IME.
+1. **Ручная проверка maximize:** в `example/native_counter.dart` дважды щёлкнуть по рамке окна и убедиться, что вся раскрытая область сразу заполняется UI без чёрных полос; непрерывное перетаскивание границы уже подтверждено.
+2. **Стабилизация Windows clipboard:** устранить повторяемый сбой `Couldn't open clipboard` в native ABI-тесте.
+3. **Этап 5.2:** DockPanel, attached `Dock` и last-child-fill.
+4. **Незавершённая часть этапа 1.2:** проверить сборку и Paragraph smoke на Linux (FontConfig/Freetype) и macOS (CoreText).
+5. **Ручная визуальная проверка:** открыть text gallery и TextBox на мониторах с разными масштабами, проверить clipping, selection и caret; автоматический smoke этого не заменяет.
+6. **Ручная проверка этапа 2.4:** русский, китайский/японский ввод и emoji через реальные системные IME.
 
 Не начинать GPU, styles или virtualization до завершения этапов 1–4.
 
@@ -753,6 +757,35 @@ default < inherited < style < binding < local < animation
 ---
 
 ## 9. Журнал работ
+
+### 2026-11-26 — синхронный render во время live resize
+
+Сделано:
+
+- Причина чёрного окна при перетаскивании: модальный resize Windows не возвращает управление обычному Dart event loop до отпускания мыши. Добавлен SDL event watch, который обрабатывает `SDL_EVENT_WINDOW_RESIZED` и live `SDL_EVENT_WINDOW_EXPOSED` непосредственно во время изменения размера.
+- C ABI получил `DuiLiveResizeCallback`, `dui_host_set_live_resize_callback()` и `dui_window_set_size()`. Callback вызывается только на host thread, защищён от рекурсии, а обычное queued resize-событие сохраняется.
+- `SdlSkiaHost` регистрирует `NativeCallable.isolateLocal`, обновляет logical size и немедленно выполняет render/present. Ошибки Dart перехватываются внутри callback и повторно выбрасываются при возврате в `pumpEvents`, `waitForEvent` или `presentWindow`; native callable корректно закрывается при dispose.
+- При maximize обнаружены ещё две причины чёрной области: `RESIZED` может прийти до фактического изменения backbuffer, а сохранённый SDL renderer viewport/clip способен обрезать новый кадр. Event watch дополнительно обрабатывает `SDL_EVENT_WINDOW_PIXEL_SIZE_CHANGED`; logical size для pixel-size/expose берётся через `SDL_GetWindowSize`, а viewport и clip rect сбрасываются перед каждым present.
+- `Window.resize()` игнорирует неизменённый размер, поэтому последующее queued событие не создаёт лишний кадр.
+- Исправлено несоответствие const в объявлении `dui_window_text_input_active`, из-за которого обновлённая DLL не экспортировала этот существующий символ.
+- Интеграционный тест расширен: синхронный Dart callback выполняет `beginFrame/present` до возврата из native `SDL_SetWindowSize`, получает logical size 240×120 и подтверждает увеличение physical backbuffer.
+
+Проверено:
+
+- Native library пересобрана через существующий CMake/Ninja build; `python tools/bootstrap_native.py --check` с явно добавленными tool paths проходит.
+- `dart format` и `dart analyze` — без замечаний.
+- Целевой `live resize callback`-тест проходит. `dart test --name '^(?!.*clipboard).*$'` — все 128 тестов проходят, включая расширенный resize-тест.
+- Два полных `dart test` до первоначального исправления maximize дошли до 128 успешных тестов и остановились только на известном Windows clipboard `Couldn't open clipboard`; ошибка воспроизвелась дважды и оставлена открытой.
+- Базовый native smoke — успешно, 3 event iterations. Text gallery smoke — успешно, 3 iterations и 1 кадр; TextBox smoke — успешно, 3 кадра, counters 4/6/4/4.
+- Пользователь подтвердил корректный непрерывный resize перетаскиванием границы.
+
+Не проверено / ограничение:
+
+- Maximize двойным щелчком по рамке после обработки `PIXEL_SIZE_CHANGED` и сброса viewport/clip вручную ещё не проверен. Callback работает только на host thread по зафиксированному ABI threading contract; Linux/macOS не запускались.
+
+Следующий шаг:
+
+- Повторить maximize двойным щелчком по рамке в `example/native_counter.dart`, затем стабилизация Windows clipboard; после этого этап 5.2.
 
 ### 2026-11-26 — этап 5.1, layout constraints и alignment
 
