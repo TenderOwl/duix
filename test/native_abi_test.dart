@@ -30,6 +30,8 @@ void main() {
       final event = arena<DuiEventStruct>();
       expect(bindings.hostNextEvent(nullptr, event), -1);
       expect(bindings.lastError, contains('Invalid event arguments'));
+      expect(bindings.hostWaitEvent(nullptr, event, -1), -1);
+      expect(bindings.lastError, contains('Invalid event arguments'));
     });
   });
 
@@ -202,6 +204,39 @@ void main() {
 
       expect(text.desiredSize.width, lessThanOrEqualTo(100));
       expect(text.desiredSize.height, greaterThan(initialHeight));
+    } finally {
+      await host.closeWindow(window);
+      host.dispose();
+    }
+  });
+
+  test('unchanged windows skip render and present until invalidated', () async {
+    final host = await SdlSkiaHost.initialize(diagnosticsEnabled: true);
+    final text = TextBlock(text: 'Initial');
+    final window = Window(width: 320, height: 200, content: text);
+    try {
+      await host.showWindow(window);
+      var diagnostics = host.diagnosticsFor(window)!;
+      expect(diagnostics.renderFrameCount, 1);
+      expect(diagnostics.presentCount, 1);
+
+      for (var iteration = 0; iteration < 3; iteration++) {
+        host.presentWindow(window);
+      }
+      diagnostics = host.diagnosticsFor(window)!;
+      expect(diagnostics.renderFrameCount, 1);
+      expect(diagnostics.presentCount, 1);
+
+      text.text = 'Changed';
+      host.presentWindow(window);
+      diagnostics = host.diagnosticsFor(window)!;
+      expect(diagnostics.renderFrameCount, 2);
+      expect(diagnostics.presentCount, 2);
+
+      host.presentWindow(window);
+      diagnostics = host.diagnosticsFor(window)!;
+      expect(diagnostics.renderFrameCount, 2);
+      expect(diagnostics.presentCount, 2);
     } finally {
       await host.closeWindow(window);
       host.dispose();

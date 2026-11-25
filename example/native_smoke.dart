@@ -50,7 +50,11 @@ Future<void> main(List<String> args) async {
     }
     final diagnostics = host.diagnosticsFor(window);
     if (diagnostics != null) print(diagnostics);
-    print('Native smoke passed: 3 frames rendered.');
+    final renderedFrames = diagnostics?.renderFrameCount;
+    print(
+      'Native smoke passed: 3 event iterations'
+      '${renderedFrames == null ? '' : ', $renderedFrames frames rendered'}.',
+    );
   } finally {
     final activeWindow = window;
     if (application != null && activeWindow != null) {

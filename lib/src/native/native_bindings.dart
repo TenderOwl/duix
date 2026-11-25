@@ -216,6 +216,11 @@ typedef _HostNextEventNative = Int32 Function(
   Pointer<DuiHostOpaque>,
   Pointer<DuiEventStruct>,
 );
+typedef _HostWaitEventNative = Int32 Function(
+  Pointer<DuiHostOpaque>,
+  Pointer<DuiEventStruct>,
+  Int32,
+);
 typedef _WindowCreateNative = Pointer<DuiWindowOpaque> Function(
   Pointer<DuiHostOpaque>,
   Pointer<Utf8>,
@@ -308,6 +313,11 @@ typedef _HostDestroyDart = void Function(Pointer<DuiHostOpaque>);
 typedef _HostNextEventDart = int Function(
   Pointer<DuiHostOpaque>,
   Pointer<DuiEventStruct>,
+);
+typedef _HostWaitEventDart = int Function(
+  Pointer<DuiHostOpaque>,
+  Pointer<DuiEventStruct>,
+  int,
 );
 typedef _WindowCreateDart = Pointer<DuiWindowOpaque> Function(
   Pointer<DuiHostOpaque>,
@@ -435,6 +445,10 @@ final class NativeBindings {
             library.lookupFunction<_HostNextEventNative, _HostNextEventDart>(
           'dui_host_next_event',
         ),
+        hostWaitEvent =
+            library.lookupFunction<_HostWaitEventNative, _HostWaitEventDart>(
+          'dui_host_wait_event',
+        ),
         windowCreate =
             library.lookupFunction<_WindowCreateNative, _WindowCreateDart>(
           'dui_window_create',
@@ -532,6 +546,7 @@ final class NativeBindings {
   final _HostCreateDart hostCreate;
   final _HostDestroyDart hostDestroy;
   final _HostNextEventDart hostNextEvent;
+  final _HostWaitEventDart hostWaitEvent;
   final _WindowCreateDart windowCreate;
   final _WindowDestroyDart windowDestroy;
   final _WindowIdDart windowGetId;
@@ -622,6 +637,20 @@ final class NativeBindings {
   NativeEvent? nextEvent(Pointer<DuiHostOpaque> host, Arena arena) {
     final event = arena<DuiEventStruct>();
     final result = hostNextEvent(host, event);
+    return _decodeEvent(event, result);
+  }
+
+  NativeEvent? waitEvent(
+    Pointer<DuiHostOpaque> host,
+    Arena arena, {
+    int timeoutMs = -1,
+  }) {
+    final event = arena<DuiEventStruct>();
+    final result = hostWaitEvent(host, event, timeoutMs);
+    return _decodeEvent(event, result);
+  }
+
+  NativeEvent? _decodeEvent(Pointer<DuiEventStruct> event, int result) {
     if (result < 0) throw StateError(lastError);
     if (result == 0) return null;
     final value = event.ref;

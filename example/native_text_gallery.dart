@@ -80,12 +80,16 @@ Future<void> main(List<String> args) async {
         throw StateError(
             'The native window closed before the gallery smoke ended.');
       }
-      print('Native text gallery smoke passed: 3 frames rendered.');
+      final diagnostics = host.diagnosticsFor(window);
+      final renderedFrames = diagnostics?.renderFrameCount;
+      print(
+        'Native text gallery smoke passed: 3 event iterations'
+        '${renderedFrames == null ? '' : ', $renderedFrames frames rendered'}.',
+      );
     } else {
       while (host.isOpen(window)) {
-        host.pumpEvents();
+        host.waitForEvent(window);
         host.presentWindow(window);
-        await Future<void>.delayed(const Duration(milliseconds: 8));
       }
     }
     final diagnostics = host.diagnosticsFor(window);

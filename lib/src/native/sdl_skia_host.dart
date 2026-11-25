@@ -197,10 +197,25 @@ final class SdlSkiaHost
     });
   }
 
+  /// Waits for one SDL event without continuously polling an idle window.
+  void waitForEvent(Window window) {
+    _checkNotDisposed();
+    if (!isOpen(window)) return;
+    using((arena) {
+      final event = bindings.waitEvent(_host, arena);
+      if (event != null) _dispatchEvent(event);
+    });
+  }
+
   void presentWindow(Window window) {
     _checkNotDisposed();
     final session = _sessions[window];
-    if (session == null || !session.open || !window.isVisible) return;
+    if (session == null ||
+        !session.open ||
+        !window.isVisible ||
+        !window.frameScheduled) {
+      return;
+    }
     window.updateDevicePixelRatio(
       bindings.windowGetContentScale(session.pointer),
     );

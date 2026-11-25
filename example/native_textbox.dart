@@ -151,9 +151,8 @@ Future<void> main(List<String> args) async {
       print('Native TextBox smoke passed: 3 frames rendered.');
     } else {
       while (host.isOpen(window)) {
-        host.pumpEvents();
+        host.waitForEvent(window);
         host.presentWindow(window);
-        await Future<void>.delayed(const Duration(milliseconds: 8));
       }
     }
     final diagnostics = host.diagnosticsFor(window);

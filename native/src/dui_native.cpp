@@ -319,17 +319,8 @@ void dui_host_destroy(DuiHost* host) {
   SDL_Quit();
 }
 
-int32_t dui_host_next_event(DuiHost* host, DuiEvent* out_event) {
-  clear_error();
-  if (!host || !out_event) {
-    set_error("Invalid event arguments.");
-    return -1;
-  }
-  std::memset(out_event, 0, sizeof(*out_event));
-  out_event->struct_size = sizeof(*out_event);
-
-  SDL_Event source;
-  if (!SDL_PollEvent(&source)) return 0;
+static int32_t translate_event(
+    DuiHost* host, DuiEvent* out_event, const SDL_Event& source) {
 
   out_event->window_id = 0;
   switch (source.type) {
@@ -407,6 +398,37 @@ int32_t dui_host_next_event(DuiHost* host, DuiEvent* out_event) {
   return 1;
 }
 
+int32_t dui_host_next_event(DuiHost* host, DuiEvent* out_event) {
+  clear_error();
+  if (!host || !out_event) {
+    set_error("Invalid event arguments.");
+    return -1;
+  }
+  std::memset(out_event, 0, sizeof(*out_event));
+  out_event->struct_size = sizeof(*out_event);
+  SDL_Event source;
+  if (!SDL_PollEvent(&source)) return 0;
+  return translate_event(host, out_event, source);
+}
+
+int32_t dui_host_wait_event(
+    DuiHost* host, DuiEvent* out_event, int32_t timeout_ms) {
+  clear_error();
+  if (!host || !out_event || timeout_ms < -1) {
+    set_error("Invalid event arguments.");
+    return -1;
+  }
+  std::memset(out_event, 0, sizeof(*out_event));
+  out_event->struct_size = sizeof(*out_event);
+  SDL_Event source;
+  if (!SDL_WaitEventTimeout(&source, timeout_ms)) {
+    if (timeout_ms >= 0) return 0;
+    set_sdl_error();
+    return -1;
+  }
+  return translate_event(host, out_event, source);
+}
+
 DuiWindow* dui_window_create(
     DuiHost* host,
     const char* title_utf8,
@@ -436,6 +458,11 @@ DuiWindow* dui_window_create(
             content_to_window_units(window->window, height))));
     window->renderer = SDL_CreateRenderer(window->window, nullptr);
     if (!window->renderer) {
+      destroy_window_resources(window.get());
+      set_sdl_error();
+      return nullptr;
+    }
+    if (!SDL_SetRenderVSync(window->renderer, 1)) {
       destroy_window_resources(window.get());
       set_sdl_error();
       return nullptr;
