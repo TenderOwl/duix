@@ -3,6 +3,7 @@ import 'dart:ffi';
 
 import 'package:ffi/ffi.dart';
 
+import '../drawing.dart';
 import '../events.dart';
 import '../geometry.dart';
 import '../window.dart';
@@ -12,10 +13,31 @@ import 'native_text_layout.dart';
 final class _NativeWindowSession {
   _NativeWindowSession(this.pointer, this.id);
 
+  static const _frameRateSampleMicros = 500000;
+
   final Pointer<DuiWindowOpaque> pointer;
   final int id;
+  final Stopwatch frameRateStopwatch = Stopwatch()..start();
   bool open = true;
   int presentCount = 0;
+  int frameRateWindowStart = 0;
+  double? framesPerSecond;
+
+  String get frameRateLabel {
+    final value = framesPerSecond;
+    return value == null ? '0.0 FPS' : '${value.toStringAsFixed(1)} FPS';
+  }
+
+  void sampleFrameRate() {
+    final elapsed = frameRateStopwatch.elapsedMicroseconds;
+    if (elapsed < _frameRateSampleMicros) return;
+    final presented = presentCount + 1 - frameRateWindowStart;
+    framesPerSecond = presented * Duration.microsecondsPerSecond / elapsed;
+    frameRateWindowStart = presentCount + 1;
+    frameRateStopwatch
+      ..reset()
+      ..start();
+  }
 }
 
 final class NativeWindowDiagnostics {
@@ -30,6 +52,7 @@ final class NativeWindowDiagnostics {
     required this.layoutPassCount,
     required this.paintPassCount,
     required this.presentCount,
+    required this.framesPerSecond,
   });
 
   final double displayScale;
@@ -42,6 +65,7 @@ final class NativeWindowDiagnostics {
   final int layoutPassCount;
   final int paintPassCount;
   final int presentCount;
+  final double? framesPerSecond;
 
   int get renderFrameCount => paintPassCount;
 
@@ -52,7 +76,8 @@ final class NativeWindowDiagnostics {
         'logical=${logicalWidth}x$logicalHeight, '
         'physical=${physicalWidth}x$physicalHeight, '
         'scheduled=$scheduledFrameCount, layout=$layoutPassCount, '
-        'painted=$paintPassCount, presented=$presentCount';
+        'painted=$paintPassCount, presented=$presentCount, '
+        'fps=${framesPerSecond?.toStringAsFixed(1) ?? '--'}';
   }
 }
 
@@ -119,6 +144,7 @@ final class SdlSkiaHost
         layoutPassCount: window.layoutPassCount,
         paintPassCount: window.paintPassCount,
         presentCount: session.presentCount,
+        framesPerSecond: session.framesPerSecond,
       );
     });
   }
@@ -267,7 +293,12 @@ final class SdlSkiaHost
       throw StateError('Could not begin native frame: ${bindings.lastError}');
     }
     try {
-      window.renderFrame(NativeDrawingContext(bindings, session.pointer));
+      final context = NativeDrawingContext(bindings, session.pointer);
+      window.renderFrame(context);
+      if (diagnosticsEnabled) {
+        session.sampleFrameRate();
+        _drawFrameRateOverlay(window, session, context);
+      }
     } finally {
       if (bindings.windowPresent(session.pointer) == 0) {
         throw StateError(
@@ -275,6 +306,25 @@ final class SdlSkiaHost
       }
       session.presentCount++;
     }
+  }
+
+  void _drawFrameRateOverlay(
+    Window window,
+    _NativeWindowSession session,
+    DrawingContext context,
+  ) {
+    final windowWidth = window.logicalSize.width;
+    context.drawRect(
+      Rect.fromLTWH(windowWidth - 104, 8, 96, 26),
+      const Paint(Color(0xCC000000)),
+    );
+    context.drawText(
+      session.frameRateLabel,
+      Point(windowWidth - 16, 13),
+      fontSize: 12,
+      color: Color.white,
+      alignment: TextAlignment.end,
+    );
   }
 
   void _handleLiveResize(

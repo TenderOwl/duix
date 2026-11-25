@@ -29,13 +29,14 @@ void main() {
       layoutPassCount: 4,
       paintPassCount: 4,
       presentCount: 4,
+      framesPerSecond: 59.94,
     );
 
     expect(
       diagnostics.toString(),
       'Native diagnostics: displayScale=1.5, pixelDensity=2.0, '
       'logical=800.0x600.0, physical=1600x1200, '
-      'scheduled=4, layout=4, painted=4, presented=4',
+      'scheduled=4, layout=4, painted=4, presented=4, fps=59.9',
     );
   });
 }

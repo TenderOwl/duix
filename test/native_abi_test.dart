@@ -329,6 +329,40 @@ void main() {
     }
   });
 
+  test('diagnostics FPS follows presented frames without extra rendering',
+      () async {
+    final host = await SdlSkiaHost.initialize(diagnosticsEnabled: true);
+    final text = Label(text: 'Initial');
+    final window = Window(width: 320, height: 200, content: text);
+    try {
+      await host.showWindow(window);
+      var diagnostics = host.diagnosticsFor(window)!;
+      expect(diagnostics.presentCount, 1);
+      expect(diagnostics.framesPerSecond, isNull);
+
+      await Future<void>.delayed(const Duration(milliseconds: 550));
+      host.presentWindow(window);
+      diagnostics = host.diagnosticsFor(window)!;
+      expect(diagnostics.presentCount, 1);
+      expect(diagnostics.framesPerSecond, isNull);
+
+      text.text = 'Changed';
+      host.presentWindow(window);
+      diagnostics = host.diagnosticsFor(window)!;
+      expect(diagnostics.presentCount, 2);
+      expect(diagnostics.framesPerSecond, greaterThan(0));
+
+      final sampledFps = diagnostics.framesPerSecond;
+      host.presentWindow(window);
+      diagnostics = host.diagnosticsFor(window)!;
+      expect(diagnostics.presentCount, 2);
+      expect(diagnostics.framesPerSecond, sampledFps);
+    } finally {
+      await host.closeWindow(window);
+      host.dispose();
+    }
+  });
+
   test('async Dart invalidation wakes the scheduler and renders one frame',
       () async {
     final host = await SdlSkiaHost.initialize(diagnosticsEnabled: true);

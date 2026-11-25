@@ -143,11 +143,12 @@ Skia canvas масштабируется через `displayScale`. Backbuffer �
 - перед native present сбрасываются SDL renderer viewport и clip rect, чтобы прежние размеры не обрезали увеличенный backbuffer;
 - интерактивные примеры используют wait с пределом 16 мс и уступают Dart event loop, поэтому Timer/Future invalidate обрабатываются без постоянного render/present;
 - SDL renderer создаётся с включённым VSync;
-- diagnostics включают `scheduled`, `layout`, `painted`, `presented`;
+- diagnostics включают `scheduled`, `layout`, `painted`, `presented` и семплируемый `fps`;
+- при `--diagnostics` native host рисует поверх UI полупрозрачный FPS overlay в правом верхнем углу; частота считается по фактическим present за интервалы около 500 мс без дополнительных кадров в idle;
 - `example/native_frame_benchmark.dart` измеряет process CPU на Windows через `GetProcessTimes`, idle counters и latency async invalidate→present;
 - `UIElement` поддерживает min/max width/height, margin, horizontal/vertical alignment, раздельные `desiredSize`, `arrangedSize` и `bounds`;
 - `StackPanel` измеряет детей с бесконечным главным направлением; measure cache учитывает изменение available constraints;
-- 129 Dart-тестов, включая synchronous live-resize frame с увеличением physical backbuffer, layout constraints/alignment, infinite text width, clipping/rendering, horizontal scrolling, mouse caret/selection, pointer capture, surrogate pairs, composition, clipboard, render-on-demand и scheduler counters.
+- 130 Dart-тестов, включая diagnostics FPS/render-on-demand, synchronous live-resize frame с увеличением physical backbuffer, layout constraints/alignment, infinite text width, clipping/rendering, horizontal scrolling, mouse caret/selection, pointer capture, surrogate pairs, composition, clipboard, render-on-demand и scheduler counters.
 
 ### 3.2. Проверенное поведение
 
@@ -158,8 +159,8 @@ Skia canvas масштабируется через `displayScale`. Backbuffer �
 - Белый фон окна отображается корректно.
 - HiDPI-масштабирование подтверждено на 4K-дисплее.
 - `dart analyze` проходит без замечаний.
-- Все 128 тестов вне известного clipboard-сценария проходят. Два полных прогона после первоначального live-resize изменения остановились только на Windows clipboard `Couldn't open clipboard`; после обработки `PIXEL_SIZE_CHANGED` и сброса viewport/clip выполнен целевой resize-тест и повторный прогон 128 тестов без clipboard.
-- Native integration-тест подтверждает, что Dart callback выполняет `beginFrame/present` до возврата из `SDL_SetWindowSize`, получает logical size 240×120 и увеличенный physical backbuffer. Непрерывный drag границы окна подтверждён пользователем; maximize двойным щелчком по рамке после последнего исправления вручную ещё не проверен.
+- Все 128 тестов при исключении двух clipboard-сценариев проходят, включая новый FPS/render-on-demand тест. Два прежних полных прогона остановились только на Windows clipboard `Couldn't open clipboard`.
+- Native integration-тест подтверждает, что Dart callback выполняет `beginFrame/present` до возврата из `SDL_SetWindowSize`, получает logical size 240×120 и увеличенный physical backbuffer. Непрерывный drag и maximize двойным щелчком по рамке подтверждены пользователем.
 - Margin включается в `desiredSize` и исключается из фактических `bounds`; start/center/end/stretch выравнивание проверено по координатам, а `arrangedSize` сохраняет размер исходного слота.
 - Повторный `presentWindow()` без invalidate не увеличивает render/present counters; изменение `Label.text` планирует ровно один следующий кадр. SDL expose/resize могут законно запланировать дополнительный кадр.
 - Несколько invalidate до кадра увеличивают `scheduled` и вызывают wake-up только один раз; `layout` и `painted` увеличиваются на каждом обработанном кадре, а пустой `renderFrame()` ничего не рисует.
@@ -711,12 +712,11 @@ default < inherited < style < binding < local < animation
 
 Порядок ближайших рабочих сессий:
 
-1. **Ручная проверка maximize:** в `example/native_counter.dart` дважды щёлкнуть по рамке окна и убедиться, что вся раскрытая область сразу заполняется UI без чёрных полос; непрерывное перетаскивание границы уже подтверждено.
-2. **Стабилизация Windows clipboard:** устранить повторяемый сбой `Couldn't open clipboard` в native ABI-тесте.
-3. **Этап 5.2:** DockPanel, attached `Dock` и last-child-fill.
-4. **Незавершённая часть этапа 1.2:** проверить сборку и Paragraph smoke на Linux (FontConfig/Freetype) и macOS (CoreText).
-5. **Ручная визуальная проверка:** открыть text gallery и TextBox на мониторах с разными масштабами, проверить clipping, selection и caret; автоматический smoke этого не заменяет.
-6. **Ручная проверка этапа 2.4:** русский, китайский/японский ввод и emoji через реальные системные IME.
+1. **Стабилизация Windows clipboard:** устранить повторяемый сбой `Couldn't open clipboard` в native ABI-тесте.
+2. **Этап 5.2:** DockPanel, attached `Dock` и last-child-fill.
+3. **Незавершённая часть этапа 1.2:** проверить сборку и Paragraph smoke на Linux (FontConfig/Freetype) и macOS (CoreText).
+4. **Ручная визуальная проверка:** открыть `native_counter` с `--diagnostics`, text gallery и TextBox на мониторах с разными масштабами; проверить FPS overlay, clipping, selection и caret. Автоматический smoke этого не заменяет.
+5. **Ручная проверка этапа 2.4:** русский, китайский/японский ввод и emoji через реальные системные IME.
 
 Не начинать GPU, styles или virtualization до завершения этапов 1–4.
 
@@ -758,6 +758,30 @@ default < inherited < style < binding < local < animation
 
 ## 9. Журнал работ
 
+### 2026-11-26 — FPS overlay для diagnostics
+
+Сделано:
+
+- При `diagnosticsEnabled` (`--diagnostics` во всех native-примерах) `SdlSkiaHost` рисует поверх дерева контролов полупрозрачную плашку `N.N FPS` в правом верхнем углу. До первого измерения отображается `0.0 FPS`.
+- FPS вычисляется по монотонному `Stopwatch` и числу фактических present за интервалы не менее 500 мс. Таймер и принудительные invalidate не добавлены: в idle overlay не создаёт дополнительные кадры и сохраняет последнее измеренное значение до следующего present.
+- `NativeWindowDiagnostics` получил nullable `framesPerSecond` и включает FPS в строковое представление.
+- Добавлена integration-регрессия: отсутствие invalidate не увеличивает present и не обновляет FPS, а отложенный реальный кадр даёт положительное измерение.
+
+Проверено:
+
+- `dart format` и `dart analyze` — без замечаний.
+- Целевые diagnostics contract/FPS-тесты проходят. Общий прогон с исключением двух clipboard-сценариев — все 128 тестов проходят.
+- `dart run example/native_smoke.dart --diagnostics` — успешно, 3 event iterations и 1 кадр, counters 1/1/1/1.
+
+Не проверено / ограничение:
+
+- Положение и читаемость overlay вручную ещё не проверены. Значение обновляется только на кадрах, поэтому после прекращения рендеринга остаётся последний семпл, а не принудительно сбрасывается в ноль.
+- Общий `python tools/bootstrap_native.py --smoke --diagnostics` остановлен на GN из-за отсутствующей переменной окружения `ProgramFiles(x86)`; C++ не менялся, тот же smoke успешно запущен напрямую через Dart.
+
+Следующий шаг:
+
+- Ручная визуальная проверка FPS overlay, затем стабилизация Windows clipboard и этап 5.2 по порядку ближайших задач.
+
 ### 2026-11-26 — синхронный render во время live resize
 
 Сделано:
@@ -777,15 +801,15 @@ default < inherited < style < binding < local < animation
 - Целевой `live resize callback`-тест проходит. `dart test --name '^(?!.*clipboard).*$'` — все 128 тестов проходят, включая расширенный resize-тест.
 - Два полных `dart test` до первоначального исправления maximize дошли до 128 успешных тестов и остановились только на известном Windows clipboard `Couldn't open clipboard`; ошибка воспроизвелась дважды и оставлена открытой.
 - Базовый native smoke — успешно, 3 event iterations. Text gallery smoke — успешно, 3 iterations и 1 кадр; TextBox smoke — успешно, 3 кадра, counters 4/6/4/4.
-- Пользователь подтвердил корректный непрерывный resize перетаскиванием границы.
+- Пользователь подтвердил корректный непрерывный resize перетаскиванием границы и maximize двойным щелчком по рамке: вся раскрытая область сразу заполняется UI без чёрных полос.
 
 Не проверено / ограничение:
 
-- Maximize двойным щелчком по рамке после обработки `PIXEL_SIZE_CHANGED` и сброса viewport/clip вручную ещё не проверен. Callback работает только на host thread по зафиксированному ABI threading contract; Linux/macOS не запускались.
+- Callback работает только на host thread по зафиксированному ABI threading contract; Linux/macOS не запускались.
 
 Следующий шаг:
 
-- Повторить maximize двойным щелчком по рамке в `example/native_counter.dart`, затем стабилизация Windows clipboard; после этого этап 5.2.
+- Стабилизация Windows clipboard, после этого этап 5.2.
 
 ### 2026-11-26 — этап 5.1, layout constraints и alignment
 
