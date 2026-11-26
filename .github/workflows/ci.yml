@@ -52,7 +52,8 @@ jobs:
     name: Native (${{ matrix.os }})
     # The native job is best effort: the Skia build needs far more disk and
     # time than a hosted runner provides, and the macOS runners have no window
-    # server, so the window based checks only run on Windows and Linux.
+    # server, so the window based checks only run on Windows and Linux. The
+    # macOS runner still builds the library and publishes it as an artifact.
     continue-on-error: true
     if: github.event_name == 'workflow_dispatch' || github.event_name == 'schedule'
     runs-on: ${{ matrix.os }}
@@ -60,7 +61,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [windows-latest, ubuntu-24.04]
+        os: [windows-latest, ubuntu-24.04, macos-14]
     steps:
       - uses: actions/checkout@v4
 
@@ -101,13 +102,14 @@ jobs:
 
       # The native tests open real windows, so Linux needs a virtual display.
       # The clipboard tests stay excluded: a runner has no user session that
-      # owns the system clipboard.
+      # owns the system clipboard. The macOS runners have no window server, so
+      # there the window based checks are skipped.
       - name: Test
         if: runner.os == 'Linux'
         run: xvfb-run -a dart test --tags native --exclude-tags clipboard
 
       - name: Test
-        if: runner.os != 'Linux'
+        if: runner.os == 'Windows'
         run: dart test --tags native --exclude-tags clipboard
 
       - name: Smoke
@@ -115,7 +117,7 @@ jobs:
         run: xvfb-run -a dart run example/native_smoke.dart --smoke --diagnostics
 
       - name: Smoke
-        if: runner.os != 'Linux'
+        if: runner.os == 'Windows'
         run: dart run example/native_smoke.dart --smoke --diagnostics
 
       # The packaging step installs the library with the CMake install rules,
@@ -128,3 +130,13 @@ jobs:
       # every native build as well.
       - name: Distribution
         run: python tools/package.py --dist --no-verify
+
+      # The built library of every platform is published as an artifact, so the
+      # release bundle can be assembled from the runners.
+      - name: Upload the native artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: native-${{ matrix.os }}
+          path: build/dist/
+          retention-days: 30
+          if-no-files-found: error
