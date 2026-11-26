@@ -264,12 +264,19 @@ final class SdlSkiaHost
   bool clearClipboard() => bindings.clearClipboard();
 
   @override
-  Future<String?> showOpenFileDialog(Window? parent, {String? title}) async {
+  Future<String?> showOpenFileDialog(
+    Window? parent, {
+    String? title,
+    String? initialDirectory,
+    List<FileDialogFilter> filters = const [],
+  }) async {
     final session = parent == null ? null : _sessions[parent];
     if (parent != null && (session == null || !session.open)) return null;
     return bindings.openFileDialog(
       session?.pointer ?? nullptr,
       title: title,
+      initialDirectory: initialDirectory,
+      filters: filters,
     );
   }
 

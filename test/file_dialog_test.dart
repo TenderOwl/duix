@@ -25,13 +25,10 @@ void main() {
 
   test('Standalone FileDialog accepts an optional parent window', () async {
     final dialogs = _FakeFileDialogs(result: '/tmp/document.txt');
-    final dialog = FileDialog(dialogs);
+    final dialog = FileDialog(dialogs)..title = 'Документ';
     final parent = Window();
 
-    final result = await dialog.showOpen(
-      parent: parent,
-      title: 'Документ',
-    );
+    final result = await dialog.showOpen(parent);
 
     expect(result, '/tmp/document.txt');
     expect(dialogs.window, same(parent));
@@ -45,6 +42,24 @@ void main() {
     expect(await dialog.showOpen(), '/tmp/document.txt');
     expect(dialogs.window, isNull);
   });
+
+  test('FileDialog forwards initial directory and typed filters', () async {
+    final dialogs = _FakeFileDialogs(result: '/tmp/readme.md');
+    final dialog = FileDialog(dialogs);
+    const filters = [
+      FileDialogFilter(name: 'Документы', extensions: ['txt', 'md']),
+      FileDialogFilter(name: 'Изображения', extensions: ['.png', '.jpg']),
+    ];
+    dialog
+      ..initialDirectory = '/tmp'
+      ..filters = filters;
+
+    final result = await dialog.showOpen();
+
+    expect(result, '/tmp/readme.md');
+    expect(dialogs.initialDirectory, '/tmp');
+    expect(dialogs.filters, same(filters));
+  });
 }
 
 final class _FakeFileDialogs implements FileDialogHandler {
@@ -53,11 +68,20 @@ final class _FakeFileDialogs implements FileDialogHandler {
   final String? result;
   Window? window;
   String? title;
+  String? initialDirectory;
+  List<FileDialogFilter> filters = const [];
 
   @override
-  Future<String?> showOpenFileDialog(Window? window, {String? title}) async {
+  Future<String?> showOpenFileDialog(
+    Window? window, {
+    String? title,
+    String? initialDirectory,
+    List<FileDialogFilter> filters = const [],
+  }) async {
     this.window = window;
     this.title = title;
+    this.initialDirectory = initialDirectory;
+    this.filters = filters;
     return result;
   }
 }

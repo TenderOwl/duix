@@ -159,12 +159,21 @@ DUI_API int32_t dui_window_set_size(
     int32_t logical_width,
     int32_t logical_height);
 DUI_API uint64_t dui_window_get_id(const DuiWindow* window);
+typedef struct DuiFileDialogFilter {
+  const char* name_utf8;
+  const char* spec_utf8;
+} DuiFileDialogFilter;
+
 /* Shows the platform open-file dialog. A NULL window creates an unowned dialog.
- * A NULL result means cancellation; errors are available through
- * dui_last_error_message(). Free paths with dui_file_dialog_free_path(). */
+ * Filter specs use platform patterns such as "*.txt;*.md". A NULL result means
+ * cancellation; errors are available through dui_last_error_message(). Free
+ * paths with dui_file_dialog_free_path(). */
 DUI_API char* dui_window_open_file_dialog(
     DuiWindow* window,
-    const char* title_utf8);
+    const char* title_utf8,
+    const char* initial_directory_utf8,
+    const DuiFileDialogFilter* filters,
+    size_t filter_count);
 DUI_API void dui_file_dialog_free_path(char* path);
 DUI_API double dui_window_get_content_scale(const DuiWindow* window);
 DUI_API int32_t dui_window_get_metrics(

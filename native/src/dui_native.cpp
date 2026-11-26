@@ -1004,9 +1004,28 @@ uint64_t dui_window_get_id(const DuiWindow* window) {
   return window && window->window ? SDL_GetWindowID(window->window) : 0;
 }
 
-char* dui_window_open_file_dialog(DuiWindow* window, const char* title_utf8) {
+char* dui_window_open_file_dialog(
+    DuiWindow* window,
+    const char* title_utf8,
+    const char* initial_directory_utf8,
+    const DuiFileDialogFilter* filters,
+    size_t filter_count) {
   clear_error();
 #if defined(_WIN32)
+  if ((filter_count > 0 && !filters) ||
+      filter_count > std::numeric_limits<UINT>::max()) {
+    set_error("Invalid open-file dialog filters.");
+    return nullptr;
+  }
+  auto widen = [](const char* value, std::wstring* output) {
+    const int size = MultiByteToWideChar(
+        CP_UTF8, MB_ERR_INVALID_CHARS, value, -1, nullptr, 0);
+    if (size <= 0) return false;
+    output->assign(static_cast<size_t>(size), L'\0');
+    return MultiByteToWideChar(
+               CP_UTF8, MB_ERR_INVALID_CHARS, value, -1, output->data(), size) >
+           0;
+  };
   HRESULT initialized = CoInitializeEx(
       nullptr, COINIT_APARTMENTTHREADED | COINIT_DISABLE_OLE1DDE);
   const bool uninitialize = SUCCEEDED(initialized);
@@ -1030,18 +1049,69 @@ char* dui_window_open_file_dialog(DuiWindow* window, const char* title_utf8) {
     if (uninitialize) CoUninitialize();
   };
   if (title_utf8 && *title_utf8) {
-    const int title_length = MultiByteToWideChar(
-        CP_UTF8, MB_ERR_INVALID_CHARS, title_utf8, -1, nullptr, 0);
-    if (title_length > 0) {
-      std::wstring title(static_cast<size_t>(title_length), L'\0');
-      MultiByteToWideChar(
-          CP_UTF8,
-          MB_ERR_INVALID_CHARS,
-          title_utf8,
-          -1,
-          title.data(),
-          title_length);
-      dialog->SetTitle(title.c_str());
+    std::wstring title;
+    if (!widen(title_utf8, &title) || FAILED(dialog->SetTitle(title.c_str()))) {
+      finish();
+      set_error("Couldn't set the open-file dialog title.");
+      return nullptr;
+    }
+  }
+  if (initial_directory_utf8 && *initial_directory_utf8) {
+    std::wstring directory;
+    if (!widen(initial_directory_utf8, &directory)) {
+      finish();
+      set_error("Invalid UTF-8 in the initial directory.");
+      return nullptr;
+    }
+    IShellItem* folder = nullptr;
+    result = SHCreateItemFromParsingName(
+        directory.c_str(), nullptr, IID_PPV_ARGS(&folder));
+    if (FAILED(result)) {
+      finish();
+      set_error("Couldn't resolve the initial directory.");
+      return nullptr;
+    }
+    result = dialog->SetFolder(folder);
+    folder->Release();
+    if (FAILED(result)) {
+      finish();
+      set_error("Couldn't set the initial directory.");
+      return nullptr;
+    }
+  }
+  if (filter_count > 0) {
+    std::vector<std::wstring> strings;
+    strings.reserve(filter_count * 2);
+    for (size_t index = 0; index < filter_count; ++index) {
+      const auto& filter = filters[index];
+      if (!filter.name_utf8 || !filter.spec_utf8) {
+        finish();
+        set_error("Invalid UTF-8 in the open-file dialog filters.");
+        return nullptr;
+      }
+      std::wstring name;
+      std::wstring spec;
+      if (!widen(filter.name_utf8, &name) ||
+          !widen(filter.spec_utf8, &spec)) {
+        finish();
+        set_error("Invalid UTF-8 in the open-file dialog filters.");
+        return nullptr;
+      }
+      strings.push_back(std::move(name));
+      strings.push_back(std::move(spec));
+    }
+    std::vector<COMDLG_FILTERSPEC> specs;
+    specs.reserve(filter_count);
+    for (size_t index = 0; index < filter_count; ++index) {
+      specs.push_back(COMDLG_FILTERSPEC{
+          strings[index * 2].c_str(), strings[index * 2 + 1].c_str()});
+    }
+    result = dialog->SetFileTypes(
+        static_cast<UINT>(filter_count), specs.data());
+    if (FAILED(result)) {
+      finish();
+      set_error("Couldn't set the open-file dialog filters.");
+      return nullptr;
     }
   }
   DWORD options = 0;

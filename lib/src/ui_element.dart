@@ -3,6 +3,7 @@ import 'dart:typed_data';
 
 import 'drawing.dart';
 import 'events.dart';
+import 'file_dialog.dart';
 import 'geometry.dart';
 import 'properties.dart';
 import 'styles.dart';
@@ -33,7 +34,11 @@ abstract interface class WindowHost {
   bool writeClipboardData(Map<String, List<int>> formats) => false;
   List<String> readClipboardMimeTypes() => const <String>[];
   bool clearClipboard() => false;
-  Future<String?> showOpenFileDialog({String? title}) =>
+  Future<String?> showOpenFileDialog({
+    String? title,
+    String? initialDirectory,
+    List<FileDialogFilter> filters = const [],
+  }) =>
       Future<String?>.value();
 }
 

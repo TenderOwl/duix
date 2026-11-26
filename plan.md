@@ -168,8 +168,8 @@ Skia canvas масштабируется через `displayScale`. Backbuffer �
 - `Border.colorProperty`/`paddingProperty` поддерживают styles и bindings; `example/native_aqua_button.dart` демонстрирует named Aqua style, persistent template с hover/pressed, капсульную форму, внутреннюю светлую кромку, верхний глянцевый блик и капсульный focus ring;
 - `DrawingContext.drawRoundedRect()` поддерживает fill/stroke в recording renderer и native Skia backend через `dui_draw_rounded_rect`;
 - публичный backend-independent clipboard: `Window`/`WindowHost.writeClipboardData()`, `hasClipboardData()`, `readClipboardData()` с `Uint8List`, `readClipboardMimeTypes()`, `clearClipboard()`, `ClipboardMimeTypes.plainText/html` и native adapter через `ClipboardHandler`;
-- standalone backend-independent `FileDialog(handler).showOpen({Window? parent, String? title})`: один файл, optional parent, `null` при отмене, ошибки native backend как `StateError`; совместимый `Window`/`WindowHost.showOpenFileDialog()` сохранён. Windows использует системный `IFileOpenDialog`, а возвращаемый UTF-8 path имеет явное native ownership;
-- 226 Dart-тестов, включая file-dialog contract, formatted clipboard snapshots, styles/templates, DataContext inheritance/accessors/reparenting, value precedence/transitions, binding lifecycle/diagnostics, ObservableCollection/ItemsControl/virtualization, ScrollViewer measure/scroll/input/clip, Grid tracks/span/gap/invalidate/HiDPI, DockPanel measure/arrange/invalidate, diagnostics FPS/render-on-demand, synchronous live-resize frame с увеличением physical backbuffer, layout constraints/alignment, infinite text width, clipping/rendering, horizontal scrolling, mouse caret/selection, pointer capture, surrogate pairs, composition, clipboard, render-on-demand и scheduler counters.
+- standalone backend-independent `FileDialog(handler)` хранит `title`, `initialDirectory` и typed `filters` в свойствах; `showOpen([Window? parent])` принимает только optional parent. Возвращается один файл или `null` при отмене, native errors становятся `StateError`; совместимый `Window`/`WindowHost.showOpenFileDialog()` сохранён. Windows использует системный `IFileOpenDialog`, а возвращаемый UTF-8 path имеет явное native ownership;
+- 227 Dart-тестов, включая file-dialog contract, formatted clipboard snapshots, styles/templates, DataContext inheritance/accessors/reparenting, value precedence/transitions, binding lifecycle/diagnostics, ObservableCollection/ItemsControl/virtualization, ScrollViewer measure/scroll/input/clip, Grid tracks/span/gap/invalidate/HiDPI, DockPanel measure/arrange/invalidate, diagnostics FPS/render-on-demand, synchronous live-resize frame с увеличением physical backbuffer, layout constraints/alignment, infinite text width, clipping/rendering, horizontal scrolling, mouse caret/selection, pointer capture, surrogate pairs, composition, clipboard, render-on-demand и scheduler counters.
 
 ### 3.2. Проверенное поведение
 
@@ -180,8 +180,8 @@ Skia canvas масштабируется через `displayScale`. Backbuffer �
 - Белый фон окна отображается корректно.
 - HiDPI-масштабирование подтверждено на 4K-дисплее.
 - `dart analyze` проходит без замечаний.
-- Полный `dart test` проходит: все 226 тестов, включая 5 file-dialog contract-тестов, 4 style-теста, 3 control-template-теста, 6 DataContext-тестов, 9 value-precedence-тестов, 13 binding-тестов, 17 ItemsControl/virtualization-тестов, 11 ScrollViewer-тестов, 18 Grid-тестов, 7 DockPanel-тестов и все clipboard-сценарии.
-- Native library с `IFileOpenDialog` пересобрана, Paragraph smoke проходит. Headless-тесты подтверждают standalone dialog с parent и без него, передачу title, selected path, `null` при отмене и без backend; пользователь подтвердил работу Windows-примера с родительским окном. Standalone ownerless-вариант визуально ещё не запускался.
+- Полный `dart test` проходит: все 227 тестов, включая 6 file-dialog contract-тестов, 4 style-теста, 3 control-template-теста, 6 DataContext-тестов, 9 value-precedence-тестов, 13 binding-тестов, 17 ItemsControl/virtualization-тестов, 11 ScrollViewer-тестов, 18 Grid-тестов, 7 DockPanel-тестов и все clipboard-сценарии.
+- Native library с `IFileOpenDialog` пересобрана, Paragraph smoke проходит. Headless-тесты подтверждают standalone dialog с parent и без него, передачу title/initialDirectory/filters, selected path и `null` при отмене или без backend; пользователь подтвердил parent/ownerless-варианты, фильтры и начальный каталог Windows-примера.
 - В formatted clipboard тесте проходят round-trip и восстановление прежнего значения для Unicode plain text, Windows `text/html`/CF_HTML, `application/xhtml+xml`, binary с нулевыми байтами и empty payload. Четыре native clipboard-сценария дополнительно прошли три повторных запуска. CF_HTML формируется с UTF-8 byte offsets, а чтение возвращает fragment без служебного header; остальные MIME-форматы сохраняются. Ручная вставка в сторонние приложения ещё не проверялась.
 - Clipboard snapshot/restore покрывает весь набор, перечисляемый MIME API: plain text, CF_HTML, XHTML, binary и empty payload. `clearClipboard()` восстанавливает исходно пустое состояние. Произвольные native-only clipboard formats, не представленные SDL/CF_HTML MIME API, в snapshot не входят.
 - Публичный `Window` clipboard API проверен отдельно на headless handler и реальном `SdlSkiaHost`: приложение использует MIME strings и Dart byte lists без FFI/native types. Отсутствие backend возвращает `false`/`null`; native HTML round-trip проходит через тот же `WindowHost` contract.
@@ -749,12 +749,11 @@ One-way local маскирует binding, но не отменяет его; `cl
   - [x] Перечисление MIME-форматов, очистка clipboard и полный snapshot/restore в integration cleanup.
   - [ ] Ручная проверка HTML в сторонних приложениях.
 - [ ] File dialogs.
-  - [x] Standalone `FileDialog.showOpen()` с optional parent/title и `null` при отмене; compatibility API через `Window` сохранён.
+  - [x] Standalone `FileDialog.showOpen([parent])` с настройками в свойствах title/initialDirectory/filters и `null` при отмене; compatibility API через `Window` сохранён.
   - [x] Windows `IFileOpenDialog` с родительским HWND либо без owner, UTF-8 path и явным освобождением native string.
   - [x] Headless contract-тесты и `example/native_open_file_dialog.dart`.
-  - [x] Пользователь подтвердил пример с родительским окном.
-  - [ ] Ручная проверка ownerless-диалога, Unicode path и ошибок на Windows.
-  - [ ] Фильтры и initial directory.
+  - [x] Typed filters (`txt`/`*.txt` и `*` для всех файлов) и initial directory через Windows `SetFileTypes`/`SetFolder`.
+  - [x] Пользователь подтвердил parent/ownerless и filters/initialDirectory.
   - [ ] Linux `GtkFileDialog` и macOS `NSOpenPanel`; собственные самодельные диалоги не использовать.
 - [ ] Native menus.
 - [ ] Drag-and-drop.
@@ -800,14 +799,13 @@ One-way local маскирует binding, но не отменяет его; `cl
 
 Порядок ближайших рабочих сессий:
 
-1. **Ручная проверка ownerless open-file dialog:** вызвать standalone `FileDialog.showOpen()` без parent, выбрать Unicode path и отменить диалог; проверить отображение результата и отсутствие ошибок.
-2. **Этап 8.2, file dialogs:** добавить filters и initial directory; затем отдельными срезами Linux `GtkFileDialog` и macOS `NSOpenPanel`.
-3. **Ручная проверка clipboard:** проверить вставку CF_HTML в Word, браузер и другие сторонние приложения.
-4. **Этап 8.1:** добавить semantics к дереву и синхронизировать role/name/value/state/bounds с focus и selection.
-5. **Ручная проверка ScrollViewer:** запустить `example/native_scroll_viewer.dart`, проверить реальное SDL wheel, клавиатурную прокрутку из focused TextBox/Button, track/thumb dragging, clipping и resize при разных display scales.
-6. **Незавершённая часть этапа 1.2:** проверить сборку и Paragraph smoke на Linux (FontConfig/Freetype) и macOS (CoreText).
-7. **Ручная визуальная проверка:** открыть text gallery и TextBox на мониторах с разными масштабами, проверить clipping, selection и caret; автоматический smoke этого не заменяет.
-8. **Ручная проверка этапа 2.4:** русский, китайский/японский ввод и emoji через реальные системные IME.
+1. **Этап 8.2, Linux file dialog:** реализовать `GtkFileDialog` для standalone API с title/initialDirectory/filters и optional parent; затем отдельным срезом macOS `NSOpenPanel`.
+2. **Ручная проверка clipboard:** проверить вставку CF_HTML в Word, браузер и другие сторонние приложения.
+3. **Этап 8.1:** добавить semantics к дереву и синхронизировать role/name/value/state/bounds с focus и selection.
+4. **Ручная проверка ScrollViewer:** запустить `example/native_scroll_viewer.dart`, проверить реальное SDL wheel, клавиатурную прокрутку из focused TextBox/Button, track/thumb dragging, clipping и resize при разных display scales.
+5. **Незавершённая часть этапа 1.2:** проверить сборку и Paragraph smoke на Linux (FontConfig/Freetype) и macOS (CoreText).
+6. **Ручная визуальная проверка:** открыть text gallery и TextBox на мониторах с разными масштабами, проверить clipping, selection и caret; автоматический smoke этого не заменяет.
+7. **Ручная проверка этапа 2.4:** русский, китайский/японский ввод и emoji через реальные системные IME.
 
 GPU backend по-прежнему не входит в ближайшие этапы.
 
@@ -848,6 +846,44 @@ GPU backend по-прежнему не входит в ближайшие эта
 ---
 
 ## 9. Журнал работ
+
+### 2026-11-26 — этап 8.2, настройки FileDialog в свойствах
+
+Сделано:
+
+- `title`, `initialDirectory` и `filters` перенесены из аргументов `showOpen()` в mutable properties экземпляра `FileDialog`.
+- `showOpen([Window? parent])` теперь принимает только optional positional parent. Backend contract и legacy `Window` API сохраняют передачу настроек.
+- Пример настраивает один reusable dialog через cascade и использует `try`/`on Exception` вокруг `showOpen(parent)` для обоих режимов.
+
+Проверено:
+
+- Пользователь подтвердил предыдущие filters/initialDirectory на Windows.
+- `dart analyze` — без замечаний; полный `dart test` — 227/227. Native code в этом шаге не менялся.
+
+Следующий шаг:
+
+- Linux `GtkFileDialog` для того же property-based standalone API.
+
+### 2026-11-26 — этап 8.2, filters и initialDirectory
+
+Сделано:
+
+- `FileDialog.showOpen()` и compatibility API получили `initialDirectory` и typed `FileDialogFilter(name, extensions)`. Поддерживаются `txt`/`.txt`, составные фильтры и `*` для всех файлов.
+- C ABI передаёт UTF-8 initial directory и массив filter specs. Windows использует `SHCreateItemFromParsingName` + `IFileDialog.SetFolder` и `SetFileTypes` с patterns `*.txt;*.md`.
+- Пример задаёт каталог проекта и фильтры `txt/md`/«Все файлы» в parent и ownerless-режимах. Добавлен headless forwarding-тест.
+
+Проверено:
+
+- Пользователь подтвердил предыдущий ownerless-вариант.
+- Native library пересобрана, Paragraph smoke успешен; `dart analyze` — без замечаний; полный `dart test` — 227/227.
+
+Не проверено / ограничения:
+
+- Визуальное применение новых фильтров и стартового каталога ещё не проверено. Linux `GtkFileDialog` и macOS `NSOpenPanel` остаются отдельными срезами.
+
+Следующий шаг:
+
+- Ручная проверка filters/initialDirectory, затем Linux `GtkFileDialog`.
 
 ### 2026-11-26 — этап 8.2, standalone FileDialog с optional parent
 

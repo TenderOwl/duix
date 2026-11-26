@@ -7,6 +7,8 @@ import 'dart:typed_data';
 
 import 'package:ffi/ffi.dart';
 
+import '../file_dialog.dart';
+
 final class DuiHostOpaque extends Opaque {}
 
 final class DuiWindowOpaque extends Opaque {}
@@ -68,6 +70,11 @@ final class DuiWindowMetricsStruct extends Struct {
 
   @Double()
   external double pixelDensity;
+}
+
+final class DuiFileDialogFilterStruct extends Struct {
+  external Pointer<Utf8> nameUtf8;
+  external Pointer<Utf8> specUtf8;
 }
 
 final class DuiTextLayoutOptionsStruct extends Struct {
@@ -284,6 +291,9 @@ typedef _WindowIdNative = Uint64 Function(Pointer<DuiWindowOpaque>);
 typedef _WindowOpenFileDialogNative = Pointer<Utf8> Function(
   Pointer<DuiWindowOpaque>,
   Pointer<Utf8>,
+  Pointer<Utf8>,
+  Pointer<DuiFileDialogFilterStruct>,
+  Size,
 );
 typedef _FileDialogFreePathNative = Void Function(Pointer<Utf8>);
 typedef _WindowContentScaleNative = Double Function(Pointer<DuiWindowOpaque>);
@@ -424,6 +434,9 @@ typedef _WindowIdDart = int Function(Pointer<DuiWindowOpaque>);
 typedef _WindowOpenFileDialogDart = Pointer<Utf8> Function(
   Pointer<DuiWindowOpaque>,
   Pointer<Utf8>,
+  Pointer<Utf8>,
+  Pointer<DuiFileDialogFilterStruct>,
+  int,
 );
 typedef _FileDialogFreePathDart = void Function(Pointer<Utf8>);
 typedef _WindowContentScaleDart = double Function(Pointer<DuiWindowOpaque>);
@@ -752,11 +765,49 @@ final class NativeBindings {
   String? openFileDialog(
     Pointer<DuiWindowOpaque> window, {
     String? title,
+    String? initialDirectory,
+    List<FileDialogFilter> filters = const [],
   }) {
     return using<String?>((arena) {
       final Pointer<Utf8> nativeTitle =
           title?.toNativeUtf8(allocator: arena) ?? nullptr;
-      final path = _windowOpenFileDialog(window, nativeTitle);
+      final Pointer<Utf8> nativeInitialDirectory =
+          initialDirectory?.toNativeUtf8(allocator: arena) ?? nullptr;
+      final Pointer<DuiFileDialogFilterStruct> nativeFilters =
+          filters.isEmpty ? nullptr : arena(filters.length);
+      for (var index = 0; index < filters.length; index++) {
+        final filter = filters[index];
+        if (filter.name.trim().isEmpty || filter.extensions.isEmpty) {
+          throw ArgumentError.value(
+            filter,
+            'filters',
+            'Each filter needs a name and at least one extension.',
+          );
+        }
+        final spec = filter.extensions.map((extension) {
+          final normalized =
+              extension.startsWith('.') ? extension.substring(1) : extension;
+          if (normalized == '*') return '*.*';
+          if (normalized.isEmpty || normalized.contains(RegExp(r'[*?;/\\]'))) {
+            throw ArgumentError.value(
+              extension,
+              'filters',
+              'Invalid file extension.',
+            );
+          }
+          return '*.$normalized';
+        }).join(';');
+        nativeFilters[index]
+          ..nameUtf8 = filter.name.toNativeUtf8(allocator: arena)
+          ..specUtf8 = spec.toNativeUtf8(allocator: arena);
+      }
+      final path = _windowOpenFileDialog(
+        window,
+        nativeTitle,
+        nativeInitialDirectory,
+        nativeFilters,
+        filters.length,
+      );
       if (path == nullptr) {
         final error = lastError;
         if (error.isNotEmpty) {

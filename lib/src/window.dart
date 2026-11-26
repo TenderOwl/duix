@@ -14,7 +14,7 @@ import 'text_layout.dart';
 import 'ui_element.dart';
 
 export 'clipboard.dart' show ClipboardHandler, ClipboardMimeTypes;
-export 'file_dialog.dart' show FileDialogHandler;
+export 'file_dialog.dart' show FileDialogFilter, FileDialogHandler;
 
 abstract interface class NativeHost {
   Future<void> showWindow(Window window);
@@ -134,8 +134,17 @@ final class Window extends ObservableObject implements WindowHost {
   bool clearClipboard() => clipboardHandler?.clearClipboard() ?? false;
 
   @override
-  Future<String?> showOpenFileDialog({String? title}) =>
-      fileDialogHandler?.showOpenFileDialog(this, title: title) ??
+  Future<String?> showOpenFileDialog({
+    String? title,
+    String? initialDirectory,
+    List<FileDialogFilter> filters = const [],
+  }) =>
+      fileDialogHandler?.showOpenFileDialog(
+        this,
+        title: title,
+        initialDirectory: initialDirectory,
+        filters: filters,
+      ) ??
       Future<String?>.value();
 
   @override
