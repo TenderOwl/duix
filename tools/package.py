@@ -1,10 +1,12 @@
 #!/usr/bin/env python3
 """Assemble a release bundle of the native library and check its dependencies.
 
-The bundle keeps the native library and the ICU data file together, because
-the ICU loader looks for `icudtl.dat` next to the executable or next to the
-library. The script also reports the runtime dependencies of the library so a
-missing private dependency is caught before a release, not on a user machine.
+On Windows the bundle keeps the native library and the ICU data file together,
+because the ICU loader looks for `icudtl.dat` next to the executable or next to
+the library. On Linux and macOS Skia links the ICU data into the library, so
+the file is not part of the bundle there. The script also reports the runtime
+dependencies of the library so a missing private dependency is caught before a
+release, not on a user machine.
 """
 
 from __future__ import annotations
@@ -172,12 +174,22 @@ def is_system_dependency(system: str, name: str, location: str) -> bool:
     return not _is_inside_project(location)
 
 
-def install_native(prefix: Path, system: str) -> tuple[Path, Path]:
+def requires_icu(system: str) -> bool:
+    """Tells whether the platform loads the ICU data from the disk.
+
+    Windows reads `icudtl.dat` next to the executable or next to the library,
+    on Linux and macOS Skia links the ICU data into the library itself.
+    """
+    return system == "Windows"
+
+
+def install_native(prefix: Path, system: str) -> tuple[Path, Path | None]:
     """Installs the native library with the CMake install rules.
 
     The install rules decide where the library and the ICU data file go, so
     the release bundle is built from the install tree. That keeps the shipped
-    layout and the documented install layout in sync.
+    layout and the documented install layout in sync. The ICU data file is
+    only installed on Windows, so it is only expected there.
     """
     cmake = shutil.which("cmake")
     if not cmake:
@@ -199,10 +211,18 @@ def install_native(prefix: Path, system: str) -> tuple[Path, Path]:
 
     directory = prefix / ("bin" if system == "Windows" else "lib")
     library = directory / LIBRARY_NAMES[system]
-    icu = directory / "icudtl.dat"
-    if not library.exists() or not icu.exists():
+    if not library.exists():
         raise RuntimeError(f"the install tree {prefix} is incomplete.")
-    return library, icu
+
+    icu = directory / "icudtl.dat"
+    if requires_icu(system):
+        if not icu.exists():
+            raise RuntimeError(
+                f"the install tree {prefix} has no ICU data file, but Windows "
+                "loads it from the disk."
+            )
+        return library, icu
+    return library, None
 
 
 def sha256(path: Path) -> str:
@@ -236,20 +256,25 @@ def collect_platform_artifacts(
     staging: Path,
     key: str,
     library: Path,
-    icu: Path,
+    icu: Path | None,
 ) -> Path:
     """Copies the built artifacts of one platform into the staging area.
 
     Every platform build drops its library and the ICU data file into
     `staging/<platform>/`, and the distribution takes them from there. That
-    way a release can be assembled from builds of different machines.
+    way a release can be assembled from builds of different machines. Only
+    Windows needs the ICU data file, on the other systems Skia links the ICU
+    data into the library.
     """
     directory = staging / key
     if directory.exists():
         shutil.rmtree(directory)
     directory.mkdir(parents=True)
     shutil.copy2(library, directory / library.name)
-    shutil.copy2(icu, directory / icu.name)
+    if icu is not None:
+        if not icu.exists():
+            raise RuntimeError(f"the ICU data file {icu} is missing.")
+        shutil.copy2(icu, directory / icu.name)
     return directory
 
 
@@ -384,7 +409,9 @@ def verify_bundle(directory: Path) -> bool:
             print(result.stderr)
             return False
         for name in (LIBRARY_NAMES[platform.system()], "icudtl.dat"):
-            shutil.copy2(directory / name, workspace / name)
+            source = directory / name
+            if source.exists():
+                shutil.copy2(source, workspace / name)
 
         working_directory = workspace / "run"
         working_directory.mkdir()
@@ -454,7 +481,7 @@ def main() -> int:
 
     if args.skip_install:
         library = NATIVE_BUILD / "bin" / LIBRARY_NAMES[system]
-        icu = library.parent / "icudtl.dat"
+        icu = library.parent / "icudtl.dat" if requires_icu(system) else None
     else:
         try:
             library, icu = install_native(INSTALL_PREFIX, system)
@@ -470,7 +497,7 @@ def main() -> int:
         )
         return 1
 
-    if not icu.exists():
+    if icu is not None and not icu.exists():
         print(
             f"ERROR: {icu} is missing. The ICU loader needs it next to the "
             "library or next to the executable.",
@@ -485,7 +512,10 @@ def main() -> int:
         if not is_system_dependency(system, name, location)
     ]
     print(f"Library: {library} ({library.stat().st_size} bytes)")
-    print(f"ICU data: {icu} ({icu.stat().st_size} bytes)")
+    if icu is not None:
+        print(f"ICU data: {icu} ({icu.stat().st_size} bytes)")
+    else:
+        print("ICU data: linked into the library")
     print(f"Runtime dependencies: {len(dependencies)}")
     for name, location in dependencies:
         marker = "private" if name in private else "system"
@@ -509,7 +539,8 @@ def main() -> int:
         shutil.rmtree(directory)
     directory.mkdir(parents=True)
     shutil.copy2(library, directory / library.name)
-    shutil.copy2(icu, directory / icu.name)
+    if icu is not None:
+        shutil.copy2(icu, directory / icu.name)
 
     manifest = {
         "name": "dui_native",
@@ -517,11 +548,11 @@ def main() -> int:
         "platform": system,
         "architecture": machine,
         "library": library.name,
-        "icuData": icu.name,
+        "icuData": icu.name if icu is not None else None,
         "dependencies": [name for name, _ in dependencies],
         "sha256": {
             library.name: sha256(directory / library.name),
-            icu.name: sha256(directory / icu.name),
+            **({icu.name: sha256(directory / icu.name)} if icu is not None else {}),
         },
     }
     (directory / "manifest.json").write_text(

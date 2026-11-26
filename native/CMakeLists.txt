@@ -121,7 +121,8 @@ set_target_properties(dui_native PROPERTIES
 )
 
 # The ICU data file is loaded from the directory of the executable or of the
-# native library, so it has to be installed next to the library.
+# native library, so it has to be installed next to the library. Only Windows
+# loads it from the disk, on the other systems Skia links it into the library.
 set(SKIA_ICU_DATA "${SKIA_ROOT}/out/Release/icudtl.dat" CACHE FILEPATH
     "Path to the Skia ICU data file (icudtl.dat)")
 
@@ -134,17 +135,14 @@ endif()
 
 if(WIN32)
   install(TARGETS dui_native RUNTIME DESTINATION bin)
-  set(DUI_ICU_DESTINATION bin)
+  if(DUI_ICU_DATA AND EXISTS "${DUI_ICU_DATA}")
+    install(FILES "${DUI_ICU_DATA}" DESTINATION bin)
+  else()
+    message(WARNING "Skia ICU data file not found (${SKIA_ICU_DATA}); "
+                    "Unicode shaping will be limited.")
+  endif()
 else()
   install(TARGETS dui_native LIBRARY DESTINATION lib)
-  set(DUI_ICU_DESTINATION lib)
-endif()
-
-if(DUI_ICU_DATA AND EXISTS "${DUI_ICU_DATA}")
-  install(FILES "${DUI_ICU_DATA}" DESTINATION ${DUI_ICU_DESTINATION})
-else()
-  message(WARNING "Skia ICU data file not found (${SKIA_ICU_DATA}); "
-                  "Unicode shaping will be limited.")
 endif()
 
 if(APPLE)

@@ -99,12 +99,25 @@ void main() {
           isTrue,
           reason: 'the library is missing in ${directory.path}',
         );
-        expect(
-          File('${directory.path}${Platform.pathSeparator}icudtl.dat')
-              .existsSync(),
-          isTrue,
-          reason: 'the ICU data is missing in ${directory.path}',
-        );
+        if (Platform.isWindows) {
+          // The ICU loader looks for the data file next to the library, so
+          // both files have to end up in the same directory of the install
+          // tree. On Linux and macOS Skia links the ICU data into the
+          // library, so there is no file to install.
+          expect(
+            File('${directory.path}${Platform.pathSeparator}icudtl.dat')
+                .existsSync(),
+            isTrue,
+            reason: 'the ICU data is missing in ${directory.path}',
+          );
+        } else {
+          expect(
+            File('${directory.path}${Platform.pathSeparator}icudtl.dat')
+                .existsSync(),
+            isFalse,
+            reason: 'the ICU data is linked into the library on this platform',
+          );
+        }
       } finally {
         prefix.deleteSync(recursive: true);
       }

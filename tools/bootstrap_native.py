@@ -280,10 +280,13 @@ def build_native(sdl_dir: Path, skia_libraries: list[Path]) -> Path:
     if not library.exists():
         raise RuntimeError(f"Native build completed without producing {library}")
     smoke_name = "dui_paragraph_smoke.exe" if platform.system() == "Windows" else "dui_paragraph_smoke"
-    icu_data = SKIA_SOURCE / "out" / "Release" / "icudtl.dat"
-    if not icu_data.exists():
-        raise RuntimeError(f"ICU data file was not produced: {icu_data}")
-    shutil.copy2(icu_data, NATIVE_BUILD / "bin" / "icudtl.dat")
+    if platform.system() == "Windows":
+        # Only Windows loads the ICU data from the disk, on the other systems
+        # Skia links it into the library.
+        icu_data = SKIA_SOURCE / "out" / "Release" / "icudtl.dat"
+        if not icu_data.exists():
+            raise RuntimeError(f"ICU data file was not produced: {icu_data}")
+        shutil.copy2(icu_data, NATIVE_BUILD / "bin" / "icudtl.dat")
     run([str(NATIVE_BUILD / "bin" / smoke_name)])
     return library
 
