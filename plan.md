@@ -173,7 +173,10 @@ Skia canvas масштабируется через `displayScale`. Backbuffer �
 - измерение `TextBox` клампится к available width и больше не бросает `ArgumentError` на узком контейнере (прежняя оценка `clamp(80, available)` падала при available width меньше 80);
 - у `TextBox` раздельные кэши раскладки для measure и render: IME composition не вытесняет раскладку, используемую для измерения, а в steady state создаётся одна native-раскладка;
 - native clipboard-тесты помечены тегом `clipboard` (объявлен в `dart_test.yaml`), поэтому их можно исключать через `dart test --exclude-tags clipboard`, когда системный clipboard занят другим процессом;
-- 233 Dart-теста, включая file-dialog contract, formatted clipboard snapshots, styles/templates, DataContext inheritance/accessors/reparenting, value precedence/transitions, binding lifecycle/diagnostics, ObservableCollection/ItemsControl/virtualization, ScrollViewer measure/scroll/input/clip, Grid tracks/span/gap/invalidate/HiDPI, DockPanel measure/arrange/invalidate, diagnostics FPS/render-on-demand, synchronous live-resize frame с увеличением physical backbuffer, layout constraints/alignment, infinite text width, clipping/rendering, horizontal scrolling, mouse caret/selection, pointer capture, surrogate pairs, composition, clipboard, render-on-demand и scheduler counters.
+- legacy `DrawingContext.drawText()` в native backend рисует через SkParagraph shaping: native `dui_draw_text` возвращает логическую ширину нарисованного текста и использует тот же `create_paragraph`, что и `dui_text_layout_create`; шрифт, unicode и font-collection переиспользуются между вызовами, раскладка кэшируется на окне;
+- ABI `dui_native` версии 2: `dui_draw_text` возвращает `int32_t` и добавляет out-параметр `out_width`, `dui_abi_version()` возвращает 2;
+- исправлен paint-range в `dui_text_layout_draw`: foreground paint задаётся в UTF-16 offsets, а не в UTF-8 байтах;
+- 235 Dart-тестов, включая file-dialog contract, formatted clipboard snapshots, styles/templates, DataContext inheritance/accessors/reparenting, value precedence/transitions, binding lifecycle/diagnostics, ObservableCollection/ItemsControl/virtualization, ScrollViewer measure/scroll/input/clip, Grid tracks/span/gap/invalidate/HiDPI, DockPanel measure/arrange/invalidate, diagnostics FPS/render-on-demand, synchronous live-resize frame с увеличением physical backbuffer, layout constraints/alignment, infinite text width, clipping/rendering, horizontal scrolling, mouse caret/selection, pointer capture, surrogate pairs, composition, clipboard, render-on-demand и scheduler counters.
 
 ### 3.2. Проверенное поведение
 
@@ -184,7 +187,9 @@ Skia canvas масштабируется через `displayScale`. Backbuffer �
 - Белый фон окна отображается корректно.
 - HiDPI-масштабирование подтверждено на 4K-дисплее.
 - `dart analyze` проходит без замечаний.
-- Полный `dart test` проходит: все 233 теста, включая 6 file-dialog contract-тестов, 4 style-теста, 3 control-template-теста, 6 DataContext-тестов, 9 value-precedence-тестов, 13 binding-тестов, 17 ItemsControl/virtualization-тестов, 11 ScrollViewer-тестов, 18 Grid-тестов, 7 DockPanel-тестов, 5 TextBox measurement-тестов и все clipboard-сценарии.
+- Полный `dart test` проходит: все 235 тестов, включая 6 file-dialog contract-тестов, 4 style-теста, 3 control-template-теста, 6 DataContext-тестов, 9 value-precedence-тестов, 13 binding-тестов, 17 ItemsControl/virtualization-тестов, 11 ScrollViewer-тестов, 18 Grid-тестов, 7 DockPanel-тестов, 5 TextBox measurement-тестов, 2 native text-drawing-теста и все clipboard-сценарии.
+- Legacy text drawing подтверждён native-тестом: ширина, возвращённая `dui_draw_text`, совпадает с шириной раскладки `dui_text_layout_create` для того же текста, шрифта и scale; ASCII, кириллица, emoji и RTL-строка рисуются во всех трёх выравниваниях.
+- Idle CPU после перевода `drawText` на SkParagraph не вырос: кэш раскладки на окне вернул 1.54% (до кэша было 3.08%), при этом текст теперь shaped.
 - `TextBox` измеряется теми же метриками раскладки, что и `Label`: desired width = ширина `Label` + 16, desired height = высота `Label` + 8. Текстовая часть масштабируется с `fontSize` (удвоение `fontSize` удваивает ширину текста), padding остаётся постоянным. Узкий available width клампится вместо падения, изменение текста и remount переизмеряют контрол.
 - Native backend подтверждает ту же формулу на реальных SkParagraph-метриках: `TextBox` и `Label` с одинаковым текстом и `fontSize` дают `TextBox.width == Label.width + 16`, а смена текста увеличивает измерение.
 - Native library с `IFileOpenDialog` пересобрана, Paragraph smoke проходит. Headless-тесты подтверждают standalone dialog с parent и без него, передачу title/initialDirectory/filters, selected path и `null` при отмене или без backend; пользователь подтвердил parent/ownerless-варианты, фильтры и начальный каталог Windows-примера.
@@ -343,7 +348,7 @@ python tools/bootstrap_native.py --smoke --dart "<путь-к-dart>"
 Приоритет указан в скобках: P0 — критично, P1 — следующий этап, P2 — позже.
 
 1. **P0 (закрыт 2026-11-26):** `TextBox.measureCore()` считал ширину через число символов. Теперь измерение идёт по метрикам `TextLayout`, добавлено свойство `fontSize`, узкий available width клампится вместо `ArgumentError`.
-2. **P1 (переформулировано 2026-11-26):** устаревший пункт «legacy `drawText`, используемый `TextBox`» не воспроизводится — `TextBox` уже рисует через `layout.draw()` и SkParagraph. Фактический остаток: публичный `DrawingContext.drawText()` и native `dui_draw_text` → `SkCanvas::drawSimpleText` без shaping, и он используется FPS-overlay диагностики и headless-раскладкой. Нужно либо перевести на SkParagraph, либо убрать API.
+2. **P1 (закрыт 2026-11-26):** legacy `drawText` переведён на SkParagraph shaping: native `dui_draw_text` строит shaped-параграф через общий `create_paragraph`, шрифт/unicode/font-collection переиспользуются между вызовами, а раскладка кэшируется на окне. Остался только headless-раскладка в тестовом рендерере — там shaping по определению отсутствует.
 3. **P2:** Clipboard snapshots охватывают форматы SDL/CF_HTML MIME API, но не произвольные native-only formats вне него. Ручная проверка обмена HTML со сторонними приложениями ещё не выполнена.
 4. **P2:** SDL wait ограничен 16 мс, чтобы Dart timers получали управление; это не полностью event-driven async integration. Измеренные 1.53–1.54% idle process CPU и медианная latency около 16.3–16.5 мс пока не оправдывают усложнение backend.
 5. **P2:** поиск видимого диапазона и расчёт estimated extent в `VirtualizingStackPanel` линейны по числу items; переменная высота может уточнять позицию на последующих layout pass.
@@ -820,21 +825,20 @@ One-way local маскирует binding, но не отменяет его; `cl
 
 Порядок ближайших рабочих сессий:
 
-Пункты 1, 2, 4, 9, 10, 11 требуют macOS/Linux, сторонних приложений или живого
-IME и выполняются пользователем; пункты 3, 5, 6, 7, 8 доступны для кодовой
+Пункты 1, 2, 4, 8, 9, 10 требуют macOS/Linux, сторонних приложений или живого
+IME и выполняются пользователем; пункты 3, 5, 6, 7 доступны для кодовой
 работы на текущей машине.
 
 1. **Ручная проверка этапа 8.2:** на macOS собрать Objective‑C++ backend и проверить `NSOpenPanel` в parent/ownerless-режимах, title/initialDirectory/filters и Unicode paths; на Linux аналогично проверить GTK 4.10+ на X11/Wayland (parent пока ownerless).
 2. **Ручная проверка clipboard:** проверить вставку CF_HTML в Word, браузер и другие сторонние приложения.
 3. **Этап 8.1:** добавить semantics к дереву и синхронизировать role/name/value/state/bounds с focus и selection.
 4. **Ручная проверка ScrollViewer:** автоматическая часть закрыта — `example/native_scroll_viewer.dart --smoke` проходит на Windows (wheel прокрутка, offsets, bounds, 3 кадра, scale 2.0); остаётся визуальная проверка track/thumb dragging, clipping и resize при разных display scales.
-5. **P1 legacy `drawText`:** перевести публичный `DrawingContext.drawText()` и native `dui_draw_text` на SkParagraph shaping либо убрать API; сейчас без shaping остаются FPS-overlay диагностики и headless-раскладка.
-6. **P1 recursive dispose:** единый `dispose()` по дереву контролов (сейчас есть только `PropertyOwner.dispose()` и `ItemsControl.dispose()`), с освобождением native-раскладок и идемпотентным повторным вызовом.
-7. **Этап 8.4 CI:** добавить `.github/workflows` с analyze/test и native build на Windows/macOS/Linux — это разблокирует ручные проверки на других ОС.
-8. **Автоматизация ScrollViewer:** thumb dragging и клавиатурная прокрутка доступны через публичные `dispatchPointerDown/Move/Up` и `dispatchKeyDown`, поэтому их можно закрыть в smoke-режиме.
-9. **Незавершённая часть этапа 1.2:** проверить сборку и Paragraph smoke на Linux (FontConfig/Freetype) и macOS (CoreText).
-10. **Ручная визуальная проверка:** открыть text gallery и TextBox на мониторах с разными масштабами, проверить clipping, selection и caret; автоматический smoke этого не заменяет.
-11. **Ручная проверка этапа 2.4:** русский, китайский/японский ввод и emoji через реальные системные IME.
+5. **P1 recursive dispose:** единый `dispose()` по дереву контролов (сейчас есть только `PropertyOwner.dispose()` и `ItemsControl.dispose()`), с освобождением native-раскладок и идемпотентным повторным вызовом.
+6. **Этап 8.4 CI:** добавить `.github/workflows` с analyze/test и native build на Windows/macOS/Linux — это разблокирует ручные проверки на других ОС.
+7. **Автоматизация ScrollViewer:** thumb dragging и клавиатурная прокрутка доступны через публичные `dispatchPointerDown/Move/Up` и `dispatchKeyDown`, поэтому их можно закрыть в smoke-режиме.
+8. **Незавершённая часть этапа 1.2:** проверить сборку и Paragraph smoke на Linux (FontConfig/Freetype) и macOS (CoreText).
+9. **Ручная визуальная проверка:** открыть text gallery и TextBox на мониторах с разными масштабами, проверить clipping, selection и caret; отдельно посмотреть FPS-overlay в `--diagnostics` — после перевода на SkParagraph текст в нём стал shaped, baseline сдвинут на `y + font_size`, как и раньше.
+10. **Ручная проверка этапа 2.4:** русский, китайский/японский ввод и emoji через реальные системные IME.
 
 GPU backend по-прежнему не входит в ближайшие этапы.
 
@@ -880,6 +884,36 @@ GPU backend по-прежнему не входит в ближайшие эта
 ---
 
 ## 9. Журнал работ
+
+### 2026-11-26 — P1, legacy `drawText` на SkParagraph
+
+Сделано:
+
+- Native `dui_draw_text` больше не использует `SkCanvas::drawSimpleText`: текст строится как SkParagraph-параграф через общий хелпер `create_paragraph`, который теперь используют и `dui_text_layout_create`, и legacy-путь. Shaping, fallback-шрифты и Unicode работают на обоих путях.
+- Вынесен общий `create_paragraph(...)`; шрифт-менеджер, `SkUnicode` и `FontCollection` стали статическими синглами — раньше `SkFontMgr_New_DirectWrite()` создавался на каждый вызов, что недопустимо для пути, вызываемого каждый кадр.
+- На окне добавлен кэш legacy-текста: раскладка переиспользуется, пока не изменились текст, размер шрифта и scale; цвет применяется через `updateForegroundPaint` на каждом draw.
+- Якорные точки legacy-API сохранены: start — левая кромка, center — середина, end — правая кромка; baseline по-прежнему на `y + font_size`. Текст не переносится.
+- Исправлен paint-range в `dui_text_layout_draw`: foreground paint задавался в UTF-8 байтах вместо UTF-16 offsets, из-за чего диапазон не покрывал весь не-ASCII текст.
+- ABI `dui_native` поднят до версии 2: `dui_draw_text` возвращает `int32_t` и получает out-параметр `out_width`; обновлены header, C++, Dart typedef, lookup и вызов. Native library пересобрана.
+
+Проверено:
+
+- `dart analyze` — без замечаний; `dart format` — без изменений.
+- `dart test` — 235/235; `dart test --exclude-tags clipboard` — 231/231.
+- Native-тест «text drawing uses the same shaped metrics as the text layout»: ширина, возвращённая `dui_draw_text`, совпадает с измерением `dui_text_layout_create` для того же текста, шрифта и scale — legacy-путь теперь даёт те же метрики, что и layout-путь.
+- Native-тест «text drawing accepts Unicode and every alignment»: ASCII, кириллица, emoji и RTL-строка рисуются во всех трёх выравниваниях.
+- `example/native_frame_benchmark.dart`: idle CPU 1.54% — на уровне зафиксированных 1.53–1.54%. Без кэша раскладки было 3.08%, то есть shaped-текст на каждом кадре стоил ~16 мс CPU за секунду.
+- Native-смоуки (smoke, textbox, aqua button, items control, scroll viewer) проходят.
+
+Не проверено:
+
+- Визуально shaped-текст legacy-API (FPS-overlay в `--diagnostics`) не подтверждён пользователем.
+- macOS/Linux сборка и поведение не проверялись: там `SkFontMgr_New_CoreText`/`FontConfig` и другой fallback-путь.
+- Headless-раскладка по-прежнему рисует через `context.drawText` без shaping — это детерминированный тестовый рендерер, shaping в нём не предусмотрен.
+
+Следующий шаг:
+
+- P1 recursive `dispose()` по дереву контролов; затем этап 8.4 CI.
 
 ### 2026-11-26 — P0, реальное измерение TextBox
 

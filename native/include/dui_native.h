@@ -217,14 +217,19 @@ DUI_API void dui_draw_rounded_rect(
     double radius_y,
     uint32_t rgba,
     double stroke_width);
-DUI_API void dui_draw_text(
+/* Draws shaped text through SkParagraph. The text is never wrapped.
+ * The anchor point depends on the alignment: start uses the left edge of the
+ * text, center its middle and end its right edge. The baseline is placed at
+ * y + font_size. [out_width] receives the logical width of the drawn text. */
+DUI_API int32_t dui_draw_text(
     DuiWindow* window,
     const char* text_utf8,
     double x,
     double y,
     double font_size,
     uint32_t rgba,
-    int32_t alignment);
+    int32_t alignment,
+    double* out_width);
 
 /* Text offsets are UTF-16 code units. All text buffers are UTF-8 with an
  * explicit byte length and need not be null-terminated. Output storage belongs

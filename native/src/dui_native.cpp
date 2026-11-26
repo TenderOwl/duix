@@ -59,6 +59,17 @@ struct DuiTextLayout {
   uint32_t utf16_length = 0;
 };
 
+// Cached paragraph for the legacy text drawing path. The path is used for
+// overlays and simple labels that are redrawn every frame, so the shaped
+// paragraph is reused while the text, font size, scale and alignment stay
+// the same. The foreground paint is applied on every draw.
+struct DuiLegacyText {
+  std::string text;
+  double font_size = 0.0;
+  double scale = 0.0;
+  std::unique_ptr<skia::textlayout::Paragraph> paragraph;
+};
+
 struct DuiWindow {
   explicit DuiWindow(DuiHost* owner) : host(owner) {}
 
@@ -71,6 +82,7 @@ struct DuiWindow {
   int pixel_height = 0;
   uint32_t background_rgba = 0xFFFFFFFF;
   bool frame_active = false;
+  DuiLegacyText legacy_text;
 };
 
 struct DuiHost {
@@ -375,6 +387,21 @@ uint32_t utf8_prefix_utf16_length(const char* text, int32_t byte_count) {
   return result;
 }
 
+// Length of the whole string in UTF-16 code units, the unit used by the
+// SkParagraph paint and editing APIs.
+uint32_t utf16_length_of(const std::string& text) {
+  size_t current = 0;
+  uint64_t result = 0;
+  while (current < text.size()) {
+    uint32_t code_point = 0;
+    size_t next = 0;
+    if (!decode_utf8(text, current, &code_point, &next)) return 0;
+    result += code_point > 0xFFFF ? 2 : 1;
+    current = next;
+  }
+  return static_cast<uint32_t>(result);
+}
+
 bool utf16_to_utf8_offset(
     const DuiTextLayout& layout,
     uint32_t requested,
@@ -408,6 +435,74 @@ sk_sp<SkFontMgr> create_font_manager() {
 #else
   return SkFontMgr_New_FontConfig(nullptr, SkFontScanner_Make_FreeType());
 #endif
+}
+
+// The font manager, the unicode implementation and the font collection are
+// shared between all text operations. Creating them per call is expensive on
+// Windows, and the legacy text drawing path runs on every rendered frame.
+sk_sp<SkFontMgr> shared_font_manager() {
+  static const sk_sp<SkFontMgr> manager = create_font_manager();
+  return manager;
+}
+
+sk_sp<SkUnicode> shared_unicode() {
+  static const sk_sp<SkUnicode> unicode = SkUnicodes::ICU::Make();
+  return unicode;
+}
+
+sk_sp<skia::textlayout::FontCollection> shared_font_collection() {
+  static const sk_sp<skia::textlayout::FontCollection> collection = [] {
+    auto fonts = sk_make_sp<skia::textlayout::FontCollection>();
+    fonts->setDefaultFontManager(shared_font_manager());
+    return fonts;
+  }();
+  return collection;
+}
+
+// Builds a shaped SkParagraph. The paragraph is laid out with [max_width] in
+// physical pixels; [font_size] is expected in physical pixels as well.
+std::unique_ptr<skia::textlayout::Paragraph> create_paragraph(
+    const char* text,
+    size_t text_length,
+    const char* font_family,
+    size_t font_family_length,
+    SkScalar font_size,
+    int32_t alignment,
+    SkScalar max_width) {
+  auto unicode = shared_unicode();
+  auto fonts = shared_font_collection();
+  if (!unicode || !fonts->getFallbackManager()) return nullptr;
+
+  skia::textlayout::TextStyle text_style;
+  text_style.setFontSize(font_size);
+  if (font_family_length != 0) {
+    text_style.setFontFamilies(
+        {SkString(font_family, font_family_length)});
+  }
+  skia::textlayout::ParagraphStyle paragraph_style;
+  paragraph_style.setTextStyle(text_style);
+  switch (alignment) {
+    case 1:
+      paragraph_style.setTextAlign(skia::textlayout::TextAlign::kCenter);
+      break;
+    case 2:
+      paragraph_style.setTextAlign(skia::textlayout::TextAlign::kRight);
+      break;
+    default:
+      paragraph_style.setTextAlign(skia::textlayout::TextAlign::kLeft);
+      break;
+  }
+
+  auto builder = skia::textlayout::ParagraphBuilder::make(
+      paragraph_style,
+      fonts,
+      unicode);
+  if (!builder) return nullptr;
+  builder->addText(text, text_length);
+  auto paragraph = builder->Build();
+  if (!paragraph) return nullptr;
+  paragraph->layout(max_width);
+  return paragraph;
 }
 
 void write_rect(DuiRect* output, const SkRect& input, double scale) {
@@ -540,7 +635,7 @@ void destroy_window_resources(DuiWindow* window) {
 
 }  // namespace
 
-uint32_t dui_abi_version(void) { return 1; }
+uint32_t dui_abi_version(void) { return 2; }
 
 const char* dui_last_error_message(void) { return last_error.c_str(); }
 
@@ -1504,52 +1599,92 @@ void dui_draw_rounded_rect(
   window->surface->getCanvas()->drawRRect(rounded_rect, paint);
 }
 
-void dui_draw_text(
+int32_t dui_draw_text(
     DuiWindow* window,
     const char* text_utf8,
     double x,
     double y,
     double font_size,
     uint32_t rgba,
-    int32_t alignment) {
-  if (!window || !window->frame_active || !text_utf8) return;
-  SkPaint paint;
-  paint.setColor(static_cast<SkColor>(rgba));
-  paint.setAntiAlias(true);
-#if defined(_WIN32)
-  static const sk_sp<SkFontMgr> font_manager = SkFontMgr_New_DirectWrite();
-#else
-  static const sk_sp<SkFontMgr> font_manager = SkFontMgr::RefEmpty();
-#endif
-  SkFont font(
-      font_manager->legacyMakeTypeface(nullptr, SkFontStyle()),
-      static_cast<SkScalar>(font_size));
-  font.setEdging(SkFont::Edging::kAntiAlias);
-  font.setSubpixel(true);
-  const size_t length = std::strlen(text_utf8);
-  const SkScalar measured_width = font.measureText(
-      text_utf8,
-      length,
-      SkTextEncoding::kUTF8);
-  SkScalar text_offset = 0;
-  switch (alignment) {
-    case 1:
-      text_offset = measured_width * 0.5;
-      break;
-    case 2:
-      text_offset = measured_width;
-      break;
-    default:
-      break;
+    int32_t alignment,
+    double* out_width) {
+  clear_error();
+  if (!window || !window->frame_active || !window->surface || !text_utf8 ||
+      !out_width || !std::isfinite(x) || !std::isfinite(y) ||
+      !std::isfinite(font_size) || font_size <= 0 || alignment < 0 ||
+      alignment > 2) {
+    set_error("Invalid text drawing arguments or no active frame.");
+    return 0;
   }
-  window->surface->getCanvas()->drawSimpleText(
-      text_utf8,
-      length,
-      SkTextEncoding::kUTF8,
-      static_cast<SkScalar>(x) - text_offset,
-      static_cast<SkScalar>(y + font_size),
-      font,
-      paint);
+  try {
+    const auto scale = static_cast<SkScalar>(dui_window_get_content_scale(window));
+    const auto length = std::strlen(text_utf8);
+    const std::string value(text_utf8, length);
+    // The legacy text API never wraps: the paragraph is laid out without a
+    // width limit and the alignment is applied by shifting the draw origin.
+    constexpr SkScalar kUnlimitedWidth = 1.0e6f;
+
+    auto& cache = window->legacy_text;
+    if (!cache.paragraph || cache.text != value ||
+        cache.font_size != font_size || cache.scale != scale) {
+      cache.paragraph = create_paragraph(
+          value.data(),
+          value.size(),
+          nullptr,
+          0,
+          static_cast<SkScalar>(font_size * scale),
+          0,
+          kUnlimitedWidth * scale);
+      if (!cache.paragraph) {
+        set_error("SkParagraph creation failed.");
+        return 0;
+      }
+      cache.text = value;
+      cache.font_size = font_size;
+      cache.scale = scale;
+    }
+    auto* paragraph = cache.paragraph.get();
+
+    const auto text_width = paragraph->getLongestLine();
+    SkScalar text_offset = 0;
+    switch (alignment) {
+      case 1:
+        text_offset = text_width * 0.5f;
+        break;
+      case 2:
+        text_offset = text_width;
+        break;
+      default:
+        break;
+    }
+
+    const auto utf16_length = utf16_length_of(value);
+    *out_width = text_width / scale;
+    if (utf16_length == 0) return 1;
+
+    SkPaint paint;
+    paint.setColor(static_cast<SkColor>(rgba));
+    paint.setAntiAlias(true);
+    paragraph->updateForegroundPaint(0, utf16_length, paint);
+
+    auto* canvas = window->surface->getCanvas();
+    SkAutoCanvasRestore restore(canvas, true);
+    const auto inverse_scale = static_cast<SkScalar>(1.0 / scale);
+    canvas->scale(inverse_scale, inverse_scale);
+    // The legacy text API places the baseline at y + font_size.
+    const auto baseline = static_cast<SkScalar>(y + font_size) * scale;
+    paragraph->paint(
+        canvas,
+        static_cast<SkScalar>(x) * scale - text_offset,
+        baseline - paragraph->getAlphabeticBaseline());
+    return 1;
+  } catch (const std::exception& error) {
+    set_error(error.what());
+    return 0;
+  } catch (...) {
+    set_error("Unknown native text drawing error.");
+    return 0;
+  }
 }
 
 DuiTextLayout* dui_text_layout_create(const DuiTextLayoutOptions* options) {
@@ -1593,52 +1728,18 @@ DuiTextLayout* dui_text_layout_create(const DuiTextLayoutOptions* options) {
     }
     layout->utf16_length = static_cast<uint32_t>(utf16_length);
 
-    auto unicode = SkUnicodes::ICU::Make();
-    auto fonts = sk_make_sp<skia::textlayout::FontCollection>();
-    fonts->setDefaultFontManager(create_font_manager());
-    if (!unicode || !fonts->getFallbackManager()) {
-      set_error("SkParagraph font/unicode initialization failed.");
-      return nullptr;
-    }
-
-    skia::textlayout::TextStyle text_style;
-    text_style.setFontSize(static_cast<SkScalar>(
-        options->font_size * options->scale));
-    if (options->font_family_length != 0) {
-      text_style.setFontFamilies({SkString(
-          options->font_family_utf8,
-          options->font_family_length)});
-    }
-    skia::textlayout::ParagraphStyle paragraph_style;
-    paragraph_style.setTextStyle(text_style);
-    switch (options->alignment) {
-      case 1:
-        paragraph_style.setTextAlign(skia::textlayout::TextAlign::kCenter);
-        break;
-      case 2:
-        paragraph_style.setTextAlign(skia::textlayout::TextAlign::kRight);
-        break;
-      default:
-        paragraph_style.setTextAlign(skia::textlayout::TextAlign::kLeft);
-        break;
-    }
-
-    auto builder = skia::textlayout::ParagraphBuilder::make(
-        paragraph_style,
-        fonts,
-        unicode);
-    if (!builder) {
-      set_error("SkParagraph builder creation failed.");
-      return nullptr;
-    }
-    builder->addText(layout->text.data(), layout->text.size());
-    layout->paragraph = builder->Build();
+    layout->paragraph = create_paragraph(
+        layout->text.data(),
+        layout->text.size(),
+        options->font_family_utf8,
+        options->font_family_length,
+        static_cast<SkScalar>(options->font_size * options->scale),
+        options->alignment,
+        static_cast<SkScalar>(options->max_width * options->scale));
     if (!layout->paragraph) {
       set_error("SkParagraph creation failed.");
       return nullptr;
     }
-    layout->paragraph->layout(static_cast<SkScalar>(
-        options->max_width * options->scale));
     return layout.release();
   } catch (const std::exception& error) {
     set_error(error.what());
@@ -1701,7 +1802,7 @@ int32_t dui_text_layout_draw(
     paint.setAntiAlias(true);
     layout->paragraph->updateForegroundPaint(
         0,
-        layout->text.size(),
+        layout->utf16_length,
         paint);
 
     auto* canvas = window->surface->getCanvas();

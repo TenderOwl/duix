@@ -332,7 +332,7 @@ typedef _DrawRoundedRectNative = Void Function(
   Uint32,
   Double,
 );
-typedef _DrawTextNative = Void Function(
+typedef _DrawTextNative = Int32 Function(
   Pointer<DuiWindowOpaque>,
   Pointer<Utf8>,
   Double,
@@ -340,6 +340,7 @@ typedef _DrawTextNative = Void Function(
   Double,
   Uint32,
   Int32,
+  Pointer<Double>,
 );
 typedef _TextLayoutCreateNative = Pointer<DuiTextLayoutOpaque> Function(
   Pointer<DuiTextLayoutOptionsStruct>,
@@ -488,7 +489,7 @@ typedef _DrawRoundedRectDart = void Function(
   int,
   double,
 );
-typedef _DrawTextDart = void Function(
+typedef _DrawTextDart = int Function(
   Pointer<DuiWindowOpaque>,
   Pointer<Utf8>,
   double,
@@ -496,6 +497,7 @@ typedef _DrawTextDart = void Function(
   double,
   int,
   int,
+  Pointer<Double>,
 );
 typedef _TextLayoutCreateDart = Pointer<DuiTextLayoutOpaque> Function(
   Pointer<DuiTextLayoutOptionsStruct>,
@@ -670,7 +672,7 @@ final class NativeBindings {
             .lookupFunction<_DrawRoundedRectNative, _DrawRoundedRectDart>(
           'dui_draw_rounded_rect',
         ),
-        drawText = library.lookupFunction<_DrawTextNative, _DrawTextDart>(
+        _drawText = library.lookupFunction<_DrawTextNative, _DrawTextDart>(
           'dui_draw_text',
         ),
         _textLayoutCreate = library
@@ -704,7 +706,7 @@ final class NativeBindings {
         windowPresent = library.lookupFunction<_FrameNative, _FrameDart>(
           'dui_window_present',
         ) {
-    if (abiVersion() != 1) {
+    if (abiVersion() != 2) {
       throw StateError('Unsupported dui_native ABI version: ${abiVersion()}.');
     }
   }
@@ -745,7 +747,7 @@ final class NativeBindings {
   final _FrameDart _windowPopClip;
   final _DrawRectDart drawRect;
   final _DrawRoundedRectDart drawRoundedRect;
-  final _DrawTextDart drawText;
+  final _DrawTextDart _drawText;
   final _TextLayoutCreateDart _textLayoutCreate;
   final _TextLayoutDestroyDart textLayoutDestroy;
   final _TextLayoutMeasureDart _textLayoutMeasure;
@@ -995,6 +997,28 @@ final class NativeBindings {
       compositionLength: value.compositionLength,
       scanCode: value.scanCode,
     );
+  }
+
+  /// Draws shaped text through the native backend.
+  ///
+  /// Returns the logical width of the drawn text, or -1 when the native draw
+  /// failed. The anchor point depends on the alignment: start uses the left
+  /// edge of the text, center its middle and end its right edge.
+  double drawText(
+    Pointer<DuiWindowOpaque> window,
+    Pointer<Utf8> text,
+    double x,
+    double y,
+    double fontSize,
+    int color,
+    int alignment,
+  ) {
+    return using((arena) {
+      final width = arena<Double>();
+      final result =
+          _drawText(window, text, x, y, fontSize, color, alignment, width);
+      return result == 0 ? -1.0 : width.value;
+    });
   }
 
   Pointer<DuiTextLayoutOpaque> textLayoutCreate({

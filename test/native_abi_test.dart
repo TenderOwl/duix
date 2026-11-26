@@ -22,7 +22,7 @@ void main() {
   });
 
   test('ABI version is supported', () {
-    expect(bindings.abiVersion(), 1);
+    expect(bindings.abiVersion(), 2);
   });
 
   test('host can be created and destroyed repeatedly', () {
@@ -280,6 +280,95 @@ void main() {
       });
     } finally {
       bindings.textLayoutDestroy(layout);
+      bindings.windowDestroy(host, window);
+      bindings.hostDestroy(host);
+    }
+  });
+
+  test('text drawing uses the same shaped metrics as the text layout', () {
+    final host = bindings.hostCreate();
+    expect(host, isNot(nullptr), reason: bindings.lastError);
+    if (host == nullptr) return;
+    var window = nullptr.cast<DuiWindowOpaque>();
+    try {
+      using((arena) {
+        const text = 'Native measurement';
+        const fontSize = 16.0;
+        final title = 'Text draw'.toNativeUtf8(allocator: arena);
+        window = bindings.windowCreate(host, title, 160, 80);
+        expect(window, isNot(nullptr), reason: bindings.lastError);
+        if (window == nullptr) return;
+        expect(bindings.windowBeginFrame(window), 1,
+            reason: bindings.lastError);
+
+        final scale = bindings.windowGetContentScale(window);
+        expect(scale, greaterThan(0));
+        final nativeText = text.toNativeUtf8(allocator: arena);
+        final drawnWidth = bindings.drawText(
+          window,
+          nativeText,
+          8,
+          8,
+          fontSize,
+          0xFF000000,
+          0,
+        );
+        expect(drawnWidth, greaterThan(0));
+
+        final layout = bindings.textLayoutCreate(
+          text: text,
+          fontSize: fontSize,
+          maxWidth: 100000,
+          scale: scale,
+          arena: arena,
+        );
+        try {
+          final metrics = bindings.textLayoutMeasure(layout, arena);
+          expect(drawnWidth, closeTo(metrics.width, 0.001));
+        } finally {
+          bindings.textLayoutDestroy(layout);
+        }
+        expect(bindings.windowPresent(window), 1, reason: bindings.lastError);
+      });
+    } finally {
+      bindings.windowDestroy(host, window);
+      bindings.hostDestroy(host);
+    }
+  });
+
+  test('text drawing accepts Unicode and every alignment', () {
+    final host = bindings.hostCreate();
+    expect(host, isNot(nullptr), reason: bindings.lastError);
+    if (host == nullptr) return;
+    var window = nullptr.cast<DuiWindowOpaque>();
+    try {
+      using((arena) {
+        const texts = ['ASCII', 'Кириллица', '😀 emoji', 'مرحبا'];
+        final title = 'Text draw'.toNativeUtf8(allocator: arena);
+        window = bindings.windowCreate(host, title, 160, 80);
+        expect(window, isNot(nullptr), reason: bindings.lastError);
+        if (window == nullptr) return;
+        expect(bindings.windowBeginFrame(window), 1,
+            reason: bindings.lastError);
+
+        for (final alignment in [0, 1, 2]) {
+          for (final text in texts) {
+            final nativeText = text.toNativeUtf8(allocator: arena);
+            final width = bindings.drawText(
+              window,
+              nativeText,
+              80,
+              8,
+              14,
+              0xFFFFFFFF,
+              alignment,
+            );
+            expect(width, greaterThan(0), reason: 'Failed to draw "$text".');
+          }
+        }
+        expect(bindings.windowPresent(window), 1, reason: bindings.lastError);
+      });
+    } finally {
       bindings.windowDestroy(host, window);
       bindings.hostDestroy(host);
     }
