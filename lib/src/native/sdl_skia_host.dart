@@ -126,12 +126,18 @@ final class SdlSkiaHost
   /// per process: a second host, for example in another isolate, would steal
   /// the events of the first one. The host owns any number of windows, and it
   /// is released again by [dispose].
+  ///
+  /// The native library is looked up inside the installed package first, so an
+  /// application that depends on the package finds it without building
+  /// anything. A compiled executable keeps no package configuration, and the
+  /// library has to sit next to the executable there; the `duix:setup_native`
+  /// executable of the package copies it.
   static Future<SdlSkiaHost> initialize({
     String? libraryPath,
     bool diagnosticsEnabled = false,
   }) async {
     return SdlSkiaHost._(
-      NativeBindings.open(libraryPath: libraryPath),
+      await NativeBindings.openAsync(libraryPath: libraryPath),
       diagnosticsEnabled: diagnosticsEnabled,
     );
   }

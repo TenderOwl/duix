@@ -199,9 +199,14 @@ Skia canvas масштабируется через `displayScale`. Backbuffer �
 - native smoke `example/native_scroll_viewer.dart --smoke` проверяет то же: drag до конца и обратно с клампингом, клик по треку, клавиши `down`/`end`/`home`;
 - `dart_test.yaml` задаёт `concurrency: 1`: native-тесты создают host, а host в процессе может быть только один, поэтому файлы идут последовательно (тестовые файлы маленькие, suite занимает секунды);
 - native-слой сериализует все обращения к SDL process-wide рекурсивным мьютексом: изоляты Dart работают в своих OS-потоках, а SDL не потокобезопасен;
+- native-библиотека ищется внутри установленного пакета (`native/bin/<платформа>-<архитектура>/`): путь пакета определяется через `Isolate.resolvePackageUri`, поэтому приложение, запущенное из исходников, находит библиотеку без сборки;
+- `NativeBindings.libraryPath` показывает, откуда реально загрузилась библиотека — это первое, что стоит смотреть при ошибке загрузки;
+- скомпилированный исполняемый файл не хранит конфигурацию пакетов, поэтому рядом с ним библиотеку копирует исполняемый файл пакета `duix:setup_native`;
+- `tools/package.py --dist` собирает папку дистрибуции пакета: исходники, `bin/setup_native.dart` и нативные библиотеки всех платформ из staging-каталога `build/dist/<платформа>-<архитектура>/`; публикация — `dart pub publish --directory ../duix-publish`. Папка лежит вне репозитория, потому что pub прячет всё, что скрыто правилами `.gitignore` репозитория;
+- README с quick start: `dart create myapp && cd myapp`, `dart pub add duix`, минимальное приложение, порядок поиска библиотеки, сборка из исходников, публикация и ограничения;
 - в процессе разрешён только один native host: SDL имеет одну глобальную очередь событий, поэтому второй host забрал бы события первого; второй host получает явную ошибку вместо тихой поломки;
 - видеоподсистема SDL живёт до конца процесса: `SDL_Quit()` при разрушении host рвал подсистему под окном другого изолята, а повторная инициализация SDL после `SDL_Quit` ненадёжна;
-- 264 Dart-теста, включая file-dialog contract, formatted clipboard snapshots, styles/templates, DataContext inheritance/accessors/reparenting, value precedence/transitions, binding lifecycle/diagnostics, ObservableCollection/ItemsControl/virtualization, ScrollViewer measure/scroll/input/clip, Grid tracks/span/gap/invalidate/HiDPI, DockPanel measure/arrange/invalidate, diagnostics FPS/render-on-demand, synchronous live-resize frame с увеличением physical backbuffer, layout constraints/alignment, infinite text width, clipping/rendering, horizontal scrolling, mouse caret/selection, pointer capture, surrogate pairs, composition, clipboard, recursive dispose, semantics tree, packaging, native ScrollViewer automation, render-on-demand и scheduler counters.
+- 266 Dart-тестов, включая file-dialog contract, formatted clipboard snapshots, styles/templates, DataContext inheritance/accessors/reparenting, value precedence/transitions, binding lifecycle/diagnostics, ObservableCollection/ItemsControl/virtualization, ScrollViewer measure/scroll/input/clip, Grid tracks/span/gap/invalidate/HiDPI, DockPanel measure/arrange/invalidate, diagnostics FPS/render-on-demand, synchronous live-resize frame с увеличением physical backbuffer, layout constraints/alignment, infinite text width, clipping/rendering, horizontal scrolling, mouse caret/selection, pointer capture, surrogate pairs, composition, clipboard, recursive dispose, semantics tree, packaging, native ScrollViewer automation, render-on-demand и scheduler counters.
 
 ### 3.2. Проверенное поведение
 
@@ -212,7 +217,7 @@ Skia canvas масштабируется через `displayScale`. Backbuffer �
 - Белый фон окна отображается корректно.
 - HiDPI-масштабирование подтверждено на 4K-дисплее.
 - `dart analyze` проходит без замечаний.
-- Полный `dart test` проходит: все 264 теста, включая 6 file-dialog contract-тестов, 4 style-теста, 3 control-template-теста, 6 DataContext-тестов, 9 value-precedence-тестов, 13 binding-тестов, 17 ItemsControl/virtualization-тестов, 11 ScrollViewer-тестов, 18 Grid-тестов, 7 DockPanel-тестов, 5 TextBox measurement-тестов, 2 native text-drawing-теста, 12 recursive dispose-тестов, 11 semantics-тестов, native ScrollViewer automation и все clipboard-сценарии.
+- Полный `dart test` проходит: все 266 тестов, включая 6 file-dialog contract-тестов, 4 style-теста, 3 control-template-теста, 6 DataContext-тестов, 9 value-precedence-тестов, 13 binding-тестов, 17 ItemsControl/virtualization-тестов, 11 ScrollViewer-тестов, 18 Grid-тестов, 7 DockPanel-тестов, 5 TextBox measurement-тестов, 2 native text-drawing-теста, 12 recursive dispose-тестов, 11 semantics-тестов, native ScrollViewer automation и все clipboard-сценарии.
 - Packaging на Windows x64 проверен end-to-end: `cmake --install` кладёт `dui_native.dll` (8 347 648 байт) и `icudtl.dat` (10 468 208 байт) в один каталог install-дерева; DLL тянет только системные Windows DLL (ole32, KERNEL32, USER32, SHELL32, WINMM, ADVAPI32, SETUPAPI, GDI32, OLEAUT32, IMM32, VERSION), private-зависимостей нет.
 - Бандл воспроизводим: два подряд прогона `python tools/package.py` дали одинаковый sha256 архива `7553dc6e1a9a450f25cc9ea8a8609d69543d6a1172e087e5f06fdc6f18f6deec`.
 - Сквозная проверка бандла проходит: программа, запущенная из другого рабочего каталога, находит библиотеку рядом с exe и шейпит Unicode-текст — «dui_native ABI 2 loaded from the bundle, shaped width 93.4». Негативный контроль: без `icudtl.dat` рядом с библиотекой раскладка не создаётся (`SkParagraph creation failed`), то есть проверка не пустая.
@@ -221,9 +226,10 @@ Skia canvas масштабируется через `displayScale`. Backbuffer �
 - ScrollViewer автоматизирован на реальном native backend: drag вертикального ползунка на всю свободную длину трека прокручивает до конца (offset 540 при extent 740 и viewport 200), перетаскивание дальше границ клампится в 0 и в максимум, ползунок следует за offset, клик по треку прокручивает на один viewport, клавиши `down`/`pageup`/`end`/`home` дают 240/40/540/0. Проверено и в native-тесте, и в smoke примера.
 - Найдена и устранена опасность параллельных native-тестов: SDL video не потокобезопасен, и два файла с native-окнами в параллельных изолятах (`dart test` запускает файлы параллельно) роняли процесс с `STATUS_STACK_BUFFER_OVERRUN`. Воспроизведено и на двух копиях одного и того же pre-existing файла, то есть проблема не в новом тесте. `dart_test.yaml` теперь задаёт `concurrency: 1`; native-прогон стабильно проходит 36/36 при повторных запусках.
 - Потокобезопасность native-слоя закрыта: все SDL-вызовы сериализованы process-wide рекурсивным мьютексом, второй host в процессе отклоняется с явным сообщением, `SDL_Quit()` больше не вызывается. Параллельный прогон native-файлов (`--concurrency=4`) больше не роняет процесс: вместо аварии тесты получают ошибку «Only one native host per process is supported». Три новых теста в `test/native_thread_safety_test.dart` доказывают это изолированно: два изолята одновременно тянут host (один выигрывает, второй получает понятную ошибку, процесс жив), host снова доступен после освобождения, два изолята одновременно шейпят текст.
+- Quick start проверен end-to-end на «чужом» приложении с зависимостью на собранную папку дистрибуции: `dart run` находит библиотеку внутри пакета (`Library loaded from: …\publish\native\bin\windows-x64\dui_native.dll`) и рисует окно; `dart compile exe` + `dart run duix:setup_native .` дают собранное приложение, которое грузит библиотеку рядом с exe. Установлено ограничение: в AOT package-конфигурация недоступна (`Isolate.resolvePackageUri` возвращает null), поэтому рядом с exe библиотеку копирует `setup_native`.
 - Дерево семантики подтверждено тестами: роли и имена зеркалят дерево UI, элементы без роли сворачиваются, фокус и выделение отражаются в снимке, состояние disabled и границы совпадают с контролом, контрол забирает имя label-контента, `ItemsControl` даёт list с элементами, а disposed-контрол в дерево не попадает.
 - Recursive dispose подтверждён тестами: поддерево освобождает native-раскладки, disposed-элемент отсоединяется от родителя (список детей пустеет), все потомки получают `isDisposed`, повторный dispose не освобождает ресурсы дважды, фокус снимается, disposed-элемент нельзя вернуть в дерево, `Window.dispose()` освобождает контент, а `close()` оставляет его жить.
-- CI-команды проверены локально: `dart format --output=none --set-exit-if-changed lib example test` возвращает 0, `dart analyze` чист, `dart test --exclude-tags clipboard,native` проходит 224 теста, `dart test --tags native --exclude-tags clipboard` проходит 36 native-тестов. YAML workflow разобран и проверен по структуре.
+- CI-команды проверены локально: `dart format --output=none --set-exit-if-changed lib example test` возвращает 0, `dart analyze` чист, `dart test --exclude-tags clipboard,native` проходит 226 тестов, `dart test --tags native --exclude-tags clipboard` проходит 36 native-тестов. YAML workflow разобран и проверен по структуре.
 - Legacy text drawing подтверждён native-тестом: ширина, возвращённая `dui_draw_text`, совпадает с шириной раскладки `dui_text_layout_create` для того же текста, шрифта и scale; ASCII, кириллица, emoji и RTL-строка рисуются во всех трёх выравниваниях.
 - Idle CPU после перевода `drawText` на SkParagraph не вырос: кэш раскладки на окне вернул 1.54% (до кэша было 3.08%), при этом текст теперь shaped.
 - `TextBox` измеряется теми же метриками раскладки, что и `Label`: desired width = ширина `Label` + 16, desired height = высота `Label` + 8. Текстовая часть масштабируется с `fontSize` (удвоение `fontSize` удваивает ширину текста), padding остаётся постоянным. Узкий available width клампится вместо падения, изменение текста и remount переизмеряют контрол.
@@ -317,8 +323,12 @@ native/src/file_dialog_macos.mm      — macOS NSOpenPanel и SDL NSWindow paren
 native/src/paragraph_smoke.cpp       — SkParagraph smoke-проверка
 native/CMakeLists.txt                — нативная сборка; Linux требует pkg-config и GTK 4.10+ (`libgtk-4-dev`)
 tools/bootstrap_native.py            — зависимости и сборка
-tools/package.py                    — install-правила, разбор зависимостей, воспроизводимый бандл
+tools/package.py                    — install-правила, разбор зависимостей, воспроизводимый бандл, папка дистрибуции
 tool/verify_native.dart             — сквозная проверка бандла: загрузка библиотеки и shaping
+bin/setup_native.dart               — копирование нативной библиотеки рядом с exe собранного приложения
+README.md                           — quick start, порядок поиска библиотеки, сборка и публикация (английский)
+CHANGELOG.md                        — журнал изменений пакета (английский)
+LICENSE                             — MIT
 example/native_counter.dart          — нативный интерактивный пример
 example/native_open_file_dialog.dart — системный Windows/Linux/macOS open-file dialog
 example/native_aqua_button.dart      — Aqua style/template, hover/pressed и smoke
@@ -386,7 +396,9 @@ python tools/bootstrap_native.py --textbox --smoke --diagnostics
 python tools/package.py                  # install + проверка зависимостей + бандл + сквозная проверка
 python tools/package.py --check-only     # только состав runtime-зависимостей
 python tools/package.py --skip-install   # бандл из каталога сборки, без install-правил
+python tools/package.py --dist           # папка дистрибуции пакета в build/publish
 cmake --install native/build --prefix build/release/install-tree
+dart run duix:setup_native .            # копирование библиотеки рядом с exe (для собранных приложений)
 ```
 
 Бандл собирается в `build/release/dui_native-<version>-<platform>-<arch>/` и
@@ -902,7 +914,7 @@ One-way local маскирует binding, но не отменяет его; `cl
 
 Порядок ближайших рабочих сессий:
 
-Пункты 1, 2, 4, 6, 7, 8, 9, 10, 11 требуют macOS/Linux, сторонних приложений
+Пункты 1, 2, 4, 6, 7, 8, 9, 10, 11, 13 требуют macOS/Linux, сторонних приложений
 или живого IME и выполняются пользователем; пункт 3 доступен для кодовой
 работы на текущей машине.
 
@@ -918,6 +930,7 @@ One-way local маскирует binding, но не отменяет его; `cl
 10. **Этап 8.3, остаток — нужны другие машины:** macOS — universal binary (x64+arm64) и codesign/notarization, проверка dylib rpath в собранном приложении; Linux — сборка на реальном дистрибутиве и проверка rpath `$ORIGIN` вместе с зависимостями; Windows — сборка arm64 и проверка, что arm64-библиотека тоже ставится install-правилами.
 11. **Этап 8.3, чистая машина:** развернуть бандл из `build/release/` на машине без Skia, SDL и ICU. Сейчас состав импортов DLL проверяется автоматически, но запуск на «голой» системе не выполнялся.
 12. **Потокобезопасность native-слоя (закрыт 2026-11-26):** SDL-вызовы сериализованы process-wide мьютексом, host в процессе может быть только один, `SDL_Quit()` не вызывается; поведение закреплено тремя native-тестами с двумя изолятами. Дальше по этой теме можно думать только про несколько host — для этого нужна переделка глобальной очереди событий SDL.
+13. **Публикация пакета на pub.dev:** выбрать лицензию и добавить файл `LICENSE`, добавить в pubspec поля `homepage`/`repository`, собрать нативную библиотеку для macOS x64/arm64 и Linux x64/arm64, разложить сборки в `build/dist/<платформа>-<архитектура>/`, собрать `python tools/package.py --dist` и опубликовать `dart pub publish --directory ../duix-publish`. Нужны аккаунт pub.dev и решение по лицензии; сборка остальных платформ требует чужих машин.
 
 GPU backend по-прежнему не входит в ближайшие этапы.
 
@@ -973,6 +986,49 @@ GPU backend по-прежнему не входит в ближайшие эта
 ---
 
 ## 9. Журнал работ
+
+### 2026-11-26 — английская документация и лицензия MIT
+
+Сделано:
+
+- `README.md` и `CHANGELOG.md` переведены на английский: пользовательская документация пакета должна быть на языке публикации. Внутренний рабочий документ `plan.md` остаётся на русском.
+- Добавлен `LICENSE` с лицензией MIT (copyright 2026 Andrey Maksimov) — pub.dev требует файл лицензии, без него публикация не проходит.
+
+Проверено:
+
+- `dart pub publish --dry-run --directory ../duix-publish`: ошибок нет, пакет содержит README (4 КБ), CHANGELOG и LICENSE, сжатый архив 8 МБ. Осталась одна рекомендация — поля `homepage`/`repository` в pubspec: их нельзя заполнить без созданного remote.
+- `dart analyze` — No issues found; `dart format lib bin example test` — 0 изменений.
+- `dart test --exclude-tags clipboard,native` — 226/226; `dart test --tags native --exclude-tags clipboard` — 36/36.
+
+Дальше: пункт 3 «Этап 8.1, мосты accessibility»; перед публикацией — создать remote и вписать `repository` в pubspec.
+
+### 2026-11-26 — quick start и дистрибуция пакета
+
+Сделано:
+
+- Написан `README.md` с quick start для потребителей: `dart create myapp && cd myapp`, `dart pub add duix`, минимальное приложение с окном и кнопкой, порядок поиска нативной библиотеки, сборка из исходников для разработчиков пакета, таблица поддерживаемых платформ, публикация и ограничения. Добавлен `CHANGELOG.md`.
+- Нативная библиотека теперь ищется **внутри установленного пакета** (`native/bin/<платформа>-<архитектура>/`). Путь пакета определяется через `Isolate.resolvePackageUri`, поэтому приложение, запущенное из исходников (`dart run`), находит библиотеку без сборки и без ручного копирования.
+- `NativeBindings.openAsync()` и `NativeBindings.packageDirectory()` добавлены в API; `SdlSkiaHost.initialize()` использует async-путь. Ключ платформы считается через `Abi.current()` и совпадает с ключом, который раскладывает скрипт упаковки.
+- `NativeBindings.libraryPath` показывает, откуда реально загрузилась библиотека.
+- Новый исполняемый файл пакета `bin/setup_native.dart` (`dart run duix:setup_native <dir>`): копирует библиотеку и `icudtl.dat` из установленного пакета в папку приложения. Нужен для собранных приложений: скомпилированный исполняемый файл не хранит конфигурацию пакетов, и `Isolate.resolvePackageUri` в AOT возвращает null.
+- `tools/package.py --dist` раскладывает собранную библиотеку в staging-каталог `build/dist/<платформа>-<архитектура>/` и собирает папку пакета `../duix-publish/` — исходники, `bin/setup_native.dart`, примеры, README, CHANGELOG, `pubspec.yaml` без `publish_to: none` и нативные библиотеки всех платформ, что нашлись в staging. Пишется `dist-manifest.json` с sha256 каждого файла и размером; недостающие платформы перечисляются предупреждением. Папка публикации лежит вне репозитория: pub прячет всё, что скрыто правилами `.gitignore` репозитория, а `build/` в ignore есть.
+- Имя пакета на pub.dev проверено: `dui` уже занят чужой Flutter-библиотекой (dribbahq), свободно имя `duix` — quick start использует его.
+
+Проверено:
+
+- `dart analyze` — No issues found; `dart format lib bin example test` — 0 изменений.
+- `dart test --exclude-tags clipboard,native` — 226/226 (плюс тесты packaging и поиска библиотеки в пакете), `dart test --tags native --exclude-tags clipboard` — 36/36.
+- Сквозная проверка на «чужом» приложении с зависимостью на собранную папку дистрибуции: `dart run bin/main.dart` загрузил библиотеку изнутри пакета (`…\publish\native\bin\windows-x64\dui_native.dll`) и отрисовал 3 кадра.
+- Собранное приложение: `dart compile exe bin/main.dart -o consumer.exe` + `dart run duix:setup_native .` → exe загрузил библиотеку рядом с собой и отрисовал 3 кадра.
+- `python tools/package.py --dist` собрал дистрибуцию (19 125 046 байт) с библиотекой Windows x64 и ICU.
+- `dart pub publish --dry-run --directory ../duix-publish` проходит по содержимому: README и CHANGELOG внутри, сжатый архив 8 МБ. Остаются ровно два пункта: файл `LICENSE` (обязателен) и поля `homepage`/`repository` в pubspec (рекомендация) — оба требуют решения владельца пакета.
+
+Не проверено:
+
+- Публикация на pub.dev не выполнялась: нужны аккаунт, `LICENSE` (файл ещё не выбран) и сборки библиотеки для macOS и Linux.
+- Собранные приложения на macOS и Linux не проверялись: `setup_native` и порядок поиска библиотеки там не тестировались.
+
+Дальше: пункт 3 «Этап 8.1, мосты accessibility», а также публикация пакета после выбора лицензии и сборки остальных платформ.
 
 ### 2026-11-26 — потокобезопасность native-слоя
 

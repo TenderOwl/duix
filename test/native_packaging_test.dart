@@ -24,6 +24,42 @@ void main() {
     expect(candidates, contains(_libraryName));
   });
 
+  test('the platform key names the folder inside the package', () {
+    final key = NativeBindings.platformKey;
+    final system = Platform.isWindows
+        ? 'windows'
+        : Platform.isMacOS
+            ? 'macos'
+            : 'linux';
+    expect(key, startsWith('$system-'));
+    expect(key, anyOf(endsWith('-x64'), endsWith('-arm64')));
+  });
+
+  test('the installed package holds the native library', () async {
+    final directory = await NativeBindings.packageDirectory();
+    expect(
+      directory,
+      isNotNull,
+      reason: 'the package directory is only known while running from source',
+    );
+    expect(
+      File('${directory!}${Platform.pathSeparator}pubspec.yaml').existsSync(),
+      isTrue,
+      reason: 'the package root holds the pubspec',
+    );
+
+    final candidates = NativeBindings.packageLibraryCandidates(directory);
+    expect(candidates, hasLength(1));
+    expect(candidates.first, endsWith(_libraryName));
+    expect(
+      candidates.first,
+      contains(
+        '${Platform.pathSeparator}native${Platform.pathSeparator}bin'
+        '${Platform.pathSeparator}${NativeBindings.platformKey}',
+      ),
+    );
+  });
+
   test(
     'the install rules put the ICU data next to the library',
     () {

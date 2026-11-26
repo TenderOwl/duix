@@ -14,6 +14,7 @@ import hashlib
 import json
 import os
 import platform
+import re
 import shutil
 import subprocess
 import sys
@@ -221,6 +222,104 @@ def archive_name(system: str, version: str, machine: str) -> str:
     return f"dui_native-{version}-{platform_name}-{machine}"
 
 
+def platform_key(system: str, machine: str) -> str:
+    """The folder name of a platform, the same one the Dart loader looks for."""
+    platform_name = {
+        "Windows": "windows",
+        "Darwin": "macos",
+        "Linux": "linux",
+    }[system]
+    return f"{platform_name}-{machine}"
+
+
+def collect_platform_artifacts(
+    staging: Path,
+    key: str,
+    library: Path,
+    icu: Path,
+) -> Path:
+    """Copies the built artifacts of one platform into the staging area.
+
+    Every platform build drops its library and the ICU data file into
+    `staging/<platform>/`, and the distribution takes them from there. That
+    way a release can be assembled from builds of different machines.
+    """
+    directory = staging / key
+    if directory.exists():
+        shutil.rmtree(directory)
+    directory.mkdir(parents=True)
+    shutil.copy2(library, directory / library.name)
+    shutil.copy2(icu, directory / icu.name)
+    return directory
+
+
+def build_distribution(staging: Path, output: Path, version: str) -> dict:
+    """Assembles the package folder that is published or handed to a user.
+
+    The folder holds the Dart sources, the executable that copies the native
+    library, and the prebuilt library of every platform in the staging area.
+    """
+    if output.exists():
+        shutil.rmtree(output)
+    output.mkdir(parents=True)
+
+    shutil.copytree(ROOT / "lib", output / "lib")
+    if (ROOT / "bin").exists():
+        shutil.copytree(ROOT / "bin", output / "bin")
+    if (ROOT / "example").exists():
+        shutil.copytree(ROOT / "example", output / "example")
+    for name in ("README.md", "CHANGELOG.md", "LICENSE"):
+        source = ROOT / name
+        if source.exists():
+            shutil.copy2(source, output / name)
+
+    # The published package must not keep the "do not publish" marker.
+    pubspec = (ROOT / "pubspec.yaml").read_text(encoding="utf-8")
+    pubspec = re.sub(r"^publish_to:.*\n", "", pubspec, flags=re.MULTILINE)
+    (output / "pubspec.yaml").write_text(pubspec, encoding="utf-8")
+
+    # The distribution lives inside the ignored build folder, and pub reads the
+    # ignore rules of the package root. Without this file the whole package
+    # would be hidden and the upload would be empty.
+    (output / ".pubignore").write_text(
+        "# The distribution folder holds everything that gets published.\n",
+        encoding="utf-8",
+    )
+
+    platforms = {}
+    native_root = output / "native" / "bin"
+    for directory in sorted(staging.iterdir()) if staging.exists() else []:
+        if not directory.is_dir():
+            continue
+        files = sorted(file for file in directory.iterdir() if file.is_file())
+        if not files:
+            continue
+        target = native_root / directory.name
+        target.mkdir(parents=True, exist_ok=True)
+        hashes = {}
+        for file in files:
+            shutil.copy2(file, target / file.name)
+            hashes[file.name] = sha256(target / file.name)
+        platforms[directory.name] = {
+            "files": [file.name for file in files],
+            "sha256": hashes,
+        }
+
+    manifest = {
+        "name": "duix",
+        "version": version,
+        "platforms": platforms,
+        "size": sum(
+            file.stat().st_size for file in output.rglob("*") if file.is_file()
+        ),
+    }
+    (output / "dist-manifest.json").write_text(
+        json.dumps(manifest, indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
+    return manifest
+
+
 def write_archive(directory: Path, system: str) -> Path:
     """Writes a reproducible archive of the bundle directory."""
     if system == "Windows":
@@ -327,6 +426,23 @@ def main() -> int:
         action="store_true",
         help="package from the build directory instead of the CMake install tree",
     )
+    parser.add_argument(
+        "--dist",
+        action="store_true",
+        help="assemble the distribution folder of the package",
+    )
+    parser.add_argument(
+        "--staging",
+        default=str(ROOT / "build" / "dist"),
+        help="folder that holds the built library of every platform",
+    )
+    parser.add_argument(
+        "--dist-output",
+        default=str(ROOT.parent / "duix-publish"),
+        help="folder of the assembled distribution; it has to sit outside the "
+        "repository, because pub hides every folder that the ignore rules "
+        "of the repository exclude",
+    )
     args = parser.parse_args()
 
     system = platform.system()
@@ -419,6 +535,38 @@ def main() -> int:
 
     if not args.no_verify and not verify_bundle(directory):
         return 1
+
+    if args.dist:
+        staging = Path(args.staging)
+        key = platform_key(system, machine)
+        collect_platform_artifacts(staging, key, library, icu)
+        output = Path(args.dist_output)
+        manifest = build_distribution(staging, output, args.version)
+        print(f"Distribution: {output}")
+        for platform_name, files in manifest["platforms"].items():
+            print(f"  - {platform_name}: {', '.join(files['files'])}")
+        missing = [
+            expected
+            for expected in (
+                "windows-x64",
+                "windows-arm64",
+                "macos-x64",
+                "macos-arm64",
+                "linux-x64",
+                "linux-arm64",
+            )
+            if expected not in manifest["platforms"]
+        ]
+        if missing:
+            print(
+                "WARNING: the distribution has no library for: "
+                f"{', '.join(missing)}",
+                file=sys.stderr,
+            )
+        print(
+            "Publish it with: dart pub publish --directory "
+            f"{output}"
+        )
     return 0
 
 

@@ -3,6 +3,7 @@
 import 'dart:convert';
 import 'dart:ffi';
 import 'dart:io';
+import 'dart:isolate';
 import 'dart:typed_data';
 
 import 'package:ffi/ffi.dart';
@@ -537,7 +538,7 @@ typedef _TextLayoutSelectionRectsDart = int Function(
 );
 
 final class NativeBindings {
-  NativeBindings._(DynamicLibrary library)
+  NativeBindings._(DynamicLibrary library, this.libraryPath)
       : abiVersion = library.lookupFunction<_AbiVersionNative, _AbiVersionDart>(
           'dui_abi_version',
         ),
@@ -712,6 +713,13 @@ final class NativeBindings {
   }
 
   final _AbiVersionDart abiVersion;
+
+  /// The path the native library was loaded from.
+  ///
+  /// It shows whether the library came from the installed package, from the
+  /// folder of the executable or from an explicit path.
+  final String libraryPath;
+
   final _LastErrorDart _lastError;
   final _ClipboardSetDart _clipboardSet;
   final _ClipboardGetDart _clipboardGet;
@@ -1152,16 +1160,20 @@ final class NativeBindings {
         height: value.height,
       );
 
-  static NativeBindings open({String? libraryPath}) {
+  static NativeBindings open({
+    String? libraryPath,
+    List<String> additionalCandidates = const [],
+  }) {
     final candidates = <String>[
       if (libraryPath != null) libraryPath,
       if (Platform.environment['DUI_NATIVE_LIBRARY'] case final path?) path,
+      ...additionalCandidates,
       ...defaultLibraryCandidates,
     ];
     final errors = <String>[];
     for (final candidate in candidates) {
       try {
-        return NativeBindings._(DynamicLibrary.open(candidate));
+        return NativeBindings._(DynamicLibrary.open(candidate), candidate);
       } catch (error) {
         errors.add('$candidate: $error');
       }
@@ -1170,6 +1182,77 @@ final class NativeBindings {
       'Could not load dui_native. Set DUI_NATIVE_LIBRARY or pass libraryPath.\n'
       '${errors.join('\n')}',
     );
+  }
+
+  /// Opens the native library and looks for it inside the installed package.
+  ///
+  /// A package that is installed from pub.dev carries the prebuilt library in
+  /// `native/bin/<platform>-<arch>/`, so the application finds it without
+  /// building anything. The package directory is only known while the code
+  /// runs from source: a compiled executable keeps no package configuration,
+  /// and the library has to sit next to the executable there.
+  static Future<NativeBindings> openAsync({String? libraryPath}) async {
+    final directory = await packageDirectory();
+    return open(
+      libraryPath: libraryPath,
+      additionalCandidates:
+          directory == null ? const [] : packageLibraryCandidates(directory),
+    );
+  }
+
+  /// The directory of the installed package, or null when it is unknown.
+  ///
+  /// The lookup only works while the code runs from source. A compiled
+  /// executable has no package configuration, so it returns null there.
+  static Future<String?> packageDirectory() async {
+    try {
+      final resolved = await Isolate.resolvePackageUri(
+        Uri.parse('package:$_packageName/dui.dart'),
+      );
+      if (resolved == null) return null;
+      final library = File.fromUri(resolved).parent;
+      if (library.path.endsWith('${Platform.pathSeparator}lib')) {
+        return library.parent.path;
+      }
+      return null;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// The library candidates inside an installed package.
+  static List<String> packageLibraryCandidates(String packageDirectory) {
+    final folder = '$packageDirectory${Platform.pathSeparator}native'
+        '${Platform.pathSeparator}bin${Platform.pathSeparator}$platformKey';
+    if (Platform.isWindows) {
+      return ['$folder${Platform.pathSeparator}dui_native.dll'];
+    }
+    if (Platform.isMacOS) {
+      return ['$folder${Platform.pathSeparator}libdui_native.dylib'];
+    }
+    return ['$folder${Platform.pathSeparator}libdui_native.so'];
+  }
+
+  /// The name of this package, used to resolve its own location.
+  static const _packageName = 'duix';
+
+  /// The folder name of the current platform inside `native/bin`.
+  static String get platformKey {
+    final system = Platform.isWindows
+        ? 'windows'
+        : Platform.isMacOS
+            ? 'macos'
+            : 'linux';
+    final architecture = switch (Abi.current()) {
+      Abi.windowsArm64 ||
+      Abi.macosArm64 ||
+      Abi.linuxArm64 ||
+      Abi.androidArm64 ||
+      Abi.iosArm64 =>
+        'arm64',
+      _ => 'x64',
+    };
+    return '$system-$architecture';
   }
 
   static List<String> get defaultLibraryCandidates {

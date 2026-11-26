@@ -123,3 +123,8 @@ jobs:
       # library from the release bundle.
       - name: Package
         run: python tools/package.py
+
+      # The distribution folder is what gets published, so it is assembled on
+      # every native build as well.
+      - name: Distribution
+        run: python tools/package.py --dist --no-verify
