@@ -1413,7 +1413,7 @@ char* dui_window_open_file_dialog(
     g_object_unref(store);
   }
 
-  GtkOpenDialogResult result;
+  GtkOpenDialogResult result = {};
   result.loop = g_main_loop_new(nullptr, FALSE);
   gtk_file_dialog_open(
       dialog, nullptr, nullptr, gtk_open_dialog_ready, &result);
@@ -1433,8 +1433,10 @@ char* dui_window_open_file_dialog(
                            g_error_matches(
                                result.error, G_IO_ERROR, G_IO_ERROR_CANCELLED);
     if (!dismissed) {
-      set_error(std::string("The system open-file dialog failed: ") +
-                result.error->message);
+      set_error(
+          (std::string("The system open-file dialog failed: ") +
+           result.error->message)
+              .c_str());
     }
     g_error_free(result.error);
     return nullptr;

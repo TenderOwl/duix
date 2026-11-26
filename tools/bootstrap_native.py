@@ -238,13 +238,10 @@ def skia_extra_libraries() -> str:
     if system == "Windows":
         return ";".join(["dwrite", "windowscodecs", "ole32", "uuid", "usp10"])
     if system == "Darwin":
-        # CMake has to receive the flag and the framework as separate items,
-        # otherwise the linker looks for a plain library named "AppKit".
-        frameworks = ["AppKit", "ApplicationServices", "CoreText", "CoreGraphics", "Foundation"]
-        items = []
-        for name in frameworks:
-            items += ["-framework", name]
-        return ";".join(items)
+        # The frameworks of macOS are added by the CMake project: CMake keeps
+        # the link flags and the libraries apart, so a framework cannot be
+        # passed through a variable.
+        return ""
     return ";".join(["fontconfig", "freetype", "pthread", "dl", "m"])
 
 
