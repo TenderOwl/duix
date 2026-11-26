@@ -151,7 +151,11 @@ Skia canvas масштабируется через `displayScale`. Backbuffer �
 - `DockPanel` поддерживает attached `Dock.left/top/right/bottom`, последовательное уменьшение remaining rect и `lastChildFill` для последнего видимого ребёнка;
 - `Grid` поддерживает Auto/Pixel/weighted Star tracks, наблюдаемые row/column definitions, attached row/column и rowSpan/columnSpan, spacing и physical-pixel rounding границ;
 - `ScrollViewer` поддерживает viewport/extent, двунаправленные offsets, Auto/Hidden/Visible/Disabled scrollbars, mouse wheel, keyboard scrolling, pointer capture для thumbs и clipping при render/hit test;
-- 166 Dart-тестов, включая ScrollViewer measure/scroll/input/clip, Grid tracks/span/gap/invalidate/HiDPI, DockPanel measure/arrange/invalidate, diagnostics FPS/render-on-demand, synchronous live-resize frame с увеличением physical backbuffer, layout constraints/alignment, infinite text width, clipping/rendering, horizontal scrolling, mouse caret/selection, pointer capture, surrogate pairs, composition, clipboard, render-on-demand и scheduler counters.
+- `ObservableCollection<T>` публикует точечные add/insert/remove/replace/move/reset-события, поддерживает отмену подписки и идемпотентный dispose;
+- `ItemsControl<T>` создаёт persistent children через `ItemTemplate<T>`, передаёт item в `dataContext`, переиспользует элементы по `ItemKeySelector<T>` и корректно unmount удаляет;
+- `VirtualizingStackPanel<T>` материализует только видимый диапазон с buffer, поддерживает estimated extent, измеренную переменную высоту и очистку focus при recycling;
+- `example/native_items_control.dart` демонстрирует 100 000 строк и автоматический smoke с прокруткой к середине и концу;
+- 182 Dart-теста, включая ObservableCollection/ItemsControl/virtualization, ScrollViewer measure/scroll/input/clip, Grid tracks/span/gap/invalidate/HiDPI, DockPanel measure/arrange/invalidate, diagnostics FPS/render-on-demand, synchronous live-resize frame с увеличением physical backbuffer, layout constraints/alignment, infinite text width, clipping/rendering, horizontal scrolling, mouse caret/selection, pointer capture, surrogate pairs, composition, clipboard, render-on-demand и scheduler counters.
 
 ### 3.2. Проверенное поведение
 
@@ -162,7 +166,8 @@ Skia canvas масштабируется через `displayScale`. Backbuffer �
 - Белый фон окна отображается корректно.
 - HiDPI-масштабирование подтверждено на 4K-дисплее.
 - `dart analyze` проходит без замечаний.
-- Все 164 теста при исключении двух clipboard-сценариев проходят, включая 11 ScrollViewer-тестов, 18 Grid-тестов, 7 DockPanel-тестов и FPS/render-on-demand. Два прежних полных прогона остановились только на Windows clipboard `Couldn't open clipboard`.
+- Все 180 тестов при исключении двух clipboard-сценариев проходят, включая 16 новых тестов ObservableCollection/ItemsControl/virtualization, 11 ScrollViewer-тестов, 18 Grid-тестов, 7 DockPanel-тестов и FPS/render-on-demand. Два прежних полных прогона остановились только на Windows clipboard `Couldn't open clipboard`.
+- Native items smoke на Windows проходит прокрутку к середине и концу списка из 100 000 строк: после завершения создано 16 контейнеров, extent=2 400 000, отрисованы 3 кадра. Строки примера имеют фиксированную высоту 24; переменная высота проверяется headless-тестом.
 - Native integration-тест подтверждает, что Dart callback выполняет `beginFrame/present` до возврата из `SDL_SetWindowSize`, получает logical size 240×120 и увеличенный physical backbuffer. Непрерывный drag и maximize двойным щелчком по рамке подтверждены пользователем.
 - Margin включается в `desiredSize` и исключается из фактических `bounds`; start/center/end/stretch выравнивание проверено по координатам, а `arrangedSize` сохраняет размер исходного слота.
 - Повторный `presentWindow()` без invalidate не увеличивает render/present counters; изменение `Label.text` планирует ровно один следующий кадр. SDL expose/resize могут законно запланировать дополнительный кадр.
@@ -221,6 +226,8 @@ lib/src/dock_panel.dart              — Dock, DockPanel и last-child-fill
 lib/src/grid.dart                    — GridLength, definitions и Grid layout
 lib/src/properties.dart              — свойства и bindings
 lib/src/observable.dart              — observable primitives
+lib/src/observable_collection.dart   — ObservableCollection и события изменений
+lib/src/items_control.dart           — ItemsControl и VirtualizingStackPanel
 lib/src/events.dart                  — routed events
 lib/src/drawing.dart                 — DrawingContext
 lib/src/text_buffer.dart              — UTF-16 text/selection model и команды
@@ -239,6 +246,7 @@ example/native_smoke.dart            — native smoke с автоматичес�
 example/native_text_gallery.dart     — Unicode/HiDPI text gallery и её smoke-режим
 example/native_textbox.dart          — интерактивная проверка TextBox и smoke-режим
 example/native_frame_benchmark.dart  — idle CPU и async invalidate latency
+example/native_items_control.dart    — список 100 000 элементов и virtualization smoke
 test/                                — автоматические тесты
 ```
 
@@ -249,8 +257,11 @@ dart pub get
 dart format lib example test
 dart analyze
 dart test
+dart test --name '^(?!.*clipboard).*$'
 dart run example/counter.dart
 dart run example/native_frame_benchmark.dart
+dart run example/native_items_control.dart
+dart run example/native_items_control.dart --smoke --diagnostics
 ```
 
 Нативная проверка и сборка:
@@ -284,10 +295,10 @@ python tools/bootstrap_native.py --smoke --dart "<путь-к-dart>"
 2. **P0:** legacy `drawText`, используемый `TextBox`, рисует через `drawSimpleText` без SkParagraph.
 3. **P1:** Windows clipboard cleanup нестабилен при восстановлении пустого прежнего значения: SDL `Couldn't open clipboard`; round-trip и запись самого значения при этом успешны.
 4. **P2:** SDL wait ограничен 16 мс, чтобы Dart timers получали управление; это не полностью event-driven async integration. Измеренные 1.53–1.54% idle process CPU и медианная latency около 16.3–16.5 мс пока не оправдывают усложнение backend.
-5. **P1:** нет `Grid` и `ScrollViewer`.
+5. **P2:** поиск видимого диапазона и расчёт estimated extent в `VirtualizingStackPanel` линейны по числу items; переменная высота может уточнять позицию на последующих layout pass.
 6. **P1:** binding lifecycle и отмена подписок требуют более строгой модели владения.
 7. **P1:** нет единого механизма `dispose()` для контролов и ресурсов.
-8. **P2:** нет styles/templates, `ItemsControl`, виртуализации и accessibility.
+8. **P2:** нет общих styles/control templates и accessibility.
 9. **P2:** нет packaging runtime dependencies и кроссплатформенной CI.
 
 ---
@@ -609,25 +620,31 @@ text_layout_selection_rects
 
 ## 6.1. ObservableCollection
 
-- [ ] Add/remove/insert/move/reset notifications.
-- [ ] Строгая модель подписки и disposal.
-- [ ] Не пересоздавать всё дерево при точечном изменении.
+- [x] Add/remove/insert/move/reset notifications.
+- [x] Строгая модель подписки и disposal.
+- [x] Не пересоздавать всё дерево при точечном изменении.
+
+`ObservableCollection<T>` реализует `ListBase<T>`, отдельные `add`/`insert`/`remove`/`replace`/`move`/`reset`-события с индексами и неизменяемыми списками элементов, snapshot dispatch listeners, отменяемые подписки и идемпотентный `dispose()`. После disposal мутации и новые подписки запрещены.
 
 ## 6.2. ItemsControl
 
-- [ ] Items source.
-- [ ] Item template как factory, не как rebuild существующего контрола.
-- [ ] Переиспользование контейнеров по ключу при перемещении.
-- [ ] Корректный unmount/dispose удалённых элементов.
+- [x] Items source.
+- [x] Item template как factory, не как rebuild существующего контрола.
+- [x] Переиспользование контейнеров по ключу при перемещении.
+- [x] Корректный unmount/dispose удалённых элементов.
+
+`ItemTemplate<T>` вызывается только для материализуемого item; `dataContext` хранит сам item. Ключи должны быть уникальны. Add/insert/remove/replace не пересоздают unaffected siblings, move/reset сохраняют identity по ключу. Удалённый элемент отсоединяется и unmount, включая очистку focus; смена source отменяет старую подписку.
 
 ## 6.3. VirtualizingStackPanel
 
-- [ ] Создавать только видимые элементы плюс небольшой buffer.
-- [ ] Поддерживать estimated extent.
-- [ ] Обрабатывать переменную высоту элементов.
-- [ ] Проверять focus и selection при recycling.
+- [x] Создавать только видимые элементы плюс небольшой buffer.
+- [x] Поддерживать estimated extent.
+- [x] Обрабатывать переменную высоту элементов.
+- [x] Проверять focus и selection при recycling.
 
-Критерий готовности: список из 100 000 простых элементов прокручивается без создания 100 000 контролов.
+Виртуализация использует `verticalOffset`/`viewportHeight` непосредственного родителя `ScrollViewer`; создаются видимые элементы и buffer, measured heights уточняют estimated extent. Повторная прокрутка сохраняет overlapping keyed elements, recycling очищает focus и не переносит selection state в новый контейнер. Поиск offset и extent пока линейны по числу items; сложных иерархических контейнеров и pooling отдельных контролов нет.
+
+Критерий готовности выполнен: native smoke прокручивает список из 100 000 простых элементов к середине и концу, в конечном viewport создано 16 контейнеров вместо 100 000, затем отрисованы 3 кадра. Unit-тест проверяет extent 2 400 000 и менее 50 контейнеров.
 
 ---
 
@@ -724,12 +741,14 @@ default < inherited < style < binding < local < animation
 Порядок ближайших рабочих сессий:
 
 1. **Стабилизация Windows clipboard:** устранить повторяемый сбой `Couldn't open clipboard` в native ABI-тесте.
-2. **Ручная проверка ScrollViewer:** запустить `example/native_scroll_viewer.dart`, проверить реальное SDL wheel, клавиатурную прокрутку из focused TextBox/Button, track/thumb dragging, clipping и resize при разных display scales.
-3. **Незавершённая часть этапа 1.2:** проверить сборку и Paragraph smoke на Linux (FontConfig/Freetype) и macOS (CoreText).
-4. **Ручная визуальная проверка:** открыть text gallery и TextBox на мониторах с разными масштабами, проверить clipping, selection и caret; автоматический smoke этого не заменяет.
-5. **Ручная проверка этапа 2.4:** русский, китайский/японский ввод и emoji через реальные системные IME.
+2. **Ручная проверка этапа 6:** запустить `example/native_items_control.dart`, проверить wheel, keyboard и scrollbar на списке 100 000 элементов при разных display scales; автоматический smoke не заменяет визуальную проверку плавности.
+3. **Ручная проверка ScrollViewer:** запустить `example/native_scroll_viewer.dart`, проверить реальное SDL wheel, клавиатурную прокрутку из focused TextBox/Button, track/thumb dragging, clipping и resize при разных display scales.
+4. **Этап 7.1:** определить lifecycle и отмену bindings, сохраняя persistent identity контролов.
+5. **Незавершённая часть этапа 1.2:** проверить сборку и Paragraph smoke на Linux (FontConfig/Freetype) и macOS (CoreText).
+6. **Ручная визуальная проверка:** открыть text gallery и TextBox на мониторах с разными масштабами, проверить clipping, selection и caret; автоматический smoke этого не заменяет.
+7. **Ручная проверка этапа 2.4:** русский, китайский/японский ввод и emoji через реальные системные IME.
 
-Не начинать GPU, styles или virtualization до завершения этапов 1–4.
+GPU backend по-прежнему не входит в ближайшие этапы.
 
 ---
 
@@ -768,6 +787,33 @@ default < inherited < style < binding < local < animation
 ---
 
 ## 9. Журнал работ
+
+### 2026-11-26 — этап 6, коллекции и виртуализация
+
+Сделано:
+
+- Добавлены `ObservableCollection<T>`, `CollectionChangedEvent<T>`, `CollectionChangeAction` и `CollectionSubscription`: точечные add/insert/remove/replace/move/reset, snapshot listeners, cancellation и строгий dispose.
+- Добавлены `ItemsControl<T>`, `ItemTemplate<T>`, `ItemKeySelector<T>` и `VirtualizingStackPanel<T>` с публичными exports. Поддерживаются persistent keyed identity, `dataContext`, lifecycle удаляемых элементов и смена источника.
+- Виртуализация использует viewport непосредственного `ScrollViewer`, видимый диапазон с buffer, estimated extent и измеренные переменные высоты. Повторный layout и move сохраняют подходящие существующие элементы; recycling очищает focus и не переносит selection в новый контейнер.
+- Добавлены 16 тестов: события/подписки/dispose коллекции, точечные изменения без пересоздания siblings, keyed move/reset, focus/unmount, смена source, 100 000 элементов, прокрутка к середине/концу, bounds, variable heights и recycling.
+- Добавлен `example/native_items_control.dart`: 100 000 строк фиксированной высоты 24, интерактивный `ScrollViewer`, `--smoke --diagnostics`, проверки начала/середины/конца и 3 автоматических кадра.
+- C ABI и native C++ не изменялись.
+
+Проверено:
+
+- `dart analyze` — без замечаний.
+- `dart test --name '^(?!.*clipboard).*$'` — 180 тестов проходят; два известных Windows clipboard-сценария исключены.
+- `dart run example/native_items_control.dart --smoke --diagnostics` — успешно, конечный viewport содержит 16 контейнеров, extent=2 400 000, 3 кадра.
+- Предупреждение `SkIcuLoader` о копии `icudtl.dat` рядом с Dart executable остаётся известным и не влияет на результат; native backend использует копию рядом с `dui_native.dll`.
+
+Не проверено:
+
+- Ручная визуальная плавность wheel/keyboard/scrollbar и поведение на Linux/macOS.
+- Для переменной высоты estimate уточняется по мере измерения; offset может требовать последующего layout pass, поэтому native smoke намеренно использует фиксированную высоту строк.
+
+Следующий шаг:
+
+- Ручная проверка `native_items_control.dart`, затем этап 7.1 — строгий lifecycle bindings.
 
 ### 2026-11-26 — этап 5.4, ScrollViewer
 
