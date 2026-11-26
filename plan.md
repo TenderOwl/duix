@@ -155,7 +155,10 @@ Skia canvas масштабируется через `displayScale`. Backbuffer �
 - `ItemsControl<T>` создаёт persistent children через `ItemTemplate<T>`, передаёт item в `dataContext`, переиспользует элементы по `ItemKeySelector<T>` и корректно unmount удаляет;
 - `VirtualizingStackPanel<T>` материализует только видимый диапазон с buffer, поддерживает estimated extent, измеренную переменную высоту и очистку focus при recycling;
 - `example/native_items_control.dart` демонстрирует 100 000 строк и автоматический smoke с прокруткой к середине и концу;
-- 182 Dart-теста, включая ObservableCollection/ItemsControl/virtualization, ScrollViewer measure/scroll/input/clip, Grid tracks/span/gap/invalidate/HiDPI, DockPanel measure/arrange/invalidate, diagnostics FPS/render-on-demand, synchronous live-resize frame с увеличением physical backbuffer, layout constraints/alignment, infinite text width, clipping/rendering, horizontal scrolling, mouse caret/selection, pointer capture, surrogate pairs, composition, clipboard, render-on-demand и scheduler counters.
+- `BindingSubscription.cancel()` сохраняет последнее синхронизированное значение как локальное; subscription сообщает property/mode/isCancelled;
+- `PropertyOwner.dispose()` идемпотентно отменяет bindings, запрещает дальнейшие `bind()`/`setValue()` и интегрирован с `ItemsControl.dispose()`;
+- two-way writes подавляют reentrant duplicates и синхронизируются даже без callback notification; `BindingException` сообщает property, operation и cause;
+- 192 Dart-теста, включая binding lifecycle/diagnostics, ObservableCollection/ItemsControl/virtualization, ScrollViewer measure/scroll/input/clip, Grid tracks/span/gap/invalidate/HiDPI, DockPanel measure/arrange/invalidate, diagnostics FPS/render-on-demand, synchronous live-resize frame с увеличением physical backbuffer, layout constraints/alignment, infinite text width, clipping/rendering, horizontal scrolling, mouse caret/selection, pointer capture, surrogate pairs, composition, clipboard, render-on-demand и scheduler counters.
 
 ### 3.2. Проверенное поведение
 
@@ -166,8 +169,9 @@ Skia canvas масштабируется через `displayScale`. Backbuffer �
 - Белый фон окна отображается корректно.
 - HiDPI-масштабирование подтверждено на 4K-дисплее.
 - `dart analyze` проходит без замечаний.
-- Все 180 тестов при исключении двух clipboard-сценариев проходят, включая 16 новых тестов ObservableCollection/ItemsControl/virtualization, 11 ScrollViewer-тестов, 18 Grid-тестов, 7 DockPanel-тестов и FPS/render-on-demand. Два прежних полных прогона остановились только на Windows clipboard `Couldn't open clipboard`.
-- Native items smoke на Windows проходит прокрутку к середине и концу списка из 100 000 строк: после завершения создано 16 контейнеров, extent=2 400 000, отрисованы 3 кадра. Строки примера имеют фиксированную высоту 24; переменная высота проверяется headless-тестом.
+- Все 190 тестов при исключении двух clipboard-сценариев проходят, включая 13 binding-тестов, 17 ItemsControl/virtualization-тестов, 11 ScrollViewer-тестов, 18 Grid-тестов, 7 DockPanel-тестов и FPS/render-on-demand. Два прежних полных прогона остановились только на Windows clipboard `Couldn't open clipboard`.
+- Native items smoke на Windows проходит прокрутку к середине и концу списка из 100 000 строк: после завершения создано 16 контейнеров, extent=2 400 000, отрисованы 3 кадра. Строки примера имеют фиксированную высоту 24; переменная высота проверяется headless-тестом. Ручная проверка примера подтверждена пользователем.
+- Cancel/dispose bindings не изменяют последнее effective value, source после отмены не влияет на контрол. Повторная запись того же two-way value и synchronous reentrant notification не создают дополнительных property changes; failed initial read оставляет прежний binding активным.
 - Native integration-тест подтверждает, что Dart callback выполняет `beginFrame/present` до возврата из `SDL_SetWindowSize`, получает logical size 240×120 и увеличенный physical backbuffer. Непрерывный drag и maximize двойным щелчком по рамке подтверждены пользователем.
 - Margin включается в `desiredSize` и исключается из фактических `bounds`; start/center/end/stretch выравнивание проверено по координатам, а `arrangedSize` сохраняет размер исходного слота.
 - Повторный `presentWindow()` без invalidate не увеличивает render/present counters; изменение `Label.text` планирует ровно один следующий кадр. SDL expose/resize могут законно запланировать дополнительный кадр.
@@ -296,8 +300,8 @@ python tools/bootstrap_native.py --smoke --dart "<путь-к-dart>"
 3. **P1:** Windows clipboard cleanup нестабилен при восстановлении пустого прежнего значения: SDL `Couldn't open clipboard`; round-trip и запись самого значения при этом успешны.
 4. **P2:** SDL wait ограничен 16 мс, чтобы Dart timers получали управление; это не полностью event-driven async integration. Измеренные 1.53–1.54% idle process CPU и медианная latency около 16.3–16.5 мс пока не оправдывают усложнение backend.
 5. **P2:** поиск видимого диапазона и расчёт estimated extent в `VirtualizingStackPanel` линейны по числу items; переменная высота может уточнять позицию на последующих layout pass.
-6. **P1:** binding lifecycle и отмена подписок требуют более строгой модели владения.
-7. **P1:** нет единого механизма `dispose()` для контролов и ресурсов.
+6. **P1:** приоритеты default/inherited/style/binding/local/animation ещё не реализованы; lifecycle самих bindings строго определён.
+7. **P1:** базовый `PropertyOwner.dispose()` отменяет bindings, но единый recursive dispose контролов и остальных ресурсов ещё не реализован.
 8. **P2:** нет общих styles/control templates и accessibility.
 9. **P2:** нет packaging runtime dependencies и кроссплатформенной CI.
 
@@ -652,10 +656,14 @@ text_layout_selection_rects
 
 ## 7.1. Жизненный цикл bindings
 
-- [ ] Определить поведение `cancel()`: отсоединение, сохранение последнего значения или возврат к local value.
-- [ ] Отменять bindings при dispose.
-- [ ] Предотвращать повторное уведомление при двустороннем обновлении.
-- [ ] Добавить binding diagnostics и понятные ошибки.
+- [x] Определить поведение `cancel()`: отсоединение, сохранение последнего значения или возврат к local value.
+- [x] Отменять bindings при dispose.
+- [x] Предотвращать повторное уведомление при двустороннем обновлении.
+- [x] Добавить binding diagnostics и понятные ошибки.
+
+`cancel()` отписывает listener и сохраняет последнее синхронизированное значение в local value; повторный cancel безопасен. Замена binding отменяет прежний, а ошибка initial read нового источника не разрушает прежнюю привязку. `PropertyOwner.dispose()` отменяет все bindings и запрещает последующие `bind()`/`setValue()`, но оставляет чтение сохранённых значений доступным. `ItemsControl.dispose()` вызывает базовый dispose.
+
+Two-way write подавляет reentrant source callback, затем выполняет одну синхронизацию и одно property notification; это работает и для `CallbackBinding`, который не уведомляет из write. `BindingSubscription` предоставляет `property`, `mode`, `isCancelled` и диагностический `toString()`. `BindingException` содержит property, operation (`Initial read`/`Read`/`Write`/subscription) и исходную cause.
 
 ## 7.2. Приоритеты значений
 
@@ -741,12 +749,11 @@ default < inherited < style < binding < local < animation
 Порядок ближайших рабочих сессий:
 
 1. **Стабилизация Windows clipboard:** устранить повторяемый сбой `Couldn't open clipboard` в native ABI-тесте.
-2. **Ручная проверка этапа 6:** запустить `example/native_items_control.dart`, проверить wheel, keyboard и scrollbar на списке 100 000 элементов при разных display scales; автоматический smoke не заменяет визуальную проверку плавности.
+2. **Этап 7.2:** зафиксировать и реализовать приоритеты default/inherited/style/binding/local/animation, не нарушая семантику cancel/dispose.
 3. **Ручная проверка ScrollViewer:** запустить `example/native_scroll_viewer.dart`, проверить реальное SDL wheel, клавиатурную прокрутку из focused TextBox/Button, track/thumb dragging, clipping и resize при разных display scales.
-4. **Этап 7.1:** определить lifecycle и отмену bindings, сохраняя persistent identity контролов.
-5. **Незавершённая часть этапа 1.2:** проверить сборку и Paragraph smoke на Linux (FontConfig/Freetype) и macOS (CoreText).
-6. **Ручная визуальная проверка:** открыть text gallery и TextBox на мониторах с разными масштабами, проверить clipping, selection и caret; автоматический smoke этого не заменяет.
-7. **Ручная проверка этапа 2.4:** русский, китайский/японский ввод и emoji через реальные системные IME.
+4. **Незавершённая часть этапа 1.2:** проверить сборку и Paragraph smoke на Linux (FontConfig/Freetype) и macOS (CoreText).
+5. **Ручная визуальная проверка:** открыть text gallery и TextBox на мониторах с разными масштабами, проверить clipping, selection и caret; автоматический smoke этого не заменяет.
+6. **Ручная проверка этапа 2.4:** русский, китайский/японский ввод и emoji через реальные системные IME.
 
 GPU backend по-прежнему не входит в ближайшие этапы.
 
@@ -788,6 +795,27 @@ GPU backend по-прежнему не входит в ближайшие эта
 
 ## 9. Журнал работ
 
+### 2026-11-26 — этап 7.1, жизненный цикл bindings
+
+Сделано:
+
+- Зафиксировано поведение `BindingSubscription.cancel()`: listener отключается, последнее синхронизированное значение сохраняется как local, повторная отмена безопасна.
+- `BindingSubscription` предоставляет property, mode, isCancelled и диагностический `toString()`.
+- Добавлен идемпотентный `PropertyOwner.dispose()` с сохранением значений и запретом дальнейших `bind()`/`setValue()`; `ItemsControl.dispose()` теперь также освобождает property subscriptions.
+- Two-way writes подавляют reentrant callbacks, не записывают неизменившееся значение, публикуют одно property change и синхронизируются даже если `CallbackBinding.write()` сам не уведомляет listeners.
+- Добавлен `BindingException` с property, operation и cause. Initial read нового binding выполняется до отмены прежнего, поэтому ошибка не разрушает рабочую привязку. Read-only source отклоняется для two-way до attach.
+- Добавлены 9 binding-тестов и 1 интеграционный тест dispose в ItemsControl. C ABI и native C++ не изменялись.
+
+Проверено:
+
+- `dart analyze` — без замечаний.
+- `dart test --name '^(?!.*clipboard).*$'` — 190 тестов проходят, включая 13 binding-тестов и 17 ItemsControl/virtualization-тестов.
+- `git diff --check` — без ошибок.
+
+Следующий шаг:
+
+- Этап 7.2: зафиксировать приоритеты значений и добавить их без изменения cancel/dispose semantics.
+
 ### 2026-11-26 — этап 6, коллекции и виртуализация
 
 Сделано:
@@ -805,15 +833,16 @@ GPU backend по-прежнему не входит в ближайшие эта
 - `dart test --name '^(?!.*clipboard).*$'` — 180 тестов проходят; два известных Windows clipboard-сценария исключены.
 - `dart run example/native_items_control.dart --smoke --diagnostics` — успешно, конечный viewport содержит 16 контейнеров, extent=2 400 000, 3 кадра.
 - Предупреждение `SkIcuLoader` о копии `icudtl.dat` рядом с Dart executable остаётся известным и не влияет на результат; native backend использует копию рядом с `dui_native.dll`.
+- Пользователь вручную проверил интерактивный пример и подтвердил корректную работу.
 
 Не проверено:
 
-- Ручная визуальная плавность wheel/keyboard/scrollbar и поведение на Linux/macOS.
+- Поведение на Linux/macOS и на нескольких display scales.
 - Для переменной высоты estimate уточняется по мере измерения; offset может требовать последующего layout pass, поэтому native smoke намеренно использует фиксированную высоту строк.
 
-Следующий шаг:
+Следующий шаг на момент записи:
 
-- Ручная проверка `native_items_control.dart`, затем этап 7.1 — строгий lifecycle bindings.
+- Этап 7.1 — строгий lifecycle bindings; впоследствии выполнен.
 
 ### 2026-11-26 — этап 5.4, ScrollViewer
 

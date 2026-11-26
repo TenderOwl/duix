@@ -110,6 +110,28 @@ void main() {
       expect(a.isFocused, isFalse);
       expect(window.focusedElement, isNull);
     });
+
+    test('dispose releases collection and property subscriptions', () {
+      final items = ObservableCollection<String>(['a']);
+      final value = ObservableValue<double>(1);
+      final control = ItemsControl<String>(itemsSource: items);
+      final property = DuiProperty<ItemsControl<String>, double>(
+        name: 'test',
+        defaultValue: 0,
+      );
+      final subscription = control.bind(property, value.asBinding());
+      Window(width: 200, height: 100, content: control);
+
+      control.dispose();
+      control.dispose();
+      items.add('ignored');
+      value.value = 2;
+
+      expect(control.isDisposed, isTrue);
+      expect(subscription.isCancelled, isTrue);
+      expect(control.containerCount, 0);
+      expect(control.getValue(property), 1);
+    });
   });
 
   group('VirtualizingStackPanel', () {

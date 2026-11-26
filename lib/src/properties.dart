@@ -92,7 +92,22 @@ final class CallbackBinding<T> implements Binding<T> {
   }
 }
 
+final class BindingException implements Exception {
+  BindingException(this.property, this.operation, this.cause);
+
+  final DuiProperty<dynamic, dynamic> property;
+  final String operation;
+  final Object cause;
+
+  @override
+  String toString() => 'BindingException: $operation failed for property '
+      '"${property.name}": $cause';
+}
+
 abstract interface class BindingSubscription {
+  DuiProperty<dynamic, dynamic> get property;
+  BindingMode get mode;
+  bool get isCancelled;
   void cancel();
 }
 
@@ -100,6 +115,9 @@ abstract class PropertyOwner extends ObservableObject {
   final _localValues = <DuiProperty<dynamic, dynamic>, Object?>{};
   final _bindingSubscriptions =
       <DuiProperty<dynamic, dynamic>, _ActiveBinding<dynamic>>{};
+  bool _isDisposed = false;
+
+  bool get isDisposed => _isDisposed;
 
   T getValue<T>(DuiProperty<dynamic, T> property) {
     final active = _bindingSubscriptions[property];
@@ -108,13 +126,15 @@ abstract class PropertyOwner extends ObservableObject {
   }
 
   void setValue<T>(DuiProperty<dynamic, T> property, T value) {
+    _checkNotDisposed();
     final active = _bindingSubscriptions[property];
     if (active != null && active.mode == BindingMode.twoWay) {
+      if (active.lastValue == value) return;
       active.write(value);
       return;
     }
 
-    _bindingSubscriptions.remove(property)?.cancel();
+    active?.cancel();
     final oldValue = getValue(property);
     _localValues[property] = value;
     if (oldValue != value) {
@@ -127,31 +147,63 @@ abstract class PropertyOwner extends ObservableObject {
     Binding<T> binding, {
     BindingMode mode = BindingMode.oneWay,
   }) {
+    _checkNotDisposed();
     if (mode == BindingMode.twoWay && !binding.canWrite) {
       throw ArgumentError('A two-way binding must support writes.');
     }
 
-    _bindingSubscriptions.remove(property)?.cancel();
+    late final T newValue;
+    try {
+      newValue = binding.read();
+    } catch (error) {
+      throw BindingException(property, 'Initial read', error);
+    }
+
+    _bindingSubscriptions[property]?.cancel();
     final oldValue = getValue(property);
     late final _ActiveBinding<T> active;
-    active = _ActiveBinding<T>(property, binding, mode, () {
-      final previousValue = active.lastValue;
-      final newValue = binding.read();
-      active.lastValue = newValue;
-      if (previousValue != newValue) {
-        onDuiPropertyChanged(property, previousValue, newValue);
-      }
-    });
-    active.lastValue = oldValue;
+    active = _ActiveBinding<T>(
+      property,
+      binding,
+      mode,
+      (previous, current) => onDuiPropertyChanged(property, previous, current),
+      () => _bindingCancelled(active),
+    )..lastValue = oldValue;
     _bindingSubscriptions[property] = active;
-    binding.addListener(active.sourceChanged);
+    try {
+      binding.addListener(active.sourceChanged);
+    } catch (error) {
+      active.cancel();
+      throw BindingException(property, 'Listener subscription', error);
+    }
 
-    final newValue = binding.read();
     active.lastValue = newValue;
     if (oldValue != newValue) {
       onDuiPropertyChanged(property, oldValue, newValue);
     }
     return active;
+  }
+
+  /// Detaches every binding and keeps its latest synchronized value as local.
+  /// The owner cannot be bound or mutated through [setValue] after disposal.
+  void dispose() {
+    if (_isDisposed) return;
+    _isDisposed = true;
+    for (final binding in List.of(_bindingSubscriptions.values)) {
+      binding.cancel();
+    }
+    _bindingSubscriptions.clear();
+  }
+
+  void _bindingCancelled<T>(_ActiveBinding<T> binding) {
+    final current = _bindingSubscriptions[binding.property];
+    if (!identical(current, binding)) return;
+    _bindingSubscriptions.remove(binding.property);
+    _localValues[binding.property] = binding.lastValue;
+  }
+
+  void _checkNotDisposed() {
+    if (_isDisposed) throw StateError('The property owner is disposed.');
   }
 
   void onDuiPropertyChanged<T>(
@@ -169,20 +221,62 @@ final class _ActiveBinding<T> implements BindingSubscription {
     this.binding,
     this.mode,
     this.onChanged,
+    this.onCancelled,
   );
 
+  @override
   final DuiProperty<dynamic, T> property;
   final Binding<T> binding;
+  @override
   final BindingMode mode;
-  final void Function() onChanged;
+  final void Function(T oldValue, T newValue) onChanged;
+  final void Function() onCancelled;
   late T lastValue;
   bool _cancelled = false;
+  bool _isWriting = false;
+  bool _isSynchronizing = false;
 
-  T read() => binding.read();
-  void write(T value) => binding.write(value);
+  @override
+  bool get isCancelled => _cancelled;
+
+  T read() {
+    try {
+      return binding.read();
+    } catch (error) {
+      throw BindingException(property, 'Read', error);
+    }
+  }
+
+  void write(T value) {
+    if (_cancelled) throw StateError('The binding subscription is cancelled.');
+    if (_isWriting) return;
+    _isWriting = true;
+    try {
+      binding.write(value);
+    } catch (error) {
+      throw BindingException(property, 'Write', error);
+    } finally {
+      _isWriting = false;
+    }
+    _synchronize();
+  }
 
   void sourceChanged() {
-    if (!_cancelled) onChanged();
+    if (!_cancelled && !_isWriting) _synchronize();
+  }
+
+  void _synchronize() {
+    if (_cancelled || _isSynchronizing) return;
+    _isSynchronizing = true;
+    try {
+      final previousValue = lastValue;
+      final newValue = read();
+      if (previousValue == newValue) return;
+      lastValue = newValue;
+      onChanged(previousValue, newValue);
+    } finally {
+      _isSynchronizing = false;
+    }
   }
 
   @override
@@ -190,5 +284,11 @@ final class _ActiveBinding<T> implements BindingSubscription {
     if (_cancelled) return;
     _cancelled = true;
     binding.removeListener(sourceChanged);
+    onCancelled();
   }
+
+  @override
+  String toString() =>
+      'BindingSubscription(property: ${property.name}, mode: $mode, '
+      'cancelled: $_cancelled)';
 }

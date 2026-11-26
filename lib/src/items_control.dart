@@ -172,11 +172,13 @@ class ItemsControl<T> extends UIElement {
   @override
   void onUnmounted() => _unsubscribe();
 
+  @override
   void dispose() {
     if (_isDisposed) return;
     _unsubscribe();
     _removeAllContainers();
     _isDisposed = true;
+    super.dispose();
   }
 
   void _subscribe() {
