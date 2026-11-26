@@ -5,6 +5,7 @@ import 'focus_decoration.dart';
 import 'geometry.dart';
 import 'headless_text_layout.dart';
 import 'properties.dart';
+import 'semantics.dart';
 import 'text_buffer.dart';
 import 'text_layout.dart';
 import 'ui_element.dart';
@@ -254,6 +255,23 @@ final class TextBox extends Control {
     if (isFocused) _mountedHost?.stopTextInput(this);
     _mountedHost = null;
   }
+
+  @override
+  SemanticsRole get semanticsRole => SemanticsRole.textBox;
+
+  @override
+  String get semanticsValue => text;
+
+  @override
+  SemanticsState get semanticsState => SemanticsState(
+        focused: isFocused,
+        disabled: !isEnabled,
+        editable: isEnabled,
+      );
+
+  @override
+  (int, int)? get semanticsSelection =>
+      (buffer.selection.start, buffer.selection.end);
 
   @override
   void onDisposed() {

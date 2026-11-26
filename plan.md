@@ -184,7 +184,11 @@ Skia canvas масштабируется через `displayScale`. Backbuffer �
 - `ItemsControl` использует единый флаг disposed из `PropertyOwner` и освобождает контейнеры при dispose;
 - native clipboard-тесты помечены тегом `clipboard`, тесты с native-библиотекой — тегом `native` (оба объявлены в `dart_test.yaml`); теги навешиваются на первый импорт файла, как их разбирает package:test;
 - CI в `.github/workflows/ci.yml`: job `dart` на Windows/macOS/Linux (pub get, format-check, analyze, `dart test --exclude-tags clipboard,native`) и best-effort job `native` на Windows/Linux (сборка SDL3+Skia из исходников, native-тесты и smoke, `continue-on-error`, запуск по расписанию и вручную);
-- 247 Dart-тестов, включая file-dialog contract, formatted clipboard snapshots, styles/templates, DataContext inheritance/accessors/reparenting, value precedence/transitions, binding lifecycle/diagnostics, ObservableCollection/ItemsControl/virtualization, ScrollViewer measure/scroll/input/clip, Grid tracks/span/gap/invalidate/HiDPI, DockPanel measure/arrange/invalidate, diagnostics FPS/render-on-demand, synchronous live-resize frame с увеличением physical backbuffer, layout constraints/alignment, infinite text width, clipping/rendering, horizontal scrolling, mouse caret/selection, pointer capture, surrogate pairs, composition, clipboard, recursive dispose, render-on-demand и scheduler counters.
+- backend-independent семантика: `SemanticsRole`, `SemanticsState`, `SemanticsNode` и `SemanticsTree`; дерево строится по требованию из дерева контролов и снимает role, name, value, state, bounds и выделение текста;
+- элементы без роли плоско сворачиваются (их дети поднимаются к родителю), а контрол с именем забирает имя своего label-контента, чтобы текст не дублировался;
+- `Window.semanticsTree` — снимок семантики дерева контента; фокус и выделение читаются в момент построения, поэтому снимок всегда актуален;
+- `Label` → label, `Button` → button (с pressed), `TextBox` → textBox (value, editable, выделение), `ItemsControl` → list, `ContentControl` берёт имя из своего контента;
+- 258 Dart-тестов, включая file-dialog contract, formatted clipboard snapshots, styles/templates, DataContext inheritance/accessors/reparenting, value precedence/transitions, binding lifecycle/diagnostics, ObservableCollection/ItemsControl/virtualization, ScrollViewer measure/scroll/input/clip, Grid tracks/span/gap/invalidate/HiDPI, DockPanel measure/arrange/invalidate, diagnostics FPS/render-on-demand, synchronous live-resize frame с увеличением physical backbuffer, layout constraints/alignment, infinite text width, clipping/rendering, horizontal scrolling, mouse caret/selection, pointer capture, surrogate pairs, composition, clipboard, recursive dispose, semantics tree, render-on-demand и scheduler counters.
 
 ### 3.2. Проверенное поведение
 
@@ -195,7 +199,8 @@ Skia canvas масштабируется через `displayScale`. Backbuffer �
 - Белый фон окна отображается корректно.
 - HiDPI-масштабирование подтверждено на 4K-дисплее.
 - `dart analyze` проходит без замечаний.
-- Полный `dart test` проходит: все 247 тестов, включая 6 file-dialog contract-тестов, 4 style-теста, 3 control-template-теста, 6 DataContext-тестов, 9 value-precedence-тестов, 13 binding-тестов, 17 ItemsControl/virtualization-тестов, 11 ScrollViewer-тестов, 18 Grid-тестов, 7 DockPanel-тестов, 5 TextBox measurement-тестов, 2 native text-drawing-теста, 12 recursive dispose-тестов и все clipboard-сценарии.
+- Полный `dart test` проходит: все 258 тестов, включая 6 file-dialog contract-тестов, 4 style-теста, 3 control-template-теста, 6 DataContext-тестов, 9 value-precedence-тестов, 13 binding-тестов, 17 ItemsControl/virtualization-тестов, 11 ScrollViewer-тестов, 18 Grid-тестов, 7 DockPanel-тестов, 5 TextBox measurement-тестов, 2 native text-drawing-теста, 12 recursive dispose-тестов, 11 semantics-тестов и все clipboard-сценарии.
+- Дерево семантики подтверждено тестами: роли и имена зеркалят дерево UI, элементы без роли сворачиваются, фокус и выделение отражаются в снимке, состояние disabled и границы совпадают с контролом, контрол забирает имя label-контента, `ItemsControl` даёт list с элементами, а disposed-контрол в дерево не попадает.
 - Recursive dispose подтверждён тестами: поддерево освобождает native-раскладки, disposed-элемент отсоединяется от родителя (список детей пустеет), все потомки получают `isDisposed`, повторный dispose не освобождает ресурсы дважды, фокус снимается, disposed-элемент нельзя вернуть в дерево, `Window.dispose()` освобождает контент, а `close()` оставляет его жить.
 - CI-команды проверены локально: `dart format --output=none --set-exit-if-changed lib example test` возвращает 0, `dart analyze` чист, `dart test --exclude-tags clipboard,native` проходит 212 тестов, `dart test --tags native` проходит 35 native-тестов. YAML workflow разобран и проверен по структуре.
 - Legacy text drawing подтверждён native-тестом: ширина, возвращённая `dui_draw_text`, совпадает с шириной раскладки `dui_text_layout_create` для того же текста, шрифта и scale; ASCII, кириллица, emoji и RTL-строка рисуются во всех трёх выравниваниях.
@@ -263,6 +268,7 @@ lib/src/controls.dart                — compatibility barrel для контр�
 lib/src/content_control.dart         — ContentControl и content notifications
 lib/src/control_template.dart        — ControlTemplate и ContentPresenter
 lib/src/styles.dart                  — типизированные Style и DuiSetter
+lib/src/semantics.dart              — SemanticsRole, SemanticsState, SemanticsNode, SemanticsTree
 lib/src/button.dart                  — Button и persistent template
 lib/src/label.dart                   — Label
 lib/src/text_box.dart                — TextBox, editing, scrolling и IME
@@ -302,6 +308,7 @@ example/native_scroll_viewer.dart   — ScrollViewer, прокрутка и smok
 test/                                — автоматические тесты
 test/text_box_measurement_test.dart — измерение TextBox по метрикам раскладки
 test/dispose_test.dart              — recursive dispose элементов и поддеревьев
+test/semantics_test.dart            — дерево семантики, фокус и выделение
 dart_test.yaml                       — объявление тегов clipboard и native
 .github/workflows/ci.yml            — CI: Dart на трёх ОС и best-effort native job
 ```
@@ -367,7 +374,7 @@ python tools/bootstrap_native.py --smoke --dart "<путь-к-dart>"
 5. **P2:** поиск видимого диапазона и расчёт estimated extent в `VirtualizingStackPanel` линейны по числу items; переменная высота может уточнять позицию на последующих layout pass.
 6. **P1:** value layers, DataContext inheritance и styles реализованы, но универсальное inherited-property propagation и animation engine ещё отсутствуют; control templates пока поддержаны только у Button.
 7. **P1 (закрыт 2026-11-26):** единый recursive dispose реализован — `UIElement.dispose()` освобождает поддерево, `onDisposed()` отдаёт контролам их ресурсы, `removeChild()` унифицирует удаление ребёнка, `Window.dispose()` закрывает дерево окна.
-8. **P2:** accessibility ещё не реализован.
+8. **P2 (частично закрыт 2026-11-26):** accessibility — реализована backend-independent модель семантики (`SemanticsTree`, role/name/value/state/bounds, синхронизация focus и selection), но платформенные мосты UI Automation, NSAccessibility и AT-SPI ещё нет.
 9. **P2 (частично закрыт 2026-11-26):** кроссплатформенный CI добавлен (Dart job на трёх ОС и best-effort native job), но packaging runtime dependencies и воспроизводимый release build ещё отсутствуют. Native job на macOS не запускается: у hosted-runner нет window server, а сборка Skia требует больше диска и времени, чем даёт раннер.
 
 ---
@@ -771,11 +778,18 @@ One-way local маскирует binding, но не отменяет его; `cl
 
 ## 8.1. Accessibility
 
-- [ ] Добавить semantics к дереву: role, name, value, state, bounds.
+- [x] Добавить semantics к дереву: role, name, value, state, bounds.
 - [ ] Windows UI Automation.
 - [ ] macOS NSAccessibility.
 - [ ] Linux AT-SPI.
-- [ ] Синхронизировать focus и selection.
+- [x] Синхронизировать focus и selection.
+
+Семантика backend-independent: `SemanticsTree` строится по требованию из дерева
+контролов и снимает role, name, value, state, bounds и выделение текста. Фокус и
+выделение читаются в момент построения, поэтому снимок всегда актуален. Элементы
+без роли сворачиваются, контрол забирает имя label-контента. Платформенные мосты
+(UI Automation, NSAccessibility, AT-SPI) не реализованы: им нужен native-слой и
+проверка на macOS/Linux.
 
 ## 8.2. Нативная интеграция
 
@@ -844,7 +858,7 @@ One-way local маскирует binding, но не отменяет его; `cl
 
 1. **Ручная проверка этапа 8.2:** на macOS собрать Objective‑C++ backend и проверить `NSOpenPanel` в parent/ownerless-режимах, title/initialDirectory/filters и Unicode paths; на Linux аналогично проверить GTK 4.10+ на X11/Wayland (parent пока ownerless).
 2. **Ручная проверка clipboard:** проверить вставку CF_HTML в Word, браузер и другие сторонние приложения.
-3. **Этап 8.1:** добавить semantics к дереву и синхронизировать role/name/value/state/bounds с focus и selection.
+3. **Этап 8.1, мосты:** модель семантики готова; остались native-мосты accessibility — Windows UI Automation, macOS NSAccessibility и Linux AT-SPI. Начинать с Windows UI Automation: его можно собрать и проверить на этой машине, тогда как macOS и Linux требуют чужих машин.
 4. **Ручная проверка ScrollViewer:** автоматическая часть закрыта — `example/native_scroll_viewer.dart --smoke` проходит на Windows (wheel прокрутка, offsets, bounds, 3 кадра, scale 2.0); остаётся визуальная проверка track/thumb dragging, clipping и resize при разных display scales.
 5. **Автоматизация ScrollViewer:** thumb dragging и клавиатурная прокрутка доступны через публичные `dispatchPointerDown/Move/Up` и `dispatchKeyDown`, поэтому их можно закрыть в smoke-режиме.
 6. **Незавершённая часть этапа 1.2:** проверить сборку и Paragraph smoke на Linux (FontConfig/Freetype) и macOS (CoreText).
@@ -897,6 +911,32 @@ GPU backend по-прежнему не входит в ближайшие эта
 ---
 
 ## 9. Журнал работ
+
+### 2026-11-26 — этап 8.1, backend-independent семантика
+
+Сделано:
+
+- Добавлен `lib/src/semantics.dart`: `SemanticsRole`, `SemanticsState`, `SemanticsNode` и `SemanticsTree`. Узел снимает role, name, value, state, bounds и диапазон выделения текста; `SemanticsNode.element` держит ссылку на контрол, чтобы платформенный мост мог сопоставить native-объект с элементом.
+- `SemanticsTree` строится по требованию: `SemanticsTree.fromElement(element)` и `Window.semanticsTree`. Фокус и выделение читаются в момент построения, поэтому снимок всегда актуален и не требует подписки на изменения.
+- Элементы без роли (`SemanticsRole.none`) плоско сворачиваются — их дети поднимаются к родителю, дерево остаётся компактным. Контрол с непустым именем забирает имя своего label-контента, поэтому текст кнопки не дублируется в дереве.
+- `UIElement` получил хуки `semanticsRole`, `semanticsName`, `semanticsValue`, `semanticsState` и `semanticsSelection`; `Control` по умолчанию отдаёт `focused` и `disabled`.
+- Роли контролов: `Label` → label, `Button` → button (с `pressed`), `TextBox` → textBox (value, editable, выделение), `ItemsControl` → list, `ContentControl` берёт имя из контента.
+
+Проверено:
+
+- `dart analyze` — без замечаний; `dart format` — без изменений.
+- `dart test` — 258/258; `dart test --exclude-tags clipboard,native` — 223/223; `dart test --tags native --exclude-tags clipboard` — 31/31.
+- Новый `test/semantics_test.dart` (11 тестов): роли и имена зеркалят дерево UI, элементы без роли сворачиваются, фокус отражается и переносится при смене, выделение и его схлопывание видны в узле, disabled и границы совпадают с контролом, контрол забирает имя label-контента, `ItemsControl` даёт list с элементами, disposed-контрол в дерево не попадает.
+- Native-смоуки (textbox, items control) проходят.
+
+Не проверено:
+
+- Платформенные мосты (UI Automation, NSAccessibility, AT-SPI) не реализованы — им нужен native-слой и проверка на macOS/Linux.
+- Снимок семантики не проверялся в живом accessibility-инструменте (NVDA, VoiceOver, Orca) — до мостов это невозможно.
+
+Следующий шаг:
+
+- Windows UI Automation поверх готовой `SemanticsTree`: мост в native-слое плюс проверка на этой машине.
 
 ### 2026-11-26 — этап 8.4, CI на трёх ОС
 

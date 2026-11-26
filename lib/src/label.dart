@@ -3,6 +3,7 @@ import 'drawing.dart';
 import 'geometry.dart';
 import 'headless_text_layout.dart';
 import 'properties.dart';
+import 'semantics.dart';
 import 'text_layout.dart';
 import 'ui_element.dart';
 
@@ -61,6 +62,12 @@ final class Label extends Control {
 
   @override
   bool get isFocusable => false;
+
+  @override
+  SemanticsRole get semanticsRole => SemanticsRole.label;
+
+  @override
+  String get semanticsName => text;
 
   @override
   Size measureCore(Size availableSize) {

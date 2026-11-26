@@ -23,6 +23,7 @@ export 'src/panel.dart';
 export 'src/properties.dart';
 export 'src/recording_renderer.dart';
 export 'src/scroll_viewer.dart';
+export 'src/semantics.dart';
 export 'src/stack_panel.dart';
 export 'src/styles.dart';
 export 'src/label.dart';

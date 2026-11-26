@@ -10,6 +10,7 @@ import 'frame_scheduler.dart';
 import 'geometry.dart';
 import 'headless_text_layout.dart';
 import 'observable.dart';
+import 'semantics.dart';
 import 'text_layout.dart';
 import 'ui_element.dart';
 
@@ -169,6 +170,18 @@ final class Window extends ObservableObject implements WindowHost {
   }
 
   UIElement? get content => _content;
+
+  /// A snapshot of the semantics of the content tree.
+  ///
+  /// The tree is built on demand and reads the focus and the selection at the
+  /// moment of the build.
+  SemanticsTree get semanticsTree {
+    final content = _content;
+    return content == null
+        ? SemanticsTree.empty()
+        : SemanticsTree.fromElement(content);
+  }
+
   @override
   UIElement? get rootElement => _content;
   set content(UIElement? value) {

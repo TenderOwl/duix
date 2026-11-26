@@ -5,6 +5,7 @@ import 'geometry.dart';
 import 'label.dart';
 import 'observable_collection.dart';
 import 'scroll_viewer.dart';
+import 'semantics.dart';
 import 'ui_element.dart';
 
 typedef ItemTemplate<T> = UIElement Function(T item);
@@ -164,6 +165,9 @@ class ItemsControl<T> extends UIElement {
   @override
   Iterable<UIElement> get logicalChildren =>
       _containers.map((container) => container.element);
+
+  @override
+  SemanticsRole get semanticsRole => SemanticsRole.list;
 
   @override
   void onMounted() => _subscribe();

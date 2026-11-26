@@ -6,6 +6,7 @@ import 'events.dart';
 import 'file_dialog.dart';
 import 'geometry.dart';
 import 'properties.dart';
+import 'semantics.dart';
 import 'styles.dart';
 import 'text_layout.dart';
 
@@ -554,6 +555,24 @@ abstract class UIElement extends PropertyOwner {
 
   Iterable<UIElement> get logicalChildren => const [];
 
+  /// The role of this element for assistive technologies.
+  ///
+  /// Elements without a role are flattened away when the semantics tree is
+  /// built, so their children move up to the parent.
+  SemanticsRole get semanticsRole => SemanticsRole.none;
+
+  /// The accessible name of this element.
+  String get semanticsName => '';
+
+  /// The accessible value of this element.
+  String get semanticsValue => '';
+
+  /// The accessible state of this element.
+  SemanticsState get semanticsState => const SemanticsState();
+
+  /// The selected range of this element as start and end offsets.
+  (int, int)? get semanticsSelection => null;
+
   Size measureCore(Size availableSize);
   void arrangeCore(Rect finalRect) {}
   void renderCore(DrawingContext context) {}
@@ -591,4 +610,10 @@ abstract class Control extends UIElement {
   void onTextInputActivated() {}
 
   void updatePointerOver(bool value) => setValue(isPointerOverProperty, value);
+
+  @override
+  SemanticsState get semanticsState => SemanticsState(
+        focused: isFocused,
+        disabled: !isEnabled,
+      );
 }

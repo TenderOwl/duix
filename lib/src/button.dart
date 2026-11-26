@@ -5,6 +5,7 @@ import 'events.dart';
 import 'focus_decoration.dart';
 import 'geometry.dart';
 import 'properties.dart';
+import 'semantics.dart';
 import 'ui_element.dart';
 
 final class Button extends ContentControl {
@@ -75,6 +76,16 @@ final class Button extends ContentControl {
   @override
   Iterable<UIElement> get logicalChildren =>
       _templateRoot == null ? super.logicalChildren : [_templateRoot!];
+
+  @override
+  SemanticsRole get semanticsRole => SemanticsRole.button;
+
+  @override
+  SemanticsState get semanticsState => SemanticsState(
+        focused: isFocused,
+        disabled: !isEnabled,
+        pressed: isPressed,
+      );
 
   @override
   void onDuiPropertyChanged<T>(

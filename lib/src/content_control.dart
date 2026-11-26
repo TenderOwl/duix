@@ -45,6 +45,10 @@ abstract class ContentControl extends Control {
   Iterable<UIElement> get logicalChildren =>
       _content == null ? const [] : [_content!];
 
+  /// The accessible name of a content control comes from its content.
+  @override
+  String get semanticsName => _content?.semanticsName ?? '';
+
   @override
   void removeChild(UIElement child) {
     if (identical(_content, child)) content = null;
