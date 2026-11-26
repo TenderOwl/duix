@@ -65,6 +65,10 @@ set_target_properties(dui_paragraph_smoke PROPERTIES
 
 if(WIN32)
   target_link_libraries(dui_native PRIVATE ole32)
+elseif(UNIX AND NOT APPLE)
+  find_package(PkgConfig REQUIRED)
+  pkg_check_modules(GTK4 REQUIRED IMPORTED_TARGET gtk4>=4.10)
+  target_link_libraries(dui_native PRIVATE PkgConfig::GTK4)
 endif()
 
 if(MSVC)

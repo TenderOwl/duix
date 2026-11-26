@@ -168,7 +168,7 @@ Skia canvas масштабируется через `displayScale`. Backbuffer �
 - `Border.colorProperty`/`paddingProperty` поддерживают styles и bindings; `example/native_aqua_button.dart` демонстрирует named Aqua style, persistent template с hover/pressed, капсульную форму, внутреннюю светлую кромку, верхний глянцевый блик и капсульный focus ring;
 - `DrawingContext.drawRoundedRect()` поддерживает fill/stroke в recording renderer и native Skia backend через `dui_draw_rounded_rect`;
 - публичный backend-independent clipboard: `Window`/`WindowHost.writeClipboardData()`, `hasClipboardData()`, `readClipboardData()` с `Uint8List`, `readClipboardMimeTypes()`, `clearClipboard()`, `ClipboardMimeTypes.plainText/html` и native adapter через `ClipboardHandler`;
-- standalone backend-independent `FileDialog(handler)` хранит `title`, `initialDirectory` и typed `filters` в свойствах; `showOpen([Window? parent])` принимает только optional parent. Возвращается один файл или `null` при отмене, native errors становятся `StateError`; совместимый `Window`/`WindowHost.showOpenFileDialog()` сохранён. Windows использует системный `IFileOpenDialog`, а возвращаемый UTF-8 path имеет явное native ownership;
+- standalone backend-independent `FileDialog(handler)` хранит `title`, `initialDirectory` и typed `filters` в свойствах; `showOpen([Window? parent])` принимает только optional parent. Возвращается один файл или `null` при отмене, native errors становятся `StateError`; совместимый `Window`/`WindowHost.showOpenFileDialog()` сохранён. Windows использует системный `IFileOpenDialog`, Linux — `GtkFileDialog` (GTK 4.10+, пока без GTK parent для SDL window); возвращаемый UTF-8 path имеет явное native ownership;
 - 227 Dart-тестов, включая file-dialog contract, formatted clipboard snapshots, styles/templates, DataContext inheritance/accessors/reparenting, value precedence/transitions, binding lifecycle/diagnostics, ObservableCollection/ItemsControl/virtualization, ScrollViewer measure/scroll/input/clip, Grid tracks/span/gap/invalidate/HiDPI, DockPanel measure/arrange/invalidate, diagnostics FPS/render-on-demand, synchronous live-resize frame с увеличением physical backbuffer, layout constraints/alignment, infinite text width, clipping/rendering, horizontal scrolling, mouse caret/selection, pointer capture, surrogate pairs, composition, clipboard, render-on-demand и scheduler counters.
 
 ### 3.2. Проверенное поведение
@@ -266,10 +266,10 @@ lib/src/native/sdl_skia_host.dart    — SDL/Skia Dart host
 native/include/dui_native.h          — C ABI
 native/src/dui_native.cpp            — SDL3 + Skia backend
 native/src/paragraph_smoke.cpp       — SkParagraph smoke-проверка
-native/CMakeLists.txt                — нативная сборка
+native/CMakeLists.txt                — нативная сборка; Linux требует pkg-config и GTK 4.10+ (`libgtk-4-dev`)
 tools/bootstrap_native.py            — зависимости и сборка
 example/native_counter.dart          — нативный интерактивный пример
-example/native_open_file_dialog.dart — системный Windows open-file dialog
+example/native_open_file_dialog.dart — системный Windows/Linux open-file dialog
 example/native_aqua_button.dart      — Aqua style/template, hover/pressed и smoke
 example/native_smoke.dart            — native smoke с автоматическим завершением
 example/native_text_gallery.dart     — Unicode/HiDPI text gallery и её smoke-режим
@@ -753,8 +753,9 @@ One-way local маскирует binding, но не отменяет его; `cl
   - [x] Windows `IFileOpenDialog` с родительским HWND либо без owner, UTF-8 path и явным освобождением native string.
   - [x] Headless contract-тесты и `example/native_open_file_dialog.dart`.
   - [x] Typed filters (`txt`/`*.txt` и `*` для всех файлов) и initial directory через Windows `SetFileTypes`/`SetFolder`.
-  - [x] Пользователь подтвердил parent/ownerless и filters/initialDirectory.
-  - [ ] Linux `GtkFileDialog` и macOS `NSOpenPanel`; собственные самодельные диалоги не использовать.
+  - [x] Пользователь подтвердил parent/ownerless и filters/initialDirectory на Windows.
+  - [x] Linux `GtkFileDialog`: title, initial directory, filters и ownerless fallback; SDL X11/Wayland handles не преобразуются в `GtkWindow*`.
+  - [ ] Собрать и вручную проверить Linux `GtkFileDialog` на X11/Wayland; реализовать macOS `NSOpenPanel`. Собственные самодельные диалоги не использовать.
 - [ ] Native menus.
 - [ ] Drag-and-drop.
 - [ ] Notifications/tray по необходимости.
@@ -799,7 +800,7 @@ One-way local маскирует binding, но не отменяет его; `cl
 
 Порядок ближайших рабочих сессий:
 
-1. **Этап 8.2, Linux file dialog:** реализовать `GtkFileDialog` для standalone API с title/initialDirectory/filters и optional parent; затем отдельным срезом macOS `NSOpenPanel`.
+1. **Этап 8.2, Linux/macOS file dialogs:** на Linux с GTK 4.10+ собрать и вручную проверить выбор, отмену, title/initialDirectory/filters на X11/Wayland; parent пока ownerless. Затем отдельным срезом реализовать macOS `NSOpenPanel`.
 2. **Ручная проверка clipboard:** проверить вставку CF_HTML в Word, браузер и другие сторонние приложения.
 3. **Этап 8.1:** добавить semantics к дереву и синхронизировать role/name/value/state/bounds с focus и selection.
 4. **Ручная проверка ScrollViewer:** запустить `example/native_scroll_viewer.dart`, проверить реальное SDL wheel, клавиатурную прокрутку из focused TextBox/Button, track/thumb dragging, clipping и resize при разных display scales.
@@ -846,6 +847,28 @@ GPU backend по-прежнему не входит в ближайшие эта
 ---
 
 ## 9. Журнал работ
+
+### 2026-11-26 — этап 8.2, Linux GtkFileDialog
+
+Сделано:
+
+- Linux native build подключает GTK 4.10+ через `pkg-config`; для сборки нужны `pkg-config` и `libgtk-4-dev`.
+- `dui_window_open_file_dialog()` использует системный `GtkFileDialog`: title, initial directory и `GListStore` из `GtkFileFilter`; `*.*` нормализуется в GTK pattern `*`.
+- Асинхронный `open`/`open_finish` адаптирован к существующему синхронному C ABI через локальный `GMainLoop`. Cancel/Close возвращает `null`, остальные ошибки включают GTK message. Native path по-прежнему выделяется через `SDL_malloc`.
+- SDL X11/Wayland handles не выдаются за `GtkWindow*`; при переданном parent Linux пока использует безопасный ownerless fallback. Dart API и Windows backend не изменялись.
+
+Проверено:
+
+- Windows native build и Paragraph smoke — успешно, `dart analyze` — без замечаний, полный `dart test` — 227/227.
+- Официальная документация GTK подтверждает async contract, ownership filters/result и коды `GTK_DIALOG_ERROR_DISMISSED`/`CANCELLED`.
+
+Не проверено / ограничения:
+
+- Linux-компиляция, связывание с GTK и реальный диалог на X11/Wayland не проверялись на Windows-машине. GTK parent/modality для SDL window отсутствует.
+
+Следующий шаг:
+
+- На Linux установить `pkg-config`/`libgtk-4-dev`, собрать native library и вручную проверить `example/native_open_file_dialog.dart`; затем macOS `NSOpenPanel`.
 
 ### 2026-11-26 — этап 8.2, настройки FileDialog в свойствах
 

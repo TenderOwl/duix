@@ -8,6 +8,8 @@
 #endif
 #include <windows.h>
 #include <shobjidl.h>
+#elif defined(__linux__)
+#include <gtk/gtk.h>
 #endif
 
 #include "include/core/SkCanvas.h"
@@ -84,6 +86,24 @@ namespace {
 
 thread_local std::string last_error;
 std::unordered_map<std::string, std::vector<uint8_t>> clipboard_formats;
+
+#if defined(__linux__)
+struct GtkOpenDialogResult {
+  GMainLoop* loop = nullptr;
+  GFile* file = nullptr;
+  GError* error = nullptr;
+};
+
+void gtk_open_dialog_ready(
+    GObject* source_object,
+    GAsyncResult* async_result,
+    gpointer user_data) {
+  auto* result = static_cast<GtkOpenDialogResult*>(user_data);
+  result->file = gtk_file_dialog_open_finish(
+      GTK_FILE_DIALOG(source_object), async_result, &result->error);
+  g_main_loop_quit(result->loop);
+}
+#endif
 
 const void* SDLCALL clipboard_data_callback(
     void*,
@@ -1159,6 +1179,115 @@ char* dui_window_open_file_dialog(
   CoTaskMemFree(path);
   finish();
   if (!utf8) set_error("Couldn't allocate the selected file path.");
+  return utf8;
+#elif defined(__linux__)
+  (void)window;  // SDL's X11/Wayland handles are not GtkWindow instances.
+  if (filter_count > 0 && !filters) {
+    set_error("Invalid open-file dialog filters.");
+    return nullptr;
+  }
+  static bool gtk_initialized = false;
+  if (!gtk_initialized) {
+    if (!gtk_init_check()) {
+      set_error("Couldn't initialize GTK for the open-file dialog.");
+      return nullptr;
+    }
+    gtk_initialized = true;
+  }
+
+  GtkFileDialog* dialog = gtk_file_dialog_new();
+  if (!dialog) {
+    set_error("Couldn't create the system open-file dialog.");
+    return nullptr;
+  }
+  if (title_utf8 && *title_utf8) {
+    gtk_file_dialog_set_title(dialog, title_utf8);
+  }
+  if (initial_directory_utf8 && *initial_directory_utf8) {
+    GFile* folder = g_file_new_for_path(initial_directory_utf8);
+    gtk_file_dialog_set_initial_folder(dialog, folder);
+    g_object_unref(folder);
+  }
+  if (filter_count > 0) {
+    GListStore* store = g_list_store_new(GTK_TYPE_FILE_FILTER);
+    for (size_t index = 0; index < filter_count; ++index) {
+      const auto& filter = filters[index];
+      if (!filter.name_utf8 || !filter.spec_utf8) {
+        g_object_unref(store);
+        g_object_unref(dialog);
+        set_error("Invalid UTF-8 in the open-file dialog filters.");
+        return nullptr;
+      }
+      GtkFileFilter* file_filter = gtk_file_filter_new();
+      gtk_file_filter_set_name(file_filter, filter.name_utf8);
+      gchar** patterns = g_strsplit(filter.spec_utf8, ";", -1);
+      bool has_pattern = false;
+      for (gchar** pattern = patterns; *pattern; ++pattern) {
+        g_strstrip(*pattern);
+        if (!**pattern) continue;
+        gtk_file_filter_add_pattern(
+            file_filter, g_str_equal(*pattern, "*.*") ? "*" : *pattern);
+        has_pattern = true;
+      }
+      g_strfreev(patterns);
+      if (!has_pattern) {
+        g_object_unref(file_filter);
+        g_object_unref(store);
+        g_object_unref(dialog);
+        set_error("An open-file dialog filter has no patterns.");
+        return nullptr;
+      }
+      g_list_store_append(store, file_filter);
+      g_object_unref(file_filter);
+    }
+    gtk_file_dialog_set_filters(dialog, G_LIST_MODEL(store));
+    g_object_unref(store);
+  }
+
+  GtkOpenDialogResult result;
+  result.loop = g_main_loop_new(nullptr, FALSE);
+  gtk_file_dialog_open(
+      dialog, nullptr, nullptr, gtk_open_dialog_ready, &result);
+  g_main_loop_run(result.loop);
+  g_main_loop_unref(result.loop);
+  g_object_unref(dialog);
+
+  if (result.error) {
+    const bool dismissed = g_error_matches(
+                               result.error,
+                               GTK_DIALOG_ERROR,
+                               GTK_DIALOG_ERROR_DISMISSED) ||
+                           g_error_matches(
+                               result.error,
+                               GTK_DIALOG_ERROR,
+                               GTK_DIALOG_ERROR_CANCELLED) ||
+                           g_error_matches(
+                               result.error, G_IO_ERROR, G_IO_ERROR_CANCELLED);
+    if (!dismissed) {
+      set_error(std::string("The system open-file dialog failed: ") +
+                result.error->message);
+    }
+    g_error_free(result.error);
+    return nullptr;
+  }
+  if (!result.file) {
+    set_error("Couldn't read the selected file.");
+    return nullptr;
+  }
+  gchar* path = g_file_get_path(result.file);
+  g_object_unref(result.file);
+  if (!path) {
+    set_error("The selected file has no local filesystem path.");
+    return nullptr;
+  }
+  const size_t size = std::strlen(path) + 1;
+  char* utf8 = static_cast<char*>(SDL_malloc(size));
+  if (utf8) {
+    std::memcpy(utf8, path, size);
+  } else {
+    set_error("Couldn't allocate the selected file path.");
+  }
+  g_free(path);
   return utf8;
 #else
   set_error("The system open-file dialog is not implemented on this platform.");
