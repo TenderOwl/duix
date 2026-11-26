@@ -987,6 +987,22 @@ GPU backend по-прежнему не входит в ближайшие эта
 
 ## 9. Журнал работ
 
+### 2026-11-27 — репозиторий на GitHub и публикация пакета
+
+Сделано:
+
+- Установлен GitHub CLI 2.106.0 (winget), выполнен вход через device flow в аккаунт `amka`; пользователь — admin организации `TenderOwl`.
+- Создан публичный репозиторий `TenderOwl/duix` (описание совпадает с описанием пакета), вся история проекта запушена в ветку `main`, локальная ветка теперь отслеживает `origin/main`.
+- В `pubspec.yaml` добавлены поля `homepage` и `repository` — `https://github.com/TenderOwl/duix`.
+- Первый push был отклонён: OAuth-токен без scope `workflow` не позволяет создать `.github/workflows/ci.yml`. Scope добавлен через `gh auth refresh -s workflow` (повторный device flow), после чего push прошёл, и workflow `ci.yml` появился в репозитории.
+
+Проверено:
+
+- `dart pub publish --dry-run --directory ../duix-publish` — 0 ошибок и 0 предупреждений, сжатый архив 8 МБ, README, CHANGELOG и LICENSE внутри.
+- `gh repo view TenderOwl/duix` показывает репозиторий с README пакета; `ci.yml` присутствует в репозитории.
+
+Дальше: пункт 3 «Этап 8.1, мосты accessibility». Публикацию на pub.dev можно запускать командой `dart pub publish --directory ../duix-publish` — но лучше после сборки библиотек под macOS и Linux, иначе пакет уедет с одной платформой.
+
 ### 2026-11-26 — английская документация и лицензия MIT
 
 Сделано:
