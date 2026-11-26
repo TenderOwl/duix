@@ -198,6 +198,16 @@ final class Window extends ObservableObject implements WindowHost {
     _content?.mountTo(null);
   }
 
+  /// Releases the content tree and the resources it owns.
+  ///
+  /// Closing a window does not dispose the content, so a window can be closed
+  /// and opened again. Call [dispose] when the window is not needed any more.
+  void dispose() {
+    final content = _content;
+    this.content = null;
+    content?.dispose();
+  }
+
   void resize(double width, double height) {
     final size = Size(width, height);
     if (_logicalSize == size) return;

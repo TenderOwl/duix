@@ -101,6 +101,7 @@ abstract class UIElement extends PropertyOwner {
   HorizontalAlignment _horizontalAlignment = HorizontalAlignment.stretch;
   VerticalAlignment _verticalAlignment = VerticalAlignment.stretch;
   bool _isMounted = false;
+  bool _isDisposing = false;
   bool _isVisible = true;
   bool _isEnabled = true;
   bool _isFocusScope = false;
@@ -109,6 +110,10 @@ abstract class UIElement extends PropertyOwner {
 
   UIElement? get logicalParent => _logicalParent;
   WindowHost? get window => _window;
+
+  /// Whether the element is disposed or is being disposed right now.
+  @override
+  bool get isDisposed => _isDisposing || super.isDisposed;
 
   /// Actual control bounds, excluding margin and alignment slot space.
   Rect get bounds => _bounds;
@@ -489,7 +494,11 @@ abstract class UIElement extends PropertyOwner {
   }
 
   void mountTo(WindowHost? window) {
+    if (window != null && super.isDisposed) {
+      throw StateError('A disposed element cannot be mounted.');
+    }
     if (_isMounted && identical(_window, window)) return;
+    if (!_isMounted && window == null) return;
     final previousWindow = _window;
     _window = window;
     _isMounted = window != null;
@@ -502,6 +511,45 @@ abstract class UIElement extends PropertyOwner {
     for (final child in logicalChildren) {
       child.mountTo(window);
     }
+  }
+
+  /// Releases this element and its descendants.
+  ///
+  /// The element is detached from its parent and unmounted, its bindings are
+  /// cancelled and the resources it owns are released. Descendants are
+  /// disposed as well, so a disposed subtree never stays alive in the tree.
+  /// Disposing is idempotent, and a disposed element cannot be mounted or
+  /// mutated through [setValue] any more.
+  @override
+  void dispose() {
+    if (isDisposed) return;
+    _isDisposing = true;
+    _detachFromParent();
+    if (isMounted) mountTo(null);
+    for (final child in List<UIElement>.of(logicalChildren)) {
+      child.dispose();
+    }
+    super.dispose();
+    onDisposed();
+  }
+
+  /// Releases the resources owned by this element itself.
+  ///
+  /// Called once when the element is disposed. Descendants are disposed
+  /// before this hook runs.
+  void onDisposed() {}
+
+  /// Removes [child] from the children of this element.
+  ///
+  /// The base implementation does nothing. Elements that own children, such as
+  /// panels, content controls and items controls, override it.
+  void removeChild(UIElement child) {}
+
+  void _detachFromParent() {
+    final parent = _logicalParent;
+    if (parent == null) return;
+    parent.removeChild(this);
+    attachToParent(null);
   }
 
   Iterable<UIElement> get logicalChildren => const [];

@@ -79,7 +79,6 @@ class ItemsControl<T> extends UIElement {
   final _containersByKey = <Object?, _ItemContainer<T>>{};
   final _knownHeights = <int, double>{};
   CollectionSubscription? _sourceSubscription;
-  bool _isDisposed = false;
   int _firstVisibleIndex = -1;
   int _lastVisibleIndex = -1;
 
@@ -174,15 +173,27 @@ class ItemsControl<T> extends UIElement {
 
   @override
   void dispose() {
-    if (_isDisposed) return;
+    if (isDisposed) return;
     _unsubscribe();
+    for (final container in List<_ItemContainer<T>>.of(_containers)) {
+      container.element.dispose();
+    }
     _removeAllContainers();
-    _isDisposed = true;
     super.dispose();
   }
 
+  @override
+  void removeChild(UIElement child) {
+    for (final container in List<_ItemContainer<T>>.of(_containers)) {
+      if (identical(container.element, child)) {
+        _removeContainer(container);
+        return;
+      }
+    }
+  }
+
   void _subscribe() {
-    if (_isDisposed || !isMounted || _sourceSubscription != null) return;
+    if (isDisposed || !isMounted || _sourceSubscription != null) return;
     final source = _itemsSource;
     if (source is ObservableCollection<T>) {
       _sourceSubscription = source.subscribe(_collectionChanged);
@@ -195,7 +206,7 @@ class ItemsControl<T> extends UIElement {
   }
 
   void _collectionChanged(CollectionChangedEvent<T> event) {
-    if (_isDisposed) return;
+    if (isDisposed) return;
     if (_virtualizing || event.action == CollectionChangeAction.reset) {
       _knownHeights.clear();
       _reconcileAll();
@@ -519,7 +530,7 @@ class ItemsControl<T> extends UIElement {
   }
 
   void _checkNotDisposed() {
-    if (_isDisposed) throw StateError('The items control is disposed.');
+    if (isDisposed) throw StateError('The items control is disposed.');
   }
 }
 

@@ -46,6 +46,11 @@ abstract class ContentControl extends Control {
       _content == null ? const [] : [_content!];
 
   @override
+  void removeChild(UIElement child) {
+    if (identical(_content, child)) content = null;
+  }
+
+  @override
   void onMounted() {
     _content?.mountTo(window);
   }

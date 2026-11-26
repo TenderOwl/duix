@@ -89,6 +89,9 @@ final class Label extends Control {
     invalidateMeasure();
   }
 
+  @override
+  void onDisposed() => _clearTextLayout();
+
   TextLayout _layoutFor(double maxWidth) {
     final host = window;
     final factory = host?.textLayoutFactory ?? _headlessFactory;

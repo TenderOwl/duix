@@ -7,6 +7,12 @@ abstract class Panel extends UIElement {
 
   @override
   Iterable<UIElement> get logicalChildren => children;
+
+  @override
+  void removeChild(UIElement child) {
+    final index = children.indexOf(child);
+    if (index >= 0) children.removeAt(index);
+  }
 }
 
 final class ElementChildrenList extends ListBase<UIElement> {
@@ -74,6 +80,9 @@ final class ElementChildrenList extends ListBase<UIElement> {
   }
 
   void _prepareChild(UIElement element) {
+    if (element.isDisposed) {
+      throw StateError('A disposed element cannot be added to the tree.');
+    }
     if (element.logicalParent != null) {
       throw StateError('The element already belongs to another parent.');
     }

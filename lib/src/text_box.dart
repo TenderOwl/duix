@@ -256,6 +256,12 @@ final class TextBox extends Control {
   }
 
   @override
+  void onDisposed() {
+    _measureLayout.dispose();
+    _renderLayout.dispose();
+  }
+
+  @override
   void onFocusChanged(bool value) {
     if (value) {
       window?.startTextInput(this);

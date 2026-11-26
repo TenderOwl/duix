@@ -176,7 +176,13 @@ Skia canvas масштабируется через `displayScale`. Backbuffer �
 - legacy `DrawingContext.drawText()` в native backend рисует через SkParagraph shaping: native `dui_draw_text` возвращает логическую ширину нарисованного текста и использует тот же `create_paragraph`, что и `dui_text_layout_create`; шрифт, unicode и font-collection переиспользуются между вызовами, раскладка кэшируется на окне;
 - ABI `dui_native` версии 2: `dui_draw_text` возвращает `int32_t` и добавляет out-параметр `out_width`, `dui_abi_version()` возвращает 2;
 - исправлен paint-range в `dui_text_layout_draw`: foreground paint задаётся в UTF-16 offsets, а не в UTF-8 байтах;
-- 235 Dart-тестов, включая file-dialog contract, formatted clipboard snapshots, styles/templates, DataContext inheritance/accessors/reparenting, value precedence/transitions, binding lifecycle/diagnostics, ObservableCollection/ItemsControl/virtualization, ScrollViewer measure/scroll/input/clip, Grid tracks/span/gap/invalidate/HiDPI, DockPanel measure/arrange/invalidate, diagnostics FPS/render-on-demand, synchronous live-resize frame с увеличением physical backbuffer, layout constraints/alignment, infinite text width, clipping/rendering, horizontal scrolling, mouse caret/selection, pointer capture, surrogate pairs, composition, clipboard, render-on-demand и scheduler counters.
+- `UIElement.dispose()` освобождает элемент и всё его поддерево: отсоединяет от родителя, размонтирует, освобождает потомков и собственные ресурсы, отменяет bindings. Повторный вызов безопасен, а disposed-элемент больше нельзя смонтировать или изменить;
+- `UIElement.onDisposed()` — хук для собственных ресурсов контрола; `Label` и `TextBox` освобождают в нём native-раскладки;
+- `UIElement.removeChild(child)` — единая точка удаления ребёнка, переопределена в `Panel`, `ContentControl` и `ItemsControl`;
+- `Window.dispose()` освобождает дерево контента; `close()` по-прежнему контент не уничтожает, поэтому окно можно переоткрыть;
+- `mountTo(null)` идемпотентен и больше не вызывает `onUnmounted()` повторно; монтирование disposed-элемента в окно и добавление его в панель бросают `StateError`;
+- `ItemsControl` использует единый флаг disposed из `PropertyOwner` и освобождает контейнеры при dispose;
+- 247 Dart-тестов, включая file-dialog contract, formatted clipboard snapshots, styles/templates, DataContext inheritance/accessors/reparenting, value precedence/transitions, binding lifecycle/diagnostics, ObservableCollection/ItemsControl/virtualization, ScrollViewer measure/scroll/input/clip, Grid tracks/span/gap/invalidate/HiDPI, DockPanel measure/arrange/invalidate, diagnostics FPS/render-on-demand, synchronous live-resize frame с увеличением physical backbuffer, layout constraints/alignment, infinite text width, clipping/rendering, horizontal scrolling, mouse caret/selection, pointer capture, surrogate pairs, composition, clipboard, recursive dispose, render-on-demand и scheduler counters.
 
 ### 3.2. Проверенное поведение
 
@@ -187,7 +193,8 @@ Skia canvas масштабируется через `displayScale`. Backbuffer �
 - Белый фон окна отображается корректно.
 - HiDPI-масштабирование подтверждено на 4K-дисплее.
 - `dart analyze` проходит без замечаний.
-- Полный `dart test` проходит: все 235 тестов, включая 6 file-dialog contract-тестов, 4 style-теста, 3 control-template-теста, 6 DataContext-тестов, 9 value-precedence-тестов, 13 binding-тестов, 17 ItemsControl/virtualization-тестов, 11 ScrollViewer-тестов, 18 Grid-тестов, 7 DockPanel-тестов, 5 TextBox measurement-тестов, 2 native text-drawing-теста и все clipboard-сценарии.
+- Полный `dart test` проходит: все 247 тестов, включая 6 file-dialog contract-тестов, 4 style-теста, 3 control-template-теста, 6 DataContext-тестов, 9 value-precedence-тестов, 13 binding-тестов, 17 ItemsControl/virtualization-тестов, 11 ScrollViewer-тестов, 18 Grid-тестов, 7 DockPanel-тестов, 5 TextBox measurement-тестов, 2 native text-drawing-теста, 12 recursive dispose-тестов и все clipboard-сценарии.
+- Recursive dispose подтверждён тестами: поддерево освобождает native-раскладки, disposed-элемент отсоединяется от родителя (список детей пустеет), все потомки получают `isDisposed`, повторный dispose не освобождает ресурсы дважды, фокус снимается, disposed-элемент нельзя вернуть в дерево, `Window.dispose()` освобождает контент, а `close()` оставляет его жить.
 - Legacy text drawing подтверждён native-тестом: ширина, возвращённая `dui_draw_text`, совпадает с шириной раскладки `dui_text_layout_create` для того же текста, шрифта и scale; ASCII, кириллица, emoji и RTL-строка рисуются во всех трёх выравниваниях.
 - Idle CPU после перевода `drawText` на SkParagraph не вырос: кэш раскладки на окне вернул 1.54% (до кэша было 3.08%), при этом текст теперь shaped.
 - `TextBox` измеряется теми же метриками раскладки, что и `Label`: desired width = ширина `Label` + 16, desired height = высота `Label` + 8. Текстовая часть масштабируется с `fontSize` (удвоение `fontSize` удваивает ширину текста), padding остаётся постоянным. Узкий available width клампится вместо падения, изменение текста и remount переизмеряют контрол.
@@ -291,6 +298,7 @@ example/native_items_control.dart    — список 100 000 элементов
 example/native_scroll_viewer.dart   — ScrollViewer, прокрутка и smoke
 test/                                — автоматические тесты
 test/text_box_measurement_test.dart — измерение TextBox по метрикам раскладки
+test/dispose_test.dart              — recursive dispose элементов и поддеревьев
 dart_test.yaml                       — объявление тега clipboard
 ```
 
@@ -353,7 +361,7 @@ python tools/bootstrap_native.py --smoke --dart "<путь-к-dart>"
 4. **P2:** SDL wait ограничен 16 мс, чтобы Dart timers получали управление; это не полностью event-driven async integration. Измеренные 1.53–1.54% idle process CPU и медианная latency около 16.3–16.5 мс пока не оправдывают усложнение backend.
 5. **P2:** поиск видимого диапазона и расчёт estimated extent в `VirtualizingStackPanel` линейны по числу items; переменная высота может уточнять позицию на последующих layout pass.
 6. **P1:** value layers, DataContext inheritance и styles реализованы, но универсальное inherited-property propagation и animation engine ещё отсутствуют; control templates пока поддержаны только у Button.
-7. **P1:** базовый `PropertyOwner.dispose()` отменяет bindings, но единый recursive dispose контролов и остальных ресурсов ещё не реализован.
+7. **P1 (закрыт 2026-11-26):** единый recursive dispose реализован — `UIElement.dispose()` освобождает поддерево, `onDisposed()` отдаёт контролам их ресурсы, `removeChild()` унифицирует удаление ребёнка, `Window.dispose()` закрывает дерево окна.
 8. **P2:** accessibility ещё не реализован.
 9. **P2:** нет packaging runtime dependencies и кроссплатформенной CI.
 
@@ -825,20 +833,20 @@ One-way local маскирует binding, но не отменяет его; `cl
 
 Порядок ближайших рабочих сессий:
 
-Пункты 1, 2, 4, 8, 9, 10 требуют macOS/Linux, сторонних приложений или живого
-IME и выполняются пользователем; пункты 3, 5, 6, 7 доступны для кодовой
+Пункты 1, 2, 4, 7, 8, 9, 10 требуют macOS/Linux, сторонних приложений или
+живого IME и выполняются пользователем; пункты 3, 5, 6 доступны для кодовой
 работы на текущей машине.
 
 1. **Ручная проверка этапа 8.2:** на macOS собрать Objective‑C++ backend и проверить `NSOpenPanel` в parent/ownerless-режимах, title/initialDirectory/filters и Unicode paths; на Linux аналогично проверить GTK 4.10+ на X11/Wayland (parent пока ownerless).
 2. **Ручная проверка clipboard:** проверить вставку CF_HTML в Word, браузер и другие сторонние приложения.
 3. **Этап 8.1:** добавить semantics к дереву и синхронизировать role/name/value/state/bounds с focus и selection.
 4. **Ручная проверка ScrollViewer:** автоматическая часть закрыта — `example/native_scroll_viewer.dart --smoke` проходит на Windows (wheel прокрутка, offsets, bounds, 3 кадра, scale 2.0); остаётся визуальная проверка track/thumb dragging, clipping и resize при разных display scales.
-5. **P1 recursive dispose:** единый `dispose()` по дереву контролов (сейчас есть только `PropertyOwner.dispose()` и `ItemsControl.dispose()`), с освобождением native-раскладок и идемпотентным повторным вызовом.
-6. **Этап 8.4 CI:** добавить `.github/workflows` с analyze/test и native build на Windows/macOS/Linux — это разблокирует ручные проверки на других ОС.
-7. **Автоматизация ScrollViewer:** thumb dragging и клавиатурная прокрутка доступны через публичные `dispatchPointerDown/Move/Up` и `dispatchKeyDown`, поэтому их можно закрыть в smoke-режиме.
-8. **Незавершённая часть этапа 1.2:** проверить сборку и Paragraph smoke на Linux (FontConfig/Freetype) и macOS (CoreText).
-9. **Ручная визуальная проверка:** открыть text gallery и TextBox на мониторах с разными масштабами, проверить clipping, selection и caret; отдельно посмотреть FPS-overlay в `--diagnostics` — после перевода на SkParagraph текст в нём стал shaped, baseline сдвинут на `y + font_size`, как и раньше.
-10. **Ручная проверка этапа 2.4:** русский, китайский/японский ввод и emoji через реальные системные IME.
+5. **Этап 8.4 CI:** добавить `.github/workflows` с analyze/test и native build на Windows/macOS/Linux — это разблокирует ручные проверки на других ОС.
+6. **Автоматизация ScrollViewer:** thumb dragging и клавиатурная прокрутка доступны через публичные `dispatchPointerDown/Move/Up` и `dispatchKeyDown`, поэтому их можно закрыть в smoke-режиме.
+7. **Незавершённая часть этапа 1.2:** проверить сборку и Paragraph smoke на Linux (FontConfig/Freetype) и macOS (CoreText).
+8. **Ручная визуальная проверка:** открыть text gallery и TextBox на мониторах с разными масштабами, проверить clipping, selection и caret; отдельно посмотреть FPS-overlay в `--diagnostics` — после перевода на SkParagraph текст в нём стал shaped, baseline сдвинут на `y + font_size`, как и раньше.
+9. **Ручная проверка этапа 2.4:** русский, китайский/японский ввод и emoji через реальные системные IME.
+10. **Ручная проверка lifecycle:** dispose поддерева, повторное открытие окна после `close()`, поведение `Window.dispose()`.
 
 GPU backend по-прежнему не входит в ближайшие этапы.
 
@@ -884,6 +892,38 @@ GPU backend по-прежнему не входит в ближайшие эта
 ---
 
 ## 9. Журнал работ
+
+### 2026-11-26 — P1, recursive dispose по дереву контролов
+
+Сделано:
+
+- `UIElement.dispose()` освобождает элемент и всё поддерево: отсоединяет от родителя, размонтирует, освобождает потомков, отменяет bindings и вызывает `onDisposed()`. Повторный вызов безопасен.
+- `UIElement.onDisposed()` — хук для собственных ресурсов; `Label` и `TextBox` освобождают в нём native-раскладки (в том числе если контрол никогда не монтировался).
+- `UIElement.removeChild(child)` — единая точка удаления ребёнка; переопределена в `Panel`, `ContentControl` и `ItemsControl`, поэтому родитель всегда знает, как убрать своего ребёнка.
+- `Window.dispose()` освобождает дерево контента. `close()` контент не уничтожает — окно можно переоткрыть.
+- `UIElement.isDisposed` теперь учитывает и начало dispose; дублирующий флаг в `ItemsControl` удалён, единый источник состояния — `PropertyOwner`.
+- `mountTo(null)` стал идемпотентным: `onUnmounted()` больше не вызывается повторно. Монтирование disposed-элемента в окно и добавление его в панель бросают `StateError`.
+
+Исправлено по ходу:
+
+- `Panel.removeChild` не мог использовать `ListBase.remove` — он присваивает `null` в слот, а список элементов non-nullable; удаление идёт через `removeAt`.
+- `ItemsControl.dispose()` освобождал контейнеры, но не их элементы: элементы теперь dispose-ятся до удаления контейнеров.
+
+Проверено:
+
+- `dart analyze` — без замечаний; `dart format` — без изменений.
+- `dart test` — 247/247; `dart test --exclude-tags clipboard` — 243/243.
+- Новый `test/dispose_test.dart` (12 тестов): освобождение native-раскладок поддерева, отсоединение от родителя, dispose всех потомков, идемпотентность, снятие фокуса, запрет вернуть disposed-элемент в дерево, запрет мутаций, `Window.dispose()`, сохранение контента при `close()`, отсоединение контента `ContentControl`, освобождение контейнеров `ItemsControl`.
+- Native-смоуки (smoke, textbox, aqua button, items control) проходят.
+
+Не проверено:
+
+- macOS/Linux не затрагивались.
+- Ручная проверка lifecycle (dispose поддерева в живом окне, переоткрытие окна после `close()`) не проводилась.
+
+Следующий шаг:
+
+- Этап 8.4 CI: `.github/workflows` с analyze/test и native build на трёх ОС; затем этап 8.1 semantics.
 
 ### 2026-11-26 — P1, legacy `drawText` на SkParagraph
 
