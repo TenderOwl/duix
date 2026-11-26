@@ -1,3 +1,10 @@
+# The native layer allows only one native host per process, because SDL has a
+# single global event queue. The native tests create such a host, and
+# `dart test` runs the test files in parallel isolates, so two native files
+# would compete for the host. The test files are small, so the suite runs them
+# one after another instead.
+concurrency: 1
+
 tags:
   clipboard:
     description: >

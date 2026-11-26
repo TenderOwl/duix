@@ -147,6 +147,54 @@ Future<void> main(List<String> args) async {
         throw StateError('The settings footer button did not activate.');
       }
 
+      scrollViewer.scrollToStart();
+      window.updateLayout();
+      final thumb = scrollViewer.verticalThumbRect;
+      final track = scrollViewer.verticalTrackRect;
+      final travel = track.height - thumb.height;
+      final thumbStart = Point(
+        thumb.left + thumb.width / 2,
+        thumb.top + thumb.height / 2,
+      );
+      final maximumOffset =
+          scrollViewer.extentHeight - scrollViewer.viewportHeight;
+      window.dispatchPointerDown(thumbStart);
+      window.dispatchPointerMove(Point(thumbStart.x, thumbStart.y + travel));
+      if (scrollViewer.verticalOffset != maximumOffset) {
+        throw StateError('Settings smoke thumb dragging failed.');
+      }
+      window
+          .dispatchPointerMove(Point(thumbStart.x, thumbStart.y - travel * 2));
+      if (scrollViewer.verticalOffset != 0) {
+        throw StateError('Settings smoke thumb dragging did not clamp.');
+      }
+      window.dispatchPointerUp(thumbStart);
+
+      final trackPosition =
+          Point(track.left + track.width / 2, track.bottom - 3);
+      window.dispatchPointerDown(trackPosition);
+      window.dispatchPointerUp(trackPosition);
+      if (scrollViewer.verticalOffset != scrollViewer.viewportHeight) {
+        throw StateError('Settings smoke track click failed.');
+      }
+
+      scrollViewer.focus();
+      window.dispatchKeyDown('down');
+      if (scrollViewer.verticalOffset !=
+          scrollViewer.viewportHeight + ScrollViewer.lineScrollDistance) {
+        throw StateError('Settings smoke keyboard scrolling failed.');
+      }
+      window.dispatchKeyDown('end');
+      if (scrollViewer.verticalOffset != maximumOffset) {
+        throw StateError(
+            'Settings smoke keyboard scrolling did not reach the end.');
+      }
+      window.dispatchKeyDown('home');
+      if (scrollViewer.verticalOffset != 0) {
+        throw StateError(
+            'Settings smoke keyboard scrolling did not reach the start.');
+      }
+
       for (var frame = 0; frame < 3 && host.isOpen(window); frame++) {
         host.pumpEvents();
         host.presentWindow(window);
