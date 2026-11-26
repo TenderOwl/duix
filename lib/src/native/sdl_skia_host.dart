@@ -507,6 +507,27 @@ final class NativeDrawingContext implements NativeTextDrawingContext {
   }
 
   @override
+  void drawRoundedRect(
+    Rect rect,
+    double radiusX,
+    double radiusY,
+    Paint paint, {
+    double strokeWidth = 0,
+  }) {
+    bindings.drawRoundedRect(
+      window,
+      rect.left,
+      rect.top,
+      rect.width,
+      rect.height,
+      radiusX,
+      radiusY,
+      paint.color.value,
+      strokeWidth,
+    );
+  }
+
+  @override
   void drawText(
     String text,
     Point position, {

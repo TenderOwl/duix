@@ -1,8 +1,10 @@
 import 'content_control.dart';
+import 'control_template.dart';
 import 'drawing.dart';
 import 'events.dart';
 import 'focus_decoration.dart';
 import 'geometry.dart';
+import 'properties.dart';
 import 'ui_element.dart';
 
 final class Button extends ContentControl {
@@ -13,10 +15,29 @@ final class Button extends ContentControl {
     addHandler(UIElement.keyDown, _keyDown);
   }
 
-  final _clickHandlers = <void Function()>[];
-  bool _isPressed = false;
+  static const isPressedProperty = DuiProperty<Button, bool>(
+    name: 'isPressed',
+    defaultValue: false,
+    affectsPaint: true,
+  );
+  static const templateProperty = DuiProperty<Button, ControlTemplate<Button>?>(
+    name: 'template',
+    defaultValue: null,
+    affectsMeasure: true,
+    affectsPaint: true,
+  );
 
-  bool get isPressed => _isPressed;
+  final _clickHandlers = <void Function()>[];
+  UIElement? _templateRoot;
+
+  bool get isPressed => getValue(isPressedProperty);
+
+  ControlTemplate<Button>? get template => getValue(templateProperty);
+  set template(ControlTemplate<Button>? value) =>
+      setValue(templateProperty, value);
+
+  /// The persistent root created by the current template, if any.
+  UIElement? get templateRoot => _templateRoot;
 
   void addClickHandler(void Function() handler) => _clickHandlers.add(handler);
   void removeClickHandler(void Function() handler) =>
@@ -24,15 +45,13 @@ final class Button extends ContentControl {
 
   void _pointerDown(Object sender, PointerEventArgs args) {
     if (!isEnabled) return;
-    _isPressed = true;
+    setValue(isPressedProperty, true);
     focus();
-    invalidatePaint();
   }
 
   void _pointerUp(Object sender, PointerEventArgs args) {
-    if (!_isPressed) return;
-    _isPressed = false;
-    invalidatePaint();
+    if (!isPressed) return;
+    setValue(isPressedProperty, false);
     _activate();
     args.handled = true;
   }
@@ -54,13 +73,79 @@ final class Button extends ContentControl {
   }
 
   @override
+  Iterable<UIElement> get logicalChildren =>
+      _templateRoot == null ? super.logicalChildren : [_templateRoot!];
+
+  @override
+  void onDuiPropertyChanged<T>(
+    DuiProperty<dynamic, T> property,
+    T oldValue,
+    T newValue,
+  ) {
+    super.onDuiPropertyChanged(property, oldValue, newValue);
+    if (identical(property, templateProperty)) {
+      _replaceTemplate(newValue as ControlTemplate<Button>?);
+    }
+  }
+
+  void _replaceTemplate(ControlTemplate<Button>? template) {
+    final previous = _templateRoot;
+    if (previous != null) {
+      _detachPresenters(previous);
+      previous
+        ..attachToParent(null)
+        ..mountTo(null);
+      _disposeTemplate(previous);
+    }
+    _templateRoot = null;
+    content
+      ?..attachToParent(this)
+      ..mountTo(window);
+
+    if (template != null) {
+      final created = template.create(this);
+      if (created.logicalParent != null) {
+        throw StateError('A control template must return an unparented root.');
+      }
+      _templateRoot = created;
+      created
+        ..attachToParent(this)
+        ..mountTo(window);
+    }
+    invalidateMeasure();
+  }
+
+  void _detachPresenters(UIElement root) {
+    if (root is ContentPresenter && identical(root.host, this)) {
+      root.detachFromHost();
+    }
+    for (final child in root.logicalChildren) {
+      _detachPresenters(child);
+    }
+  }
+
+  void _disposeTemplate(UIElement root) {
+    for (final child in root.logicalChildren) {
+      _disposeTemplate(child);
+    }
+    root.dispose();
+  }
+
+  @override
   Size measureCore(Size availableSize) {
+    final root = _templateRoot;
+    if (root != null) return root.measure(availableSize);
     final childSize = super.measureCore(availableSize);
     return Size(childSize.width + 24, childSize.height + 12);
   }
 
   @override
   void arrangeCore(Rect finalRect) {
+    final root = _templateRoot;
+    if (root != null) {
+      root.arrange(finalRect);
+      return;
+    }
     content?.arrange(Rect.fromLTWH(
       finalRect.left + 12,
       finalRect.top + 6,
@@ -71,11 +156,29 @@ final class Button extends ContentControl {
 
   @override
   void renderCore(DrawingContext context) {
+    final root = _templateRoot;
+    if (root != null) {
+      root.render(context);
+      if (isFocused) {
+        drawFocusRing(
+          context,
+          bounds,
+          shape: template?.focusRingShape ?? FocusRingShape.rectangle,
+        );
+      }
+      return;
+    }
     context.drawRect(
       bounds,
       Paint(isPressed ? const Color(0xFFB0B0B0) : const Color(0xFFE0E0E0)),
     );
     if (isFocused) drawFocusRing(context, bounds);
     super.renderCore(context);
+  }
+
+  @override
+  UIElement? hitTestCore(Point position) {
+    final root = _templateRoot;
+    return root == null ? super.hitTestCore(position) : root.hitTest(position);
   }
 }

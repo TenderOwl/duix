@@ -31,6 +31,29 @@ void main() {
       expect(_focusRing(renderer), isEmpty);
     });
 
+    test('Button template selects a capsule focus ring', () async {
+      final button = Button(content: Label(text: 'Aqua'))
+        ..template = ControlTemplate<Button>(
+          (control) => ContentPresenter(control),
+          focusRingShape: FocusRingShape.capsule,
+        );
+      final window = Window(width: 120, height: 50, content: button);
+      await window.show();
+      button.focus();
+      final renderer = RecordingDrawingContext();
+      window.renderFrame(renderer);
+
+      final ring =
+          renderer.commands.whereType<DrawRoundedRectCommand>().singleWhere(
+                (command) => command.paint.color.value == _focusRingColor,
+              );
+      _expectRect(ring.rect, 1, 1, 118, 48);
+      expect(ring.radiusX, 59);
+      expect(ring.radiusY, 24);
+      expect(ring.strokeWidth, 2);
+      expect(_focusRing(renderer), isEmpty);
+    });
+
     test('TextBox draws a focus ring together with its caret', () async {
       final box = TextBox(text: 'Text');
       final window = Window(width: 120, height: 30, content: box);

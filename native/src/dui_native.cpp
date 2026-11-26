@@ -10,6 +10,7 @@
 #include "include/core/SkImageInfo.h"
 #include "include/core/SkPaint.h"
 #include "include/core/SkPixmap.h"
+#include "include/core/SkRRect.h"
 #include "include/core/SkSurface.h"
 #include "include/core/SkTypeface.h"
 #include "modules/skparagraph/include/FontCollection.h"
@@ -766,6 +767,32 @@ void dui_draw_rect(
   window->surface->getCanvas()->drawRect(
       SkRect::MakeXYWH(x, y, width, height),
       paint);
+}
+
+void dui_draw_rounded_rect(
+    DuiWindow* window,
+    double x,
+    double y,
+    double width,
+    double height,
+    double radius_x,
+    double radius_y,
+    uint32_t rgba,
+    double stroke_width) {
+  if (!window || !window->frame_active) return;
+  SkPaint paint;
+  paint.setColor(static_cast<SkColor>(rgba));
+  paint.setAntiAlias(true);
+  if (std::isfinite(stroke_width) && stroke_width > 0) {
+    paint.setStyle(SkPaint::kStroke_Style);
+    paint.setStrokeWidth(static_cast<SkScalar>(stroke_width));
+  }
+  const auto rect = SkRect::MakeXYWH(x, y, width, height);
+  const auto rounded_rect = SkRRect::MakeRectXY(
+      rect,
+      static_cast<SkScalar>(radius_x),
+      static_cast<SkScalar>(radius_y));
+  window->surface->getCanvas()->drawRRect(rounded_rect, paint);
 }
 
 void dui_draw_text(

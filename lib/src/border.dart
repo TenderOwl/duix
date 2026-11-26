@@ -2,31 +2,34 @@ import 'colors.dart';
 import 'content_control.dart';
 import 'drawing.dart';
 import 'geometry.dart';
+import 'properties.dart';
 
 final class Border extends ContentControl {
   Border({
     super.content,
     Color color = Colors.black,
     EdgeInsets padding = EdgeInsets.zero,
-  })  : _color = color,
-        _padding = padding;
-
-  Color _color;
-  EdgeInsets _padding;
-
-  Color get color => _color;
-  set color(Color value) {
-    if (_color == value) return;
-    _color = value;
-    invalidatePaint();
+  }) {
+    setValue(colorProperty, color);
+    setValue(paddingProperty, padding);
   }
 
-  EdgeInsets get padding => _padding;
-  set padding(EdgeInsets value) {
-    if (_padding == value) return;
-    _padding = value;
-    invalidateMeasure();
-  }
+  static const colorProperty = DuiProperty<Border, Color>(
+    name: 'color',
+    defaultValue: Colors.black,
+    affectsPaint: true,
+  );
+  static const paddingProperty = DuiProperty<Border, EdgeInsets>(
+    name: 'padding',
+    defaultValue: EdgeInsets.zero,
+    affectsMeasure: true,
+  );
+
+  Color get color => getValue(colorProperty);
+  set color(Color value) => setValue(colorProperty, value);
+
+  EdgeInsets get padding => getValue(paddingProperty);
+  set padding(EdgeInsets value) => setValue(paddingProperty, value);
 
   @override
   bool get isFocusable => false;

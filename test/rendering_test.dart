@@ -37,6 +37,21 @@ void main() {
     );
   });
 
+  test('recording renderer preserves rounded rectangle geometry', () {
+    final renderer = RecordingDrawingContext();
+    const rect = Rect.fromLTWH(4, 6, 120, 40);
+    const paint = Paint(Color(0x88FFFFFF));
+
+    renderer.drawRoundedRect(rect, 20, 18, paint, strokeWidth: 2);
+
+    final command = renderer.commands.single as DrawRoundedRectCommand;
+    expect(command.rect, rect);
+    expect(command.radiusX, 20);
+    expect(command.radiusY, 18);
+    expect(command.paint, same(paint));
+    expect(command.strokeWidth, 2);
+  });
+
   test('window uses an opaque white background by default', () {
     final window = Window();
 

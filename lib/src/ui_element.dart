@@ -2,6 +2,7 @@ import 'drawing.dart';
 import 'events.dart';
 import 'geometry.dart';
 import 'properties.dart';
+import 'styles.dart';
 import 'text_layout.dart';
 
 abstract interface class WindowHost {
@@ -29,6 +30,10 @@ abstract interface class WindowHost {
 abstract class UIElement extends PropertyOwner {
   static const dataContextProperty = DuiProperty<UIElement, Object?>(
     name: 'dataContext',
+    defaultValue: null,
+  );
+  static const styleProperty = DuiProperty<UIElement, Style<dynamic>?>(
+    name: 'style',
     defaultValue: null,
   );
 
@@ -211,6 +216,9 @@ abstract class UIElement extends PropertyOwner {
     _isFocusScope = value;
     notifyPropertyChanged('isFocusScope', oldValue, value);
   }
+
+  Style<dynamic>? get style => getValue(styleProperty);
+  set style(Style<dynamic>? value) => setValue(styleProperty, value);
 
   Object? get dataContext => getValue(dataContextProperty);
   set dataContext(Object? value) => setValue(dataContextProperty, value);
@@ -426,10 +434,25 @@ abstract class UIElement extends PropertyOwner {
     if (property.affectsArrange) invalidateArrange();
     if (property.affectsPaint) invalidatePaint();
     super.onDuiPropertyChanged(property, oldValue, newValue);
+    if (identical(property, styleProperty)) {
+      _updateStyle(oldValue as Style<dynamic>?, newValue as Style<dynamic>?);
+    }
     if (identical(property, dataContextProperty)) {
       for (final child in logicalChildren) {
         child._inheritDataContext(dataContext);
       }
+    }
+  }
+
+  void _updateStyle(Style<dynamic>? oldStyle, Style<dynamic>? newStyle) {
+    final newProperties = <DuiProperty<dynamic, dynamic>>{
+      for (final setter in newStyle?.setters ?? const []) setter.property,
+    };
+    for (final setter in oldStyle?.setters ?? const []) {
+      if (!newProperties.contains(setter.property)) setter.clearFrom(this);
+    }
+    for (final setter in newStyle?.setters ?? const []) {
+      setter.applyTo(this);
     }
   }
 
@@ -477,12 +500,17 @@ abstract class UIElement extends PropertyOwner {
 }
 
 abstract class Control extends UIElement {
+  static const isPointerOverProperty = DuiProperty<Control, bool>(
+    name: 'isPointerOver',
+    defaultValue: false,
+    affectsPaint: true,
+  );
+
   bool _isFocused = false;
-  bool _isPointerOver = false;
 
   bool get isFocusable => true;
   bool get isFocused => _isFocused;
-  bool get isPointerOver => _isPointerOver;
+  bool get isPointerOver => getValue(isPointerOverProperty);
 
   bool focus() => _window?.requestFocus(this) ?? false;
   bool capturePointer() => _window?.capturePointer(this) ?? false;
@@ -499,9 +527,5 @@ abstract class Control extends UIElement {
   void onFocusChanged(bool value) {}
   void onTextInputActivated() {}
 
-  void updatePointerOver(bool value) {
-    if (_isPointerOver == value) return;
-    _isPointerOver = value;
-    invalidatePaint();
-  }
+  void updatePointerOver(bool value) => setValue(isPointerOverProperty, value);
 }

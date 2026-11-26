@@ -285,6 +285,17 @@ typedef _DrawRectNative = Void Function(
   Double,
   Uint32,
 );
+typedef _DrawRoundedRectNative = Void Function(
+  Pointer<DuiWindowOpaque>,
+  Double,
+  Double,
+  Double,
+  Double,
+  Double,
+  Double,
+  Uint32,
+  Double,
+);
 typedef _DrawTextNative = Void Function(
   Pointer<DuiWindowOpaque>,
   Pointer<Utf8>,
@@ -401,6 +412,17 @@ typedef _DrawRectDart = void Function(
   double,
   double,
   int,
+);
+typedef _DrawRoundedRectDart = void Function(
+  Pointer<DuiWindowOpaque>,
+  double,
+  double,
+  double,
+  double,
+  double,
+  double,
+  int,
+  double,
 );
 typedef _DrawTextDart = void Function(
   Pointer<DuiWindowOpaque>,
@@ -544,6 +566,10 @@ final class NativeBindings {
         drawRect = library.lookupFunction<_DrawRectNative, _DrawRectDart>(
           'dui_draw_rect',
         ),
+        drawRoundedRect = library
+            .lookupFunction<_DrawRoundedRectNative, _DrawRoundedRectDart>(
+          'dui_draw_rounded_rect',
+        ),
         drawText = library.lookupFunction<_DrawTextNative, _DrawTextDart>(
           'dui_draw_text',
         ),
@@ -609,6 +635,7 @@ final class NativeBindings {
   final _WindowPushClipDart _windowPushClip;
   final _FrameDart _windowPopClip;
   final _DrawRectDart drawRect;
+  final _DrawRoundedRectDart drawRoundedRect;
   final _DrawTextDart drawText;
   final _TextLayoutCreateDart _textLayoutCreate;
   final _TextLayoutDestroyDart textLayoutDestroy;

@@ -256,6 +256,17 @@ void main() {
             reason: bindings.lastError);
         bindings.pushClipRect(window, 4, 4, 40, 24);
         bindings.drawRect(window, 0, 0, 160, 80, 0x5580CFFF);
+        bindings.drawRoundedRect(
+          window,
+          4,
+          4,
+          80,
+          32,
+          16,
+          16,
+          0x880087DB,
+          2,
+        );
         bindings.textLayoutDraw(window, layout, 4, 4, 0xFF000000);
         bindings.popClip(window);
         expect(bindings.windowPresent(window), 1, reason: bindings.lastError);

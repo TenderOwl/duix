@@ -174,6 +174,16 @@ DUI_API void dui_draw_rect(
     double width,
     double height,
     uint32_t rgba);
+DUI_API void dui_draw_rounded_rect(
+    DuiWindow* window,
+    double x,
+    double y,
+    double width,
+    double height,
+    double radius_x,
+    double radius_y,
+    uint32_t rgba,
+    double stroke_width);
 DUI_API void dui_draw_text(
     DuiWindow* window,
     const char* text_utf8,

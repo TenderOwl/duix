@@ -2,12 +2,18 @@ import 'drawing.dart';
 import 'geometry.dart';
 import 'ui_element.dart';
 
+typedef ContentChangedListener = void Function(
+  UIElement? oldContent,
+  UIElement? newContent,
+);
+
 abstract class ContentControl extends Control {
   ContentControl({UIElement? content}) : _content = content {
     _content?.attachToParent(this);
   }
 
   UIElement? _content;
+  final _contentChangedListeners = <ContentChangedListener>[];
 
   UIElement? get content => _content;
   set content(UIElement? value) {
@@ -15,12 +21,24 @@ abstract class ContentControl extends Control {
     if (value?.logicalParent != null) {
       throw StateError('The content already belongs to another parent.');
     }
+    final oldContent = _content;
     _content?.attachToParent(null);
     _content?.mountTo(null);
     _content = value;
     _content?.attachToParent(this);
     _content?.mountTo(window);
+    for (final listener in List.of(_contentChangedListeners)) {
+      listener(oldContent, value);
+    }
     invalidateMeasure();
+  }
+
+  void addContentChangedListener(ContentChangedListener listener) {
+    _contentChangedListeners.add(listener);
+  }
+
+  void removeContentChangedListener(ContentChangedListener listener) {
+    _contentChangedListeners.remove(listener);
   }
 
   @override

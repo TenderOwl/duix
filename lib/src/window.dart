@@ -49,6 +49,7 @@ final class Window extends ObservableObject implements WindowHost {
   UIElement? _content;
   late final FocusManager focusManager = FocusManager(this);
   Control? _pointerCapture;
+  Set<Control> _hoveredControls = <Control>{};
   TextInputHandler? textInputHandler;
   ClipboardHandler? clipboardHandler;
   final _scheduler = FrameScheduler();
@@ -137,6 +138,7 @@ final class Window extends ObservableObject implements WindowHost {
   UIElement? get rootElement => _content;
   set content(UIElement? value) {
     if (identical(_content, value)) return;
+    _clearHover();
     _content?.attachToParent(null);
     _content?.mountTo(null);
     _content = value;
@@ -157,6 +159,7 @@ final class Window extends ObservableObject implements WindowHost {
 
   void close() {
     _isVisible = false;
+    _clearHover();
     _content?.mountTo(null);
   }
 
@@ -216,11 +219,35 @@ final class Window extends ObservableObject implements WindowHost {
 
   void dispatchPointerMove(Point position) {
     final target = _pointerCapture ?? _content?.hitTest(position);
+    _updateHover(target);
     target?.raiseEvent(
       UIElement.pointerMove,
       PointerEventArgs(pointerId: 1, position: position)
         ..originalSource = target,
     );
+  }
+
+  void _updateHover(UIElement? target) {
+    final next = <Control>{};
+    UIElement? current = target;
+    while (current != null) {
+      if (current is Control) next.add(current);
+      current = current.logicalParent;
+    }
+    for (final control in _hoveredControls.difference(next)) {
+      control.updatePointerOver(false);
+    }
+    for (final control in next.difference(_hoveredControls)) {
+      control.updatePointerOver(true);
+    }
+    _hoveredControls = next;
+  }
+
+  void _clearHover() {
+    for (final control in _hoveredControls) {
+      control.updatePointerOver(false);
+    }
+    _hoveredControls = <Control>{};
   }
 
   void dispatchPointerUp(

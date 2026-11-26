@@ -162,7 +162,12 @@ Skia canvas масштабируется через `displayScale`. Backbuffer �
 - one-way local маскирует binding без отписки, а `clearLocalValue()` восстанавливает актуальное binding value; constructor defaults не блокируют style/inherited;
 - `UIElement.dataContextProperty` автоматически наследуется по logical tree, обновляет descendants при изменениях и reparenting; local/binding layers сохраняют обычные приоритеты;
 - типобезопасные `dataContextAs<T>()` и `requireDataContext<T>()` без строковых paths, reflection и кодогенерации;
-- 207 Dart-тестов, включая DataContext inheritance/accessors/reparenting, value precedence/transitions, binding lifecycle/diagnostics, ObservableCollection/ItemsControl/virtualization, ScrollViewer measure/scroll/input/clip, Grid tracks/span/gap/invalidate/HiDPI, DockPanel measure/arrange/invalidate, diagnostics FPS/render-on-demand, synchronous live-resize frame с увеличением physical backbuffer, layout constraints/alignment, infinite text width, clipping/rendering, horizontal scrolling, mouse caret/selection, pointer capture, surrogate pairs, composition, clipboard, render-on-demand и scheduler counters.
+- generic `Style<TOwner>` и `DuiSetter<TOwner, T>` применяются через style layer с сохранением local/binding приоритетов;
+- `ControlTemplate<Button>` создаёт persistent visual subtree, `ContentPresenter` сохраняет и обновляет исходный content, typed `PropertyBinding`/`MappedBinding` реагируют без rebuild; `focusRingShape` выбирает прямоугольный или капсульный focus ring;
+- `Button.isPressedProperty` и `Control.isPointerOverProperty` доступны шаблонам; Window обновляет hover по logical path, template replacement освобождает bindings старого subtree, а input/focus ring сохраняются;
+- `Border.colorProperty`/`paddingProperty` поддерживают styles и bindings; `example/native_aqua_button.dart` демонстрирует named Aqua style, persistent template с hover/pressed, капсульную форму, внутреннюю светлую кромку, верхний глянцевый блик и капсульный focus ring;
+- `DrawingContext.drawRoundedRect()` поддерживает fill/stroke в recording renderer и native Skia backend через `dui_draw_rounded_rect`;
+- 216 Dart-тестов, включая styles/templates, DataContext inheritance/accessors/reparenting, value precedence/transitions, binding lifecycle/diagnostics, ObservableCollection/ItemsControl/virtualization, ScrollViewer measure/scroll/input/clip, Grid tracks/span/gap/invalidate/HiDPI, DockPanel measure/arrange/invalidate, diagnostics FPS/render-on-demand, synchronous live-resize frame с увеличением physical backbuffer, layout constraints/alignment, infinite text width, clipping/rendering, horizontal scrolling, mouse caret/selection, pointer capture, surrogate pairs, composition, clipboard, render-on-demand и scheduler counters.
 
 ### 3.2. Проверенное поведение
 
@@ -173,7 +178,9 @@ Skia canvas масштабируется через `displayScale`. Backbuffer �
 - Белый фон окна отображается корректно.
 - HiDPI-масштабирование подтверждено на 4K-дисплее.
 - `dart analyze` проходит без замечаний.
-- Все 205 тестов при исключении двух clipboard-сценариев проходят, включая 6 DataContext-тестов, 9 value-precedence-тестов, 13 binding-тестов, 17 ItemsControl/virtualization-тестов, 11 ScrollViewer-тестов, 18 Grid-тестов, 7 DockPanel-тестов и FPS/render-on-demand. Два прежних полных прогона остановились только на Windows clipboard `Couldn't open clipboard`.
+- Все 214 тестов при исключении двух clipboard-сценариев проходят, включая 4 style-теста, 3 control-template-теста, 6 DataContext-тестов, 9 value-precedence-тестов, 13 binding-тестов, 17 ItemsControl/virtualization-тестов, 11 ScrollViewer-тестов, 18 Grid-тестов, 7 DockPanel-тестов и FPS/render-on-demand. Два прежних полных прогона остановились только на Windows clipboard `Couldn't open clipboard`.
+- Style setters применяются и удаляются через style layer, local/binding маскируют их по общим правилам, несовместимый target type отклоняется. Template factory Button вызывается один раз; content replacement, text и pressed updates сохраняют visual identity. Custom render заменяет default background, keyboard/pointer activation и focus ring продолжают работать.
+- Native Aqua smoke на Windows проверяет hover enter/leave, pressed/release, pointer click, Space и сохранение template identity; Skia-вызов rounded rect проходит в native ABI-тесте, а smoke завершается после 3 кадров: scale 2.0, logical 520×320, physical 1040×640. Обновлённый визуальный результат ещё не подтверждён пользователем.
 - DataContext рекурсивно наследуется, публикует notifications descendants, восстанавливает актуальное inherited value после очистки local и меняется при detach/reparent. Item context в ItemsControl остаётся local и передаётся вложенным контролам. Typed accessors возвращают совпадение или null, а required accessor выбрасывает понятный `StateError` для absent/wrong type.
 - Полная цепочка value layers подтверждена тестами: masked source updates не создают ложных notifications, снятие верхнего слоя восстанавливает effective value, замена binding поверх local публикует корректное previous value. Two-way setter продолжает писать в источник под animation mask; nullable layers различаются по наличию записи, а не по `null`.
 - Native items smoke на Windows проходит прокрутку к середине и концу списка из 100 000 строк: после завершения создано 16 контейнеров, extent=2 400 000, отрисованы 3 кадра. Строки примера имеют фиксированную высоту 24; переменная высота проверяется headless-тестом. Ручная проверка примера подтверждена пользователем.
@@ -224,9 +231,11 @@ lib/src/focus_manager.dart           — FocusManager
 lib/src/focus_decoration.dart        — общий focus ring для контролов
 lib/src/ui_element.dart              — UIElement, Control и WindowHost lifecycle
 lib/src/controls.dart                — compatibility barrel для контролов
-lib/src/content_control.dart         — ContentControl
-lib/src/button.dart                  — Button
-lib/src/label.dart              — Label
+lib/src/content_control.dart         — ContentControl и content notifications
+lib/src/control_template.dart        — ControlTemplate и ContentPresenter
+lib/src/styles.dart                  — типизированные Style и DuiSetter
+lib/src/button.dart                  — Button и persistent template
+lib/src/label.dart                   — Label
 lib/src/text_box.dart                — TextBox, editing, scrolling и IME
 lib/src/border.dart                  — Border
 lib/src/colors.dart                  — Colors
@@ -252,6 +261,7 @@ native/src/paragraph_smoke.cpp       — SkParagraph smoke-проверка
 native/CMakeLists.txt                — нативная сборка
 tools/bootstrap_native.py            — зависимости и сборка
 example/native_counter.dart          — нативный интерактивный пример
+example/native_aqua_button.dart      — Aqua style/template, hover/pressed и smoke
 example/native_smoke.dart            — native smoke с автоматическим завершением
 example/native_text_gallery.dart     — Unicode/HiDPI text gallery и её smoke-режим
 example/native_textbox.dart          — интерактивная проверка TextBox и smoke-режим
@@ -269,6 +279,8 @@ dart analyze
 dart test
 dart test --name '^(?!.*clipboard).*$'
 dart run example/counter.dart
+dart run example/native_aqua_button.dart --diagnostics
+dart run example/native_aqua_button.dart --smoke --diagnostics
 dart run example/native_frame_benchmark.dart
 dart run example/native_items_control.dart
 dart run example/native_items_control.dart --smoke --diagnostics
@@ -306,9 +318,9 @@ python tools/bootstrap_native.py --smoke --dart "<путь-к-dart>"
 3. **P1:** Windows clipboard cleanup нестабилен при восстановлении пустого прежнего значения: SDL `Couldn't open clipboard`; round-trip и запись самого значения при этом успешны.
 4. **P2:** SDL wait ограничен 16 мс, чтобы Dart timers получали управление; это не полностью event-driven async integration. Измеренные 1.53–1.54% idle process CPU и медианная latency около 16.3–16.5 мс пока не оправдывают усложнение backend.
 5. **P2:** поиск видимого диапазона и расчёт estimated extent в `VirtualizingStackPanel` линейны по числу items; переменная высота может уточнять позицию на последующих layout pass.
-6. **P1:** value layers, ручные setters и DataContext inheritance реализованы, но универсальное inherited-property propagation, styles/control templates и animation engine ещё отсутствуют.
+6. **P1:** value layers, DataContext inheritance и styles реализованы, но универсальное inherited-property propagation и animation engine ещё отсутствуют; control templates пока поддержаны только у Button.
 7. **P1:** базовый `PropertyOwner.dispose()` отменяет bindings, но единый recursive dispose контролов и остальных ресурсов ещё не реализован.
-8. **P2:** нет общих styles/control templates и accessibility.
+8. **P2:** accessibility ещё не реализован.
 9. **P2:** нет packaging runtime dependencies и кроссплатформенной CI.
 
 ---
@@ -695,12 +707,16 @@ One-way local маскирует binding, но не отменяет его; `cl
 
 ## 7.4. Styles и templates
 
-- [ ] Named style или type style.
-- [ ] Setter-ы свойств.
-- [ ] Control template как persistent subtree factory.
-- [ ] Template bindings без потери идентичности после смены обычных свойств.
+- [x] Named style или type style.
+- [x] Setter-ы свойств.
+- [x] Control template как persistent subtree factory.
+- [x] Template bindings без потери идентичности после смены обычных свойств.
 
-Критерий готовности: внешний вид Button меняется шаблоном без изменения его input/focus поведения.
+`Style<TOwner>` содержит типизированные `DuiSetter<TOwner, T>` и необязательное имя, применяется через `UIElement.styleProperty`. Setters записываются в style layer; local/binding/animation сохраняют приоритет. При замене style общие свойства обновляются без промежуточного clear, отсутствующие в новом style setters удаляются. Несовместимый owner type отклоняется.
+
+`ControlTemplate<Button>` создаёт subtree один раз; `ContentPresenter` переносит текущий content в шаблон и следит за его заменой. `PropertyBinding` и `MappedBinding` связывают элементы шаблона с typed properties, включая `Button.isPressedProperty`, без строковых paths. Обычные property/content changes не вызывают factory повторно. При замене template старое subtree отсоединяется и его property bindings освобождаются; content сохраняет identity и возвращается под Button.
+
+Критерий готовности выполнен: custom Border заменяет default Button background, pointer/keyboard activation и focus ring сохраняются. Поддержка templates реализована пока только для Button; распространение на остальные контролы не входило в критерий этапа.
 
 ---
 
@@ -763,7 +779,7 @@ One-way local маскирует binding, но не отменяет его; `cl
 Порядок ближайших рабочих сессий:
 
 1. **Стабилизация Windows clipboard:** устранить повторяемый сбой `Couldn't open clipboard` в native ABI-тесте.
-2. **Этап 7.4:** реализовать styles и persistent control templates без потери identity и input/focus поведения.
+2. **Этап 8.1:** добавить semantics к дереву и синхронизировать role/name/value/state/bounds с focus и selection.
 3. **Ручная проверка ScrollViewer:** запустить `example/native_scroll_viewer.dart`, проверить реальное SDL wheel, клавиатурную прокрутку из focused TextBox/Button, track/thumb dragging, clipping и resize при разных display scales.
 4. **Незавершённая часть этапа 1.2:** проверить сборку и Paragraph smoke на Linux (FontConfig/Freetype) и macOS (CoreText).
 5. **Ручная визуальная проверка:** открыть text gallery и TextBox на мониторах с разными масштабами, проверить clipping, selection и caret; автоматический smoke этого не заменяет.
@@ -808,6 +824,59 @@ GPU backend по-прежнему не входит в ближайшие эта
 ---
 
 ## 9. Журнал работ
+
+### 2026-11-26 — пример Aqua Button
+
+Сделано:
+
+- Добавлен `example/native_aqua_button.dart`: named `Style<Button>` назначает persistent Aqua template с белым content label и сохранением focus ring. После визуальной проверки прямоугольная поверхность заменена капсулой со скруглёнными краями, внутренней светлой кромкой и верхним полупрозрачным глянцевым бликом.
+- `Control.isPointerOver` переведён на typed `DuiProperty`; Window обновляет hover для logical path hit-tested element и очищает его при выходе, смене content и закрытии окна.
+- `Border.color` и `Border.padding` переведены на `DuiProperty`, поэтому поверхность шаблона поддерживает bindings.
+- Комбинированный binding примера переключает normal/hover/pressed colors без пересоздания template subtree. Поддержаны `--diagnostics` и автоматический `--smoke`.
+- В `DrawingContext`, recording renderer, FFI bindings, C ABI и Skia backend добавлен `drawRoundedRect`/`dui_draw_rounded_rect` с fill/stroke; native ABI-тест вызывает его в активном кадре, recording-тест проверяет геометрию, Paint и strokeWidth.
+- `ControlTemplate.focusRingShape` позволяет шаблону выбрать `rectangle` или `capsule`; Aqua использует капсульный контур вместо прежнего прямоугольного, default-рендеринг остальных контролов не изменён. Тест проверяет геометрию capsule ring и отсутствие прямоугольных полос.
+
+Проверено:
+
+- `dart format` и `dart analyze` — без замечаний.
+- `cmake --build native/build --parallel` — `dui_native.dll` успешно пересобрана.
+- `dart run example/native_aqua_button.dart --smoke --diagnostics` — успешно: hover, pressed, pointer click, Space и template identity проверены, 3 кадра; scale 2.0, logical 520×320, physical 1040×640.
+- `dart test --name '^(?!.*clipboard).*$'` — все 214 тестов проходят.
+- `git diff --check` — без ошибок; только известные предупреждения LF→CRLF.
+
+Не проверено:
+
+- Интерактивный визуальный результат пока не подтверждён пользователем; smoke проверяет состояния и native render/present автоматически.
+
+Следующий шаг:
+
+- Ручная проверка Aqua-примера; затем этап 8.1 — semantics и accessibility.
+
+### 2026-11-26 — этап 7.4, styles и control templates
+
+Сделано:
+
+- Добавлены generic `Style<TOwner>` с необязательным именем и `DuiSetter<TOwner, T>`. `UIElement.styleProperty` применяет setters через style layer, обновляет общие свойства при смене style и очищает удалённые setters. Несовместимые target types отклоняются.
+- Добавлены `PropertyBinding` и `MappedBinding` для typed property/template bindings без строковых paths и reflection.
+- `Button.isPressed` переведён на `DuiProperty`; добавлены `Button.templateProperty`, `ControlTemplate<Button>` и доступный для проверок persistent `templateRoot`.
+- `ContentPresenter` переносит исходный content в visual subtree и синхронизирует последующие replacements. Обычные property/content changes не пересоздают template root.
+- Custom template полностью заменяет default Button visuals, но pointer/keyboard activation и focus ring сохраняются. При замене template старое subtree отсоединяется и его bindings освобождаются; content не dispose и сохраняет identity.
+- Добавлены 4 теста `test/styles_test.dart` и 3 теста `test/control_template_test.dart`. C ABI и native C++ не изменялись.
+
+Проверено:
+
+- `dart format` и `dart analyze` — без замечаний.
+- Целевой прогон styles/templates/Button keyboard/focus/DataContext/value precedence — все 35 тестов проходят.
+- `dart test --name '^(?!.*clipboard).*$'` — все 212 тестов проходят.
+- `git diff --check` — без ошибок; только известные предупреждения LF→CRLF.
+
+Ограничение:
+
+- Control templates реализованы для Button, как требовал критерий этапа; универсальная поддержка остальных контролов и общий recursive dispose остаются отдельными задачами.
+
+Следующий шаг:
+
+- Этап 8.1 — semantics для дерева контролов и accessibility.
 
 ### 2026-11-26 — этап 7.3, DataContext
 

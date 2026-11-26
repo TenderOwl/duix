@@ -12,6 +12,22 @@ final class DrawRectCommand extends DrawCommand {
   final Paint paint;
 }
 
+final class DrawRoundedRectCommand extends DrawCommand {
+  const DrawRoundedRectCommand(
+    this.rect,
+    this.radiusX,
+    this.radiusY,
+    this.paint, {
+    this.strokeWidth = 0,
+  });
+
+  final Rect rect;
+  final double radiusX;
+  final double radiusY;
+  final Paint paint;
+  final double strokeWidth;
+}
+
 final class DrawTextCommand extends DrawCommand {
   const DrawTextCommand(
     this.text,
@@ -54,6 +70,23 @@ final class RecordingDrawingContext implements DrawingContext {
   @override
   void drawRect(Rect rect, Paint paint) {
     commands.add(DrawRectCommand(rect, paint));
+  }
+
+  @override
+  void drawRoundedRect(
+    Rect rect,
+    double radiusX,
+    double radiusY,
+    Paint paint, {
+    double strokeWidth = 0,
+  }) {
+    commands.add(DrawRoundedRectCommand(
+      rect,
+      radiusX,
+      radiusY,
+      paint,
+      strokeWidth: strokeWidth,
+    ));
   }
 
   @override

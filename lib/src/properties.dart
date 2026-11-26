@@ -102,6 +102,75 @@ final class CallbackBinding<T> implements Binding<T> {
   }
 }
 
+/// Binds directly to a typed property without string paths or reflection.
+final class PropertyBinding<T> implements Binding<T> {
+  PropertyBinding(this.source, this.property);
+
+  final PropertyOwner source;
+  final DuiProperty<dynamic, T> property;
+  final _listeners = <VoidListener, PropertyChangedListener>{};
+
+  @override
+  T read() => source.getValue(property);
+
+  @override
+  void addListener(VoidListener listener) {
+    if (_listeners.containsKey(listener)) return;
+    void propertyChanged(PropertyChangedEvent event) {
+      if (identical(event.property, property)) listener();
+    }
+
+    _listeners[listener] = propertyChanged;
+    source.addPropertyListener(propertyChanged);
+  }
+
+  @override
+  void removeListener(VoidListener listener) {
+    final propertyChanged = _listeners.remove(listener);
+    if (propertyChanged != null) {
+      source.removePropertyListener(propertyChanged);
+    }
+  }
+
+  @override
+  bool get canWrite => true;
+
+  @override
+  void write(T value) => source.setValue(property, value);
+}
+
+extension PropertyBindingExtension on PropertyOwner {
+  Binding<T> propertyBinding<T>(DuiProperty<dynamic, T> property) =>
+      PropertyBinding<T>(this, property);
+}
+
+final class MappedBinding<T, R> implements Binding<R> {
+  MappedBinding(this.source, this.convert);
+
+  final Binding<T> source;
+  final R Function(T value) convert;
+
+  @override
+  R read() => convert(source.read());
+
+  @override
+  void addListener(VoidListener listener) => source.addListener(listener);
+
+  @override
+  void removeListener(VoidListener listener) => source.removeListener(listener);
+
+  @override
+  bool get canWrite => false;
+
+  @override
+  void write(R value) => throw StateError('A mapped binding is read-only.');
+}
+
+extension BindingMapExtension<T> on Binding<T> {
+  Binding<R> map<R>(R Function(T value) convert) =>
+      MappedBinding<T, R>(this, convert);
+}
+
 final class BindingException implements Exception {
   BindingException(this.property, this.operation, this.cause);
 

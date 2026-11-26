@@ -4,6 +4,13 @@ abstract interface class DrawingContext {
   void pushClipRect(Rect rect);
   void popClip();
   void drawRect(Rect rect, Paint paint);
+  void drawRoundedRect(
+    Rect rect,
+    double radiusX,
+    double radiusY,
+    Paint paint, {
+    double strokeWidth = 0,
+  });
 
   void drawText(
     String text,
