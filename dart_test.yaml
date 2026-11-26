@@ -1,0 +1,6 @@
+tags:
+  clipboard:
+    description: >
+      Tests that drive the real system clipboard of the host machine. They fail
+      when another process holds the Windows clipboard, so they are excluded
+      with `dart test --exclude-tags clipboard`.

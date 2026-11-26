@@ -169,7 +169,11 @@ Skia canvas масштабируется через `displayScale`. Backbuffer �
 - `DrawingContext.drawRoundedRect()` поддерживает fill/stroke в recording renderer и native Skia backend через `dui_draw_rounded_rect`;
 - публичный backend-independent clipboard: `Window`/`WindowHost.writeClipboardData()`, `hasClipboardData()`, `readClipboardData()` с `Uint8List`, `readClipboardMimeTypes()`, `clearClipboard()`, `ClipboardMimeTypes.plainText/html` и native adapter через `ClipboardHandler`;
 - standalone backend-independent `FileDialog(handler)` хранит `title`, `initialDirectory` и typed `filters` в свойствах; `showOpen([Window? parent])` принимает только optional parent. Возвращается один файл или `null` при отмене, native errors становятся `StateError`; совместимый `Window`/`WindowHost.showOpenFileDialog()` сохранён. Windows использует системный `IFileOpenDialog`, Linux — `GtkFileDialog` (GTK 4.10+, пока без GTK parent), macOS — `NSOpenPanel` с parent sheet; возвращаемый UTF-8 path имеет явное native ownership;
-- 227 Dart-тестов, включая file-dialog contract, formatted clipboard snapshots, styles/templates, DataContext inheritance/accessors/reparenting, value precedence/transitions, binding lifecycle/diagnostics, ObservableCollection/ItemsControl/virtualization, ScrollViewer measure/scroll/input/clip, Grid tracks/span/gap/invalidate/HiDPI, DockPanel measure/arrange/invalidate, diagnostics FPS/render-on-demand, synchronous live-resize frame с увеличением physical backbuffer, layout constraints/alignment, infinite text width, clipping/rendering, horizontal scrolling, mouse caret/selection, pointer capture, surrogate pairs, composition, clipboard, render-on-demand и scheduler counters.
+- `TextBox` измеряется по реальным метрикам `TextLayout`: desired size = ширина/высота раскладки + content padding (16 по горизонтали, 8 по вертикали), минимальный размер 80×30; добавлено свойство `fontSize` (по умолчанию 14), влияющее на measure и paint;
+- измерение `TextBox` клампится к available width и больше не бросает `ArgumentError` на узком контейнере (прежняя оценка `clamp(80, available)` падала при available width меньше 80);
+- у `TextBox` раздельные кэши раскладки для measure и render: IME composition не вытесняет раскладку, используемую для измерения, а в steady state создаётся одна native-раскладка;
+- native clipboard-тесты помечены тегом `clipboard` (объявлен в `dart_test.yaml`), поэтому их можно исключать через `dart test --exclude-tags clipboard`, когда системный clipboard занят другим процессом;
+- 233 Dart-теста, включая file-dialog contract, formatted clipboard snapshots, styles/templates, DataContext inheritance/accessors/reparenting, value precedence/transitions, binding lifecycle/diagnostics, ObservableCollection/ItemsControl/virtualization, ScrollViewer measure/scroll/input/clip, Grid tracks/span/gap/invalidate/HiDPI, DockPanel measure/arrange/invalidate, diagnostics FPS/render-on-demand, synchronous live-resize frame с увеличением physical backbuffer, layout constraints/alignment, infinite text width, clipping/rendering, horizontal scrolling, mouse caret/selection, pointer capture, surrogate pairs, composition, clipboard, render-on-demand и scheduler counters.
 
 ### 3.2. Проверенное поведение
 
@@ -180,7 +184,9 @@ Skia canvas масштабируется через `displayScale`. Backbuffer �
 - Белый фон окна отображается корректно.
 - HiDPI-масштабирование подтверждено на 4K-дисплее.
 - `dart analyze` проходит без замечаний.
-- Полный `dart test` проходит: все 227 тестов, включая 6 file-dialog contract-тестов, 4 style-теста, 3 control-template-теста, 6 DataContext-тестов, 9 value-precedence-тестов, 13 binding-тестов, 17 ItemsControl/virtualization-тестов, 11 ScrollViewer-тестов, 18 Grid-тестов, 7 DockPanel-тестов и все clipboard-сценарии.
+- Полный `dart test` проходит: все 233 теста, включая 6 file-dialog contract-тестов, 4 style-теста, 3 control-template-теста, 6 DataContext-тестов, 9 value-precedence-тестов, 13 binding-тестов, 17 ItemsControl/virtualization-тестов, 11 ScrollViewer-тестов, 18 Grid-тестов, 7 DockPanel-тестов, 5 TextBox measurement-тестов и все clipboard-сценарии.
+- `TextBox` измеряется теми же метриками раскладки, что и `Label`: desired width = ширина `Label` + 16, desired height = высота `Label` + 8. Текстовая часть масштабируется с `fontSize` (удвоение `fontSize` удваивает ширину текста), padding остаётся постоянным. Узкий available width клампится вместо падения, изменение текста и remount переизмеряют контрол.
+- Native backend подтверждает ту же формулу на реальных SkParagraph-метриках: `TextBox` и `Label` с одинаковым текстом и `fontSize` дают `TextBox.width == Label.width + 16`, а смена текста увеличивает измерение.
 - Native library с `IFileOpenDialog` пересобрана, Paragraph smoke проходит. Headless-тесты подтверждают standalone dialog с parent и без него, передачу title/initialDirectory/filters, selected path и `null` при отмене или без backend; пользователь подтвердил parent/ownerless-варианты, фильтры и начальный каталог Windows-примера.
 - В formatted clipboard тесте проходят round-trip и восстановление прежнего значения для Unicode plain text, Windows `text/html`/CF_HTML, `application/xhtml+xml`, binary с нулевыми байтами и empty payload. Четыре native clipboard-сценария дополнительно прошли три повторных запуска. CF_HTML формируется с UTF-8 byte offsets, а чтение возвращает fragment без служебного header; остальные MIME-форматы сохраняются. Ручная вставка в сторонние приложения ещё не проверялась.
 - Clipboard snapshot/restore покрывает весь набор, перечисляемый MIME API: plain text, CF_HTML, XHTML, binary и empty payload. `clearClipboard()` восстанавливает исходно пустое состояние. Произвольные native-only clipboard formats, не представленные SDL/CF_HTML MIME API, в snapshot не входят.
@@ -277,7 +283,10 @@ example/native_text_gallery.dart     — Unicode/HiDPI text gallery и её smok
 example/native_textbox.dart          — интерактивная проверка TextBox и smoke-режим
 example/native_frame_benchmark.dart  — idle CPU и async invalidate latency
 example/native_items_control.dart    — список 100 000 элементов и virtualization smoke
+example/native_scroll_viewer.dart   — ScrollViewer, прокрутка и smoke
 test/                                — автоматические тесты
+test/text_box_measurement_test.dart — измерение TextBox по метрикам раскладки
+dart_test.yaml                       — объявление тега clipboard
 ```
 
 ### 3.4. Команды
@@ -287,7 +296,8 @@ dart pub get
 dart format lib example test
 dart analyze
 dart test
-dart test --name '^(?!.*clipboard).*$'
+dart test --exclude-tags clipboard
+dart test --tags clipboard
 dart run example/counter.dart
 dart run example/native_open_file_dialog.dart --diagnostics
 dart run example/native_aqua_button.dart --diagnostics
@@ -295,7 +305,15 @@ dart run example/native_aqua_button.dart --smoke --diagnostics
 dart run example/native_frame_benchmark.dart
 dart run example/native_items_control.dart
 dart run example/native_items_control.dart --smoke --diagnostics
+dart run example/native_scroll_viewer.dart --smoke --diagnostics
 ```
+
+Про `--exclude-tags clipboard`: четыре native clipboard-теста работают с реальным
+системным clipboard и падают, если буфер удерживает другой процесс. Раньше их
+исключали шаблоном `dart test --name '^(?!.*clipboard).*$'`, но Windows-оболочка
+съедает символ `^` до запуска Dart, и шаблон деградировал до «совпадает всё» —
+исключения не происходило. Теперь используется тег `clipboard`, объявленный в
+`dart_test.yaml`.
 
 Нативная проверка и сборка:
 
@@ -324,8 +342,8 @@ python tools/bootstrap_native.py --smoke --dart "<путь-к-dart>"
 
 Приоритет указан в скобках: P0 — критично, P1 — следующий этап, P2 — позже.
 
-1. **P0:** `TextBox.measureCore()` всё ещё приблизительно считает ширину через число символов.
-2. **P0:** legacy `drawText`, используемый `TextBox`, рисует через `drawSimpleText` без SkParagraph.
+1. **P0 (закрыт 2026-11-26):** `TextBox.measureCore()` считал ширину через число символов. Теперь измерение идёт по метрикам `TextLayout`, добавлено свойство `fontSize`, узкий available width клампится вместо `ArgumentError`.
+2. **P1 (переформулировано 2026-11-26):** устаревший пункт «legacy `drawText`, используемый `TextBox`» не воспроизводится — `TextBox` уже рисует через `layout.draw()` и SkParagraph. Фактический остаток: публичный `DrawingContext.drawText()` и native `dui_draw_text` → `SkCanvas::drawSimpleText` без shaping, и он используется FPS-overlay диагностики и headless-раскладкой. Нужно либо перевести на SkParagraph, либо убрать API.
 3. **P2:** Clipboard snapshots охватывают форматы SDL/CF_HTML MIME API, но не произвольные native-only formats вне него. Ручная проверка обмена HTML со сторонними приложениями ещё не выполнена.
 4. **P2:** SDL wait ограничен 16 мс, чтобы Dart timers получали управление; это не полностью event-driven async integration. Измеренные 1.53–1.54% idle process CPU и медианная latency около 16.3–16.5 мс пока не оправдывают усложнение backend.
 5. **P2:** поиск видимого диапазона и расчёт estimated extent в `VirtualizingStackPanel` линейны по числу items; переменная высота может уточнять позицию на последующих layout pass.
@@ -802,13 +820,21 @@ One-way local маскирует binding, но не отменяет его; `cl
 
 Порядок ближайших рабочих сессий:
 
+Пункты 1, 2, 4, 9, 10, 11 требуют macOS/Linux, сторонних приложений или живого
+IME и выполняются пользователем; пункты 3, 5, 6, 7, 8 доступны для кодовой
+работы на текущей машине.
+
 1. **Ручная проверка этапа 8.2:** на macOS собрать Objective‑C++ backend и проверить `NSOpenPanel` в parent/ownerless-режимах, title/initialDirectory/filters и Unicode paths; на Linux аналогично проверить GTK 4.10+ на X11/Wayland (parent пока ownerless).
 2. **Ручная проверка clipboard:** проверить вставку CF_HTML в Word, браузер и другие сторонние приложения.
 3. **Этап 8.1:** добавить semantics к дереву и синхронизировать role/name/value/state/bounds с focus и selection.
-4. **Ручная проверка ScrollViewer:** запустить `example/native_scroll_viewer.dart`, проверить реальное SDL wheel, клавиатурную прокрутку из focused TextBox/Button, track/thumb dragging, clipping и resize при разных display scales.
-5. **Незавершённая часть этапа 1.2:** проверить сборку и Paragraph smoke на Linux (FontConfig/Freetype) и macOS (CoreText).
-6. **Ручная визуальная проверка:** открыть text gallery и TextBox на мониторах с разными масштабами, проверить clipping, selection и caret; автоматический smoke этого не заменяет.
-7. **Ручная проверка этапа 2.4:** русский, китайский/японский ввод и emoji через реальные системные IME.
+4. **Ручная проверка ScrollViewer:** автоматическая часть закрыта — `example/native_scroll_viewer.dart --smoke` проходит на Windows (wheel прокрутка, offsets, bounds, 3 кадра, scale 2.0); остаётся визуальная проверка track/thumb dragging, clipping и resize при разных display scales.
+5. **P1 legacy `drawText`:** перевести публичный `DrawingContext.drawText()` и native `dui_draw_text` на SkParagraph shaping либо убрать API; сейчас без shaping остаются FPS-overlay диагностики и headless-раскладка.
+6. **P1 recursive dispose:** единый `dispose()` по дереву контролов (сейчас есть только `PropertyOwner.dispose()` и `ItemsControl.dispose()`), с освобождением native-раскладок и идемпотентным повторным вызовом.
+7. **Этап 8.4 CI:** добавить `.github/workflows` с analyze/test и native build на Windows/macOS/Linux — это разблокирует ручные проверки на других ОС.
+8. **Автоматизация ScrollViewer:** thumb dragging и клавиатурная прокрутка доступны через публичные `dispatchPointerDown/Move/Up` и `dispatchKeyDown`, поэтому их можно закрыть в smoke-режиме.
+9. **Незавершённая часть этапа 1.2:** проверить сборку и Paragraph smoke на Linux (FontConfig/Freetype) и macOS (CoreText).
+10. **Ручная визуальная проверка:** открыть text gallery и TextBox на мониторах с разными масштабами, проверить clipping, selection и caret; автоматический smoke этого не заменяет.
+11. **Ручная проверка этапа 2.4:** русский, китайский/японский ввод и emoji через реальные системные IME.
 
 GPU backend по-прежнему не входит в ближайшие этапы.
 
@@ -824,9 +850,14 @@ GPU backend по-прежнему не входит в ближайшие эта
 
    ```bash
    dart analyze
-   dart test
+   dart test --exclude-tags clipboard
    python tools/bootstrap_native.py --check
    ```
+
+   `dart test --exclude-tags clipboard` — надёжный gate: четыре native
+   clipboard-теста работают с реальным системным clipboard и падают, если буфер
+   удерживает другой процесс. Полный `dart test` тоже проходит, когда clipboard
+   свободен.
 
 4. Если менялся C++ или C ABI — пересобрать native:
 
@@ -849,6 +880,40 @@ GPU backend по-прежнему не входит в ближайшие эта
 ---
 
 ## 9. Журнал работ
+
+### 2026-11-26 — P0, реальное измерение TextBox
+
+Сделано:
+
+- `TextBox.measureCore()` больше не оценивает ширину по числу символов: desired size считается по метрикам `TextLayout` (ширина/высота раскладки + content padding 16/8, минимум 80×30).
+- Добавлено свойство `TextBox.fontSize` (по умолчанию 14) с `affectsMeasure`/`affectsPaint`; оно же используется при раскладке текста, поэтому measure и render считаются по одним метрикам.
+- Измерение клампится к available width. Прежняя формула `clamp(80, available)` бросала `ArgumentError`, если контейнер был уже 80 px — это воспроизведено и закрыто.
+- Раздельные кэши раскладки для measure и render: IME composition не вытесняет раскладку измерения, а в steady state держится одна native-раскладка.
+- `onMounted`/`onUnmounted` переизмеряют контрол, чтобы смена backend (headless → native) и remount не оставляли устаревший размер.
+- Четыре native clipboard-теста помечены тегом `clipboard`, тег объявлен в `dart_test.yaml`.
+
+Проверено:
+
+- `dart analyze` — без замечаний; `dart format` — без изменений.
+- `dart test` — 233/233; `dart test --exclude-tags clipboard` — 229/229.
+- Новый `test/text_box_measurement_test.dart` (5 тестов): ширина `TextBox` = ширина `Label` + 16 и высота = высота `Label` + 8; масштабирование с `fontSize`; клампинг к узкому available width; переизмерение при смене текста; корректность после remount.
+- Native-тест `TextBox measures with native text metrics` подтверждает ту же формулу на SkParagraph-метриках и рост измерения при смене текста.
+- `example/native_scroll_viewer.dart --smoke --diagnostics` проходит на Windows (scale 2.0, logical 640×420, physical 1280×840, 3 кадра) — автоматическая часть ручной проверки ScrollViewer закрыта.
+
+Обнаружено и исправлено в документации:
+
+- Windows-оболочка съедает `^` до запуска Dart, поэтому команда `dart test --name '^(?!.*clipboard).*$'` из «Команды» деградировала до «совпадает всё» и не исключала clipboard-тесты. Заменена на tag-based `--exclude-tags clipboard`.
+- Пункт долга «legacy `drawText`, используемый `TextBox`» устарел: `TextBox` уже рисует через `layout.draw()` и SkParagraph; без shaping остались только публичный `DrawingContext.drawText()`, FPS-overlay диагностики и headless-раскладка. Пункт переформулирован как P1.
+- В списке файлов не было `example/native_scroll_viewer.dart` — добавлен.
+
+Не проверено:
+
+- Визуальная проверка нового измерения в native-примерах (TextBox и три поля в `example/native_textbox.dart`) не проводилась — нужен взгляд пользователя.
+- macOS/Linux и внешние IME не затрагивались.
+
+Следующий шаг:
+
+- P1: перевести `DrawingContext.drawText()` и native `dui_draw_text` на SkParagraph shaping либо убрать API; затем recursive `dispose()` по дереву контролов.
 
 ### 2026-11-26 — этап 8.2, macOS NSOpenPanel
 

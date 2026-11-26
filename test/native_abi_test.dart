@@ -10,6 +10,12 @@ import 'package:test/test.dart';
 
 late NativeBindings bindings;
 
+/// Tag for tests that drive the real system clipboard.
+///
+/// These tests fail when another process holds the Windows clipboard, so they
+/// are excluded with `dart test --exclude-tags clipboard`.
+const _nativeClipboardTag = 'clipboard';
+
 void main() {
   setUpAll(() {
     bindings = NativeBindings.open();
@@ -308,6 +314,34 @@ void main() {
     }
   });
 
+  test('TextBox measures with native text metrics', () async {
+    final host = await SdlSkiaHost.initialize();
+    final box = TextBox(text: 'Native measurement', fontSize: 16);
+    final label = Label(text: 'Native measurement', fontSize: 16);
+    final window = Window(
+      width: 320,
+      height: 200,
+      content: StackPanel(children: [box, label]),
+    );
+    try {
+      await host.showWindow(window);
+
+      expect(label.desiredSize.width, greaterThan(0));
+      expect(
+        box.desiredSize.width,
+        closeTo(label.desiredSize.width + 16, 0.001),
+      );
+      expect(box.desiredSize.height, greaterThan(label.desiredSize.height));
+
+      box.text = 'A much longer native text layout';
+      window.updateLayout();
+      expect(box.desiredSize.width, greaterThan(label.desiredSize.width + 16));
+    } finally {
+      await host.closeWindow(window);
+      host.dispose();
+    }
+  });
+
   test('unchanged windows skip render and present until invalidated', () async {
     final host = await SdlSkiaHost.initialize(diagnosticsEnabled: true);
     final text = Label(text: 'Initial');
@@ -498,7 +532,7 @@ void main() {
       _restoreNativeClipboard(previous);
       bindings.hostDestroy(host);
     }
-  });
+  }, tags: _nativeClipboardTag);
 
   test('formatted clipboard round-trips text, HTML and binary data', () {
     final host = bindings.hostCreate();
@@ -549,7 +583,7 @@ void main() {
       _restoreNativeClipboard(previous);
       bindings.hostDestroy(host);
     }
-  });
+  }, tags: _nativeClipboardTag);
 
   test('clipboard snapshot restores all MIME formats and empty state', () {
     final host = bindings.hostCreate();
@@ -581,7 +615,7 @@ void main() {
       _restoreNativeClipboard(previous);
       bindings.hostDestroy(host);
     }
-  });
+  }, tags: _nativeClipboardTag);
 
   test('native backend works through the public Window clipboard API',
       () async {
@@ -608,7 +642,7 @@ void main() {
       _restorePublicClipboard(host, previous);
       host.dispose();
     }
-  });
+  }, tags: _nativeClipboardTag);
 
   test('null destruction arguments are ignored', () {
     expect(() => bindings.hostDestroy(nullptr), returnsNormally);

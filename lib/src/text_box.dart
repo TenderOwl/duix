@@ -10,8 +10,10 @@ import 'text_layout.dart';
 import 'ui_element.dart';
 
 final class TextBox extends Control {
-  TextBox({String text = ''}) : buffer = TextBuffer(text: text) {
+  TextBox({String text = '', double fontSize = 14})
+      : buffer = TextBuffer(text: text) {
     setValue(textProperty, text);
+    setValue(fontSizeProperty, fontSize);
     buffer.addPropertyListener((event) {
       if (event.property == TextBuffer.textProperty &&
           this.text != event.newValue) {
@@ -37,21 +39,41 @@ final class TextBox extends Control {
     affectsMeasure: true,
     affectsPaint: true,
   );
+  static const fontSizeProperty = DuiProperty<TextBox, double>(
+    name: 'fontSize',
+    defaultValue: 14,
+    affectsMeasure: true,
+    affectsPaint: true,
+  );
 
   static const _headlessFactory = HeadlessTextLayoutFactory();
+
+  /// Horizontal padding of the content area, mirrored by [renderCore].
+  static const double _contentPaddingHorizontal = 16;
+
+  /// Vertical padding of the content area, mirrored by [renderCore].
+  static const double _contentPaddingVertical = 8;
+
+  /// Smallest width the control reports so an empty field stays visible.
+  static const double _minimumWidth = 80;
+
+  /// Smallest height the control reports for a single line of text.
+  static const double _minimumHeight = 30;
 
   final TextBuffer buffer;
   WindowHost? _mountedHost;
   String _compositionText = '';
   TextSelection? _compositionSelection;
-  TextLayout? _renderLayout;
-  TextLayoutOptions? _renderLayoutOptions;
-  TextLayoutFactory? _renderLayoutFactory;
+  final _CachedTextLayout _measureLayout = _CachedTextLayout();
+  final _CachedTextLayout _renderLayout = _CachedTextLayout();
   double _horizontalScrollOffset = 0;
   bool _isSelecting = false;
 
   String get text => getValue(textProperty);
   set text(String value) => setValue(textProperty, value);
+
+  double get fontSize => getValue(fontSizeProperty);
+  set fontSize(double value) => setValue(fontSizeProperty, value);
 
   TextSelection get selection => buffer.selection;
   set selection(TextSelection value) => buffer.selection = value;
@@ -218,6 +240,7 @@ final class TextBox extends Control {
   @override
   void onMounted() {
     _mountedHost = window;
+    invalidateMeasure();
     if (isFocused) window?.startTextInput(this);
   }
 
@@ -225,7 +248,9 @@ final class TextBox extends Control {
   void onUnmounted() {
     _cancelPointerSelection();
     _clearComposition();
-    _clearRenderLayout();
+    _measureLayout.dispose();
+    _renderLayout.dispose();
+    invalidateMeasure();
     if (isFocused) _mountedHost?.stopTextInput(this);
     _mountedHost = null;
   }
@@ -312,10 +337,17 @@ final class TextBox extends Control {
   }
 
   @override
-  Size measureCore(Size availableSize) => Size(
-        (text.length * 8.4 + 16).clamp(80, availableSize.width),
-        30,
-      );
+  Size measureCore(Size availableSize) {
+    final layout = _layoutForMeasure();
+    var width = layout.width + _contentPaddingHorizontal;
+    var height = layout.height + _contentPaddingVertical;
+    if (width < _minimumWidth) width = _minimumWidth;
+    if (height < _minimumHeight) height = _minimumHeight;
+    if (availableSize.width.isFinite && width > availableSize.width) {
+      width = availableSize.width;
+    }
+    return Size(width, height);
+  }
 
   @override
   void renderCore(DrawingContext context) {
@@ -408,34 +440,72 @@ final class TextBox extends Control {
     }
   }
 
+  TextLayout _layoutForMeasure() {
+    final host = window;
+    final factory = host?.textLayoutFactory ?? _headlessFactory;
+    final options = TextLayoutOptions(
+      text: text,
+      fontSize: fontSize,
+      maxWidth: double.infinity,
+      scale: host?.displayScale ?? 1,
+    );
+    if (_renderLayout.matches(options, factory)) {
+      _measureLayout.dispose();
+      return _renderLayout.current!;
+    }
+    return _measureLayout.resolve(options, factory);
+  }
+
   TextLayout _layoutForRender(String displayText) {
     final host = window;
     final factory = host?.textLayoutFactory ?? _headlessFactory;
     final options = TextLayoutOptions(
       text: displayText,
-      fontSize: 14,
+      fontSize: fontSize,
       maxWidth: double.infinity,
       scale: host?.displayScale ?? 1,
     );
-    final current = _renderLayout;
-    if (current != null &&
-        !current.isDisposed &&
-        identical(_renderLayoutFactory, factory) &&
-        _renderLayoutOptions == options) {
-      return current;
+    if (_measureLayout.matches(options, factory)) {
+      _renderLayout.dispose();
+      return _measureLayout.current!;
     }
-    _clearRenderLayout();
+    return _renderLayout.resolve(options, factory);
+  }
+}
+
+/// A text layout together with the options and factory that produced it.
+///
+/// The layout is reused while the options stay equal and released as soon as
+/// the text, font size, scale or backend changes.
+final class _CachedTextLayout {
+  TextLayout? _layout;
+  TextLayoutOptions? _options;
+  TextLayoutFactory? _factory;
+
+  TextLayout? get current => _layout;
+
+  bool matches(TextLayoutOptions options, TextLayoutFactory factory) {
+    final layout = _layout;
+    return layout != null &&
+        !layout.isDisposed &&
+        identical(_factory, factory) &&
+        _options == options;
+  }
+
+  TextLayout resolve(TextLayoutOptions options, TextLayoutFactory factory) {
+    if (matches(options, factory)) return _layout!;
+    dispose();
     final created = factory.create(options);
-    _renderLayout = created;
-    _renderLayoutOptions = options;
-    _renderLayoutFactory = factory;
+    _layout = created;
+    _options = options;
+    _factory = factory;
     return created;
   }
 
-  void _clearRenderLayout() {
-    _renderLayout?.dispose();
-    _renderLayout = null;
-    _renderLayoutOptions = null;
-    _renderLayoutFactory = null;
+  void dispose() {
+    _layout?.dispose();
+    _layout = null;
+    _options = null;
+    _factory = null;
   }
 }
