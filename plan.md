@@ -155,10 +155,12 @@ Skia canvas масштабируется через `displayScale`. Backbuffer �
 - `ItemsControl<T>` создаёт persistent children через `ItemTemplate<T>`, передаёт item в `dataContext`, переиспользует элементы по `ItemKeySelector<T>` и корректно unmount удаляет;
 - `VirtualizingStackPanel<T>` материализует только видимый диапазон с buffer, поддерживает estimated extent, измеренную переменную высоту и очистку focus при recycling;
 - `example/native_items_control.dart` демонстрирует 100 000 строк и автоматический smoke с прокруткой к середине и концу;
-- `BindingSubscription.cancel()` сохраняет последнее синхронизированное значение как локальное; subscription сообщает property/mode/isCancelled;
+- `BindingSubscription.cancel()` сохраняет последнее синхронизированное значение как локальное только при отсутствии явного local поверх binding; subscription сообщает property/mode/isCancelled;
 - `PropertyOwner.dispose()` идемпотентно отменяет bindings, запрещает дальнейшие `bind()`/`setValue()` и интегрирован с `ItemsControl.dispose()`;
 - two-way writes подавляют reentrant duplicates и синхронизируются даже без callback notification; `BindingException` сообщает property, operation и cause;
-- 192 Dart-теста, включая binding lifecycle/diagnostics, ObservableCollection/ItemsControl/virtualization, ScrollViewer measure/scroll/input/clip, Grid tracks/span/gap/invalidate/HiDPI, DockPanel measure/arrange/invalidate, diagnostics FPS/render-on-demand, synchronous live-resize frame с увеличением physical backbuffer, layout constraints/alignment, infinite text width, clipping/rendering, horizontal scrolling, mouse caret/selection, pointer capture, surrogate pairs, composition, clipboard, render-on-demand и scheduler counters.
+- value layers с приоритетом `default < inherited < style < binding < local < animation`, ручные set/clear API и `PropertyOwner.getValueSource()`;
+- one-way local маскирует binding без отписки, а `clearLocalValue()` восстанавливает актуальное binding value; constructor defaults не блокируют style/inherited;
+- 201 Dart-тест, включая value precedence/transitions, binding lifecycle/diagnostics, ObservableCollection/ItemsControl/virtualization, ScrollViewer measure/scroll/input/clip, Grid tracks/span/gap/invalidate/HiDPI, DockPanel measure/arrange/invalidate, diagnostics FPS/render-on-demand, synchronous live-resize frame с увеличением physical backbuffer, layout constraints/alignment, infinite text width, clipping/rendering, horizontal scrolling, mouse caret/selection, pointer capture, surrogate pairs, composition, clipboard, render-on-demand и scheduler counters.
 
 ### 3.2. Проверенное поведение
 
@@ -169,7 +171,8 @@ Skia canvas масштабируется через `displayScale`. Backbuffer �
 - Белый фон окна отображается корректно.
 - HiDPI-масштабирование подтверждено на 4K-дисплее.
 - `dart analyze` проходит без замечаний.
-- Все 190 тестов при исключении двух clipboard-сценариев проходят, включая 13 binding-тестов, 17 ItemsControl/virtualization-тестов, 11 ScrollViewer-тестов, 18 Grid-тестов, 7 DockPanel-тестов и FPS/render-on-demand. Два прежних полных прогона остановились только на Windows clipboard `Couldn't open clipboard`.
+- Все 199 тестов при исключении двух clipboard-сценариев проходят, включая 9 value-precedence-тестов, 13 binding-тестов, 17 ItemsControl/virtualization-тестов, 11 ScrollViewer-тестов, 18 Grid-тестов, 7 DockPanel-тестов и FPS/render-on-demand. Два прежних полных прогона остановились только на Windows clipboard `Couldn't open clipboard`.
+- Полная цепочка value layers подтверждена тестами: masked source updates не создают ложных notifications, снятие верхнего слоя восстанавливает effective value, замена binding поверх local публикует корректное previous value. Two-way setter продолжает писать в источник под animation mask; nullable layers различаются по наличию записи, а не по `null`.
 - Native items smoke на Windows проходит прокрутку к середине и концу списка из 100 000 строк: после завершения создано 16 контейнеров, extent=2 400 000, отрисованы 3 кадра. Строки примера имеют фиксированную высоту 24; переменная высота проверяется headless-тестом. Ручная проверка примера подтверждена пользователем.
 - Cancel/dispose bindings не изменяют последнее effective value, source после отмены не влияет на контрол. Повторная запись того же two-way value и synchronous reentrant notification не создают дополнительных property changes; failed initial read оставляет прежний binding активным.
 - Native integration-тест подтверждает, что Dart callback выполняет `beginFrame/present` до возврата из `SDL_SetWindowSize`, получает logical size 240×120 и увеличенный physical backbuffer. Непрерывный drag и maximize двойным щелчком по рамке подтверждены пользователем.
@@ -300,7 +303,7 @@ python tools/bootstrap_native.py --smoke --dart "<путь-к-dart>"
 3. **P1:** Windows clipboard cleanup нестабилен при восстановлении пустого прежнего значения: SDL `Couldn't open clipboard`; round-trip и запись самого значения при этом успешны.
 4. **P2:** SDL wait ограничен 16 мс, чтобы Dart timers получали управление; это не полностью event-driven async integration. Измеренные 1.53–1.54% idle process CPU и медианная latency около 16.3–16.5 мс пока не оправдывают усложнение backend.
 5. **P2:** поиск видимого диапазона и расчёт estimated extent в `VirtualizingStackPanel` линейны по числу items; переменная высота может уточнять позицию на последующих layout pass.
-6. **P1:** приоритеты default/inherited/style/binding/local/animation ещё не реализованы; lifecycle самих bindings строго определён.
+6. **P1:** value layers и ручные setters реализованы, но automatic inherited-property propagation, styles/control templates и animation engine ещё отсутствуют.
 7. **P1:** базовый `PropertyOwner.dispose()` отменяет bindings, но единый recursive dispose контролов и остальных ресурсов ещё не реализован.
 8. **P2:** нет общих styles/control templates и accessibility.
 9. **P2:** нет packaging runtime dependencies и кроссплатформенной CI.
@@ -661,7 +664,7 @@ text_layout_selection_rects
 - [x] Предотвращать повторное уведомление при двустороннем обновлении.
 - [x] Добавить binding diagnostics и понятные ошибки.
 
-`cancel()` отписывает listener и сохраняет последнее синхронизированное значение в local value; повторный cancel безопасен. Замена binding отменяет прежний, а ошибка initial read нового источника не разрушает прежнюю привязку. `PropertyOwner.dispose()` отменяет все bindings и запрещает последующие `bind()`/`setValue()`, но оставляет чтение сохранённых значений доступным. `ItemsControl.dispose()` вызывает базовый dispose.
+`cancel()` отписывает listener и сохраняет последнее синхронизированное значение в local value только если над binding нет явного local; повторный cancel безопасен. Замена binding отменяет прежний, а ошибка initial read нового источника не разрушает прежнюю привязку. `PropertyOwner.dispose()` отменяет все bindings и запрещает последующие `bind()`/`setValue()`, но оставляет чтение сохранённых значений доступным. `ItemsControl.dispose()` вызывает базовый dispose.
 
 Two-way write подавляет reentrant source callback, затем выполняет одну синхронизацию и одно property notification; это работает и для `CallbackBinding`, который не уведомляет из write. `BindingSubscription` предоставляет `property`, `mode`, `isCancelled` и диагностический `toString()`. `BindingException` содержит property, operation (`Initial read`/`Read`/`Write`/subscription) и исходную cause.
 
@@ -671,7 +674,11 @@ Two-way write подавляет reentrant source callback, затем выпо�
 default < inherited < style < binding < local < animation
 ```
 
-Точный порядок зафиксировать отдельно перед реализацией.
+Реализованы `DuiValueSource`, `getValueSource()`, отдельные `setInheritedValue()`/`setStyleValue()`/`setAnimationValue()` и соответствующие clear API. Nullable values различаются по наличию записи в слое. Уведомления публикуются только при изменении effective value; скрытые изменения источника не создают ложных property changes.
+
+One-way local маскирует binding, но не отменяет его; `clearLocalValue()` восстанавливает актуальное binding value. Новый `bind()` удаляет прежний явный local, поэтому становится effective value. `cancel()` сохраняет последнее binding value как local только при отсутствии явного local поверх него. Two-way setter продолжает писать в источник даже под animation mask. Присваивание default без активного binding не создаёт явный local, поэтому constructor defaults контролов не блокируют style/inherited.
+
+Это ручные value layers, а не automatic inherited-property propagation, styles/control templates или animation engine; они относятся к следующим задачам.
 
 ## 7.3. DataContext
 
@@ -749,7 +756,7 @@ default < inherited < style < binding < local < animation
 Порядок ближайших рабочих сессий:
 
 1. **Стабилизация Windows clipboard:** устранить повторяемый сбой `Couldn't open clipboard` в native ABI-тесте.
-2. **Этап 7.2:** зафиксировать и реализовать приоритеты default/inherited/style/binding/local/animation, не нарушая семантику cancel/dispose.
+2. **Этап 7.3:** реализовать наследование `DataContext` по logical tree и типобезопасные accessors.
 3. **Ручная проверка ScrollViewer:** запустить `example/native_scroll_viewer.dart`, проверить реальное SDL wheel, клавиатурную прокрутку из focused TextBox/Button, track/thumb dragging, clipping и resize при разных display scales.
 4. **Незавершённая часть этапа 1.2:** проверить сборку и Paragraph smoke на Linux (FontConfig/Freetype) и macOS (CoreText).
 5. **Ручная визуальная проверка:** открыть text gallery и TextBox на мониторах с разными масштабами, проверить clipping, selection и caret; автоматический smoke этого не заменяет.
@@ -794,6 +801,27 @@ GPU backend по-прежнему не входит в ближайшие эта
 ---
 
 ## 9. Журнал работ
+
+### 2026-11-26 — этап 7.2, приоритеты значений
+
+Сделано:
+
+- Реализована цепочка `default < inherited < style < binding < local < animation` с `DuiValueSource`, `getValueSource()` и отдельными set/clear API для inherited, style, local и animation слоёв.
+- One-way local маскирует binding без отмены подписки; очистка local восстанавливает актуальное binding value. Новый binding заменяет прежний явный local, а cancel сохраняет binding value как local только при отсутствии явного local поверх него.
+- Two-way setter продолжает писать в источник под animation mask. Nullable values различаются по наличию записи в слое; constructor defaults не создают блокирующий local.
+- Property notifications публикуются только при изменении effective value. Замена binding поверх local сохраняет корректное previous value.
+- Добавлены 9 тестов `test/value_precedence_test.dart`: вся цепочка, masked bindings, animation notifications, замена/отмена binding, nullable, two-way под animation и constructor defaults. C ABI и native C++ не изменялись.
+
+Проверено:
+
+- `dart format` и `dart analyze` — без замечаний.
+- `dart test test/value_precedence_test.dart test/bindings_test.dart` — все 22 теста проходят.
+- `dart test --name '^(?!.*clipboard).*$'` — все 199 тестов проходят.
+- `git diff --check` — без ошибок; только известное предупреждение LF→CRLF.
+
+Следующий шаг:
+
+- Этап 7.3 — наследование `DataContext` по logical tree и типобезопасные accessors.
 
 ### 2026-11-26 — этап 7.1, жизненный цикл bindings
 

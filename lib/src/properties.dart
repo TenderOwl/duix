@@ -21,6 +21,16 @@ final class DuiProperty<TOwner, T> {
 
 enum BindingMode { oneWay, twoWay }
 
+/// Effective value precedence, from lowest to highest.
+enum DuiValueSource {
+  defaultValue,
+  inherited,
+  style,
+  binding,
+  local,
+  animation
+}
+
 abstract interface class Binding<T> {
   T read();
   void addListener(VoidListener listener);
@@ -112,18 +122,29 @@ abstract interface class BindingSubscription {
 }
 
 abstract class PropertyOwner extends ObservableObject {
+  final _inheritedValues = <DuiProperty<dynamic, dynamic>, Object?>{};
+  final _styleValues = <DuiProperty<dynamic, dynamic>, Object?>{};
   final _localValues = <DuiProperty<dynamic, dynamic>, Object?>{};
+  final _animationValues = <DuiProperty<dynamic, dynamic>, Object?>{};
   final _bindingSubscriptions =
       <DuiProperty<dynamic, dynamic>, _ActiveBinding<dynamic>>{};
   bool _isDisposed = false;
 
   bool get isDisposed => _isDisposed;
 
-  T getValue<T>(DuiProperty<dynamic, T> property) {
-    final active = _bindingSubscriptions[property];
-    if (active != null) return active.read() as T;
-    return (_localValues[property] ?? property.defaultValue) as T;
+  DuiValueSource getValueSource<T>(DuiProperty<dynamic, T> property) {
+    if (_animationValues.containsKey(property)) return DuiValueSource.animation;
+    if (_localValues.containsKey(property)) return DuiValueSource.local;
+    if (_bindingSubscriptions.containsKey(property)) {
+      return DuiValueSource.binding;
+    }
+    if (_styleValues.containsKey(property)) return DuiValueSource.style;
+    if (_inheritedValues.containsKey(property)) return DuiValueSource.inherited;
+    return DuiValueSource.defaultValue;
   }
+
+  T getValue<T>(DuiProperty<dynamic, T> property) =>
+      _effectiveValue(property) as T;
 
   void setValue<T>(DuiProperty<dynamic, T> property, T value) {
     _checkNotDisposed();
@@ -133,13 +154,55 @@ abstract class PropertyOwner extends ObservableObject {
       active.write(value);
       return;
     }
-
-    active?.cancel();
-    final oldValue = getValue(property);
-    _localValues[property] = value;
-    if (oldValue != value) {
-      onDuiPropertyChanged(property, oldValue, value);
+    if (active == null && value == property.defaultValue) {
+      clearLocalValue(property);
+      return;
     }
+    _setLayerValue(_localValues, property, value);
+  }
+
+  void setInheritedValue<T>(DuiProperty<dynamic, T> property, T value) =>
+      _setLayerValue(_inheritedValues, property, value);
+
+  void setStyleValue<T>(DuiProperty<dynamic, T> property, T value) =>
+      _setLayerValue(_styleValues, property, value);
+
+  void setAnimationValue<T>(DuiProperty<dynamic, T> property, T value) =>
+      _setLayerValue(_animationValues, property, value);
+
+  void clearLocalValue<T>(DuiProperty<dynamic, T> property) =>
+      _clearLayerValue(_localValues, property);
+
+  void clearInheritedValue<T>(DuiProperty<dynamic, T> property) =>
+      _clearLayerValue(_inheritedValues, property);
+
+  void clearStyleValue<T>(DuiProperty<dynamic, T> property) =>
+      _clearLayerValue(_styleValues, property);
+
+  void clearAnimationValue<T>(DuiProperty<dynamic, T> property) =>
+      _clearLayerValue(_animationValues, property);
+
+  void _setLayerValue<T>(
+    Map<DuiProperty<dynamic, dynamic>, Object?> values,
+    DuiProperty<dynamic, T> property,
+    T value,
+  ) {
+    _checkNotDisposed();
+    if (values.containsKey(property) && values[property] == value) return;
+    final oldValue = getValue(property);
+    values[property] = value;
+    _notifyEffectiveChange(property, oldValue);
+  }
+
+  void _clearLayerValue<T>(
+    Map<DuiProperty<dynamic, dynamic>, Object?> values,
+    DuiProperty<dynamic, T> property,
+  ) {
+    _checkNotDisposed();
+    if (!values.containsKey(property)) return;
+    final oldValue = getValue(property);
+    values.remove(property);
+    _notifyEffectiveChange(property, oldValue);
   }
 
   BindingSubscription bind<T>(
@@ -159,28 +222,31 @@ abstract class PropertyOwner extends ObservableObject {
       throw BindingException(property, 'Initial read', error);
     }
 
-    _bindingSubscriptions[property]?.cancel();
     final oldValue = getValue(property);
+    _bindingSubscriptions[property]?.cancel(preserveLocal: false);
+    _localValues.remove(property);
     late final _ActiveBinding<T> active;
     active = _ActiveBinding<T>(
       property,
       binding,
       mode,
-      (previous, current) => onDuiPropertyChanged(property, previous, current),
-      () => _bindingCancelled(active),
-    )..lastValue = oldValue;
+      (previous, current) => _bindingValueChanged(active, previous, current),
+      (preserveLocal) => _bindingCancelled(active, preserveLocal),
+    )..lastValue = newValue;
     _bindingSubscriptions[property] = active;
     try {
       binding.addListener(active.sourceChanged);
     } catch (error) {
-      active.cancel();
+      active.cancel(preserveLocal: false);
       throw BindingException(property, 'Listener subscription', error);
     }
 
-    active.lastValue = newValue;
-    if (oldValue != newValue) {
-      onDuiPropertyChanged(property, oldValue, newValue);
-    }
+    _notifyEffectiveChange(
+      property,
+      oldValue,
+      bindingOverride: newValue,
+      hasBindingOverride: true,
+    );
     return active;
   }
 
@@ -195,11 +261,70 @@ abstract class PropertyOwner extends ObservableObject {
     _bindingSubscriptions.clear();
   }
 
-  void _bindingCancelled<T>(_ActiveBinding<T> binding) {
+  Object? _effectiveValue<T>(
+    DuiProperty<dynamic, T> property, {
+    Object? bindingOverride,
+    bool hasBindingOverride = false,
+  }) {
+    if (_animationValues.containsKey(property)) {
+      return _animationValues[property];
+    }
+    if (_localValues.containsKey(property)) return _localValues[property];
+    final active = _bindingSubscriptions[property];
+    if (active != null) {
+      return hasBindingOverride ? bindingOverride : active.read();
+    }
+    if (_styleValues.containsKey(property)) return _styleValues[property];
+    if (_inheritedValues.containsKey(property)) {
+      return _inheritedValues[property];
+    }
+    return property.defaultValue;
+  }
+
+  void _bindingValueChanged<T>(
+    _ActiveBinding<T> active,
+    T previous,
+    T current,
+  ) {
+    final oldValue = _effectiveValue(
+      active.property,
+      bindingOverride: previous,
+      hasBindingOverride: true,
+    );
+    _notifyEffectiveChange(
+      active.property,
+      oldValue,
+      bindingOverride: current,
+      hasBindingOverride: true,
+    );
+  }
+
+  void _notifyEffectiveChange<T>(
+    DuiProperty<dynamic, T> property,
+    Object? oldValue, {
+    Object? bindingOverride,
+    bool hasBindingOverride = false,
+  }) {
+    final newValue = _effectiveValue(
+      property,
+      bindingOverride: bindingOverride,
+      hasBindingOverride: hasBindingOverride,
+    );
+    if (oldValue != newValue) {
+      onDuiPropertyChanged(property, oldValue as T, newValue as T);
+    }
+  }
+
+  void _bindingCancelled<T>(
+    _ActiveBinding<T> binding,
+    bool preserveLocal,
+  ) {
     final current = _bindingSubscriptions[binding.property];
     if (!identical(current, binding)) return;
     _bindingSubscriptions.remove(binding.property);
-    _localValues[binding.property] = binding.lastValue;
+    if (preserveLocal && !_localValues.containsKey(binding.property)) {
+      _localValues[binding.property] = binding.lastValue;
+    }
   }
 
   void _checkNotDisposed() {
@@ -230,7 +355,7 @@ final class _ActiveBinding<T> implements BindingSubscription {
   @override
   final BindingMode mode;
   final void Function(T oldValue, T newValue) onChanged;
-  final void Function() onCancelled;
+  final void Function(bool preserveLocal) onCancelled;
   late T lastValue;
   bool _cancelled = false;
   bool _isWriting = false;
@@ -280,11 +405,11 @@ final class _ActiveBinding<T> implements BindingSubscription {
   }
 
   @override
-  void cancel() {
+  void cancel({bool preserveLocal = true}) {
     if (_cancelled) return;
     _cancelled = true;
     binding.removeListener(sourceChanged);
-    onCancelled();
+    onCancelled(preserveLocal);
   }
 
   @override
