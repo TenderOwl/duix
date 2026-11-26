@@ -182,6 +182,8 @@ Skia canvas масштабируется через `displayScale`. Backbuffer �
 - `Window.dispose()` освобождает дерево контента; `close()` по-прежнему контент не уничтожает, поэтому окно можно переоткрыть;
 - `mountTo(null)` идемпотентен и больше не вызывает `onUnmounted()` повторно; монтирование disposed-элемента в окно и добавление его в панель бросают `StateError`;
 - `ItemsControl` использует единый флаг disposed из `PropertyOwner` и освобождает контейнеры при dispose;
+- native clipboard-тесты помечены тегом `clipboard`, тесты с native-библиотекой — тегом `native` (оба объявлены в `dart_test.yaml`); теги навешиваются на первый импорт файла, как их разбирает package:test;
+- CI в `.github/workflows/ci.yml`: job `dart` на Windows/macOS/Linux (pub get, format-check, analyze, `dart test --exclude-tags clipboard,native`) и best-effort job `native` на Windows/Linux (сборка SDL3+Skia из исходников, native-тесты и smoke, `continue-on-error`, запуск по расписанию и вручную);
 - 247 Dart-тестов, включая file-dialog contract, formatted clipboard snapshots, styles/templates, DataContext inheritance/accessors/reparenting, value precedence/transitions, binding lifecycle/diagnostics, ObservableCollection/ItemsControl/virtualization, ScrollViewer measure/scroll/input/clip, Grid tracks/span/gap/invalidate/HiDPI, DockPanel measure/arrange/invalidate, diagnostics FPS/render-on-demand, synchronous live-resize frame с увеличением physical backbuffer, layout constraints/alignment, infinite text width, clipping/rendering, horizontal scrolling, mouse caret/selection, pointer capture, surrogate pairs, composition, clipboard, recursive dispose, render-on-demand и scheduler counters.
 
 ### 3.2. Проверенное поведение
@@ -195,6 +197,7 @@ Skia canvas масштабируется через `displayScale`. Backbuffer �
 - `dart analyze` проходит без замечаний.
 - Полный `dart test` проходит: все 247 тестов, включая 6 file-dialog contract-тестов, 4 style-теста, 3 control-template-теста, 6 DataContext-тестов, 9 value-precedence-тестов, 13 binding-тестов, 17 ItemsControl/virtualization-тестов, 11 ScrollViewer-тестов, 18 Grid-тестов, 7 DockPanel-тестов, 5 TextBox measurement-тестов, 2 native text-drawing-теста, 12 recursive dispose-тестов и все clipboard-сценарии.
 - Recursive dispose подтверждён тестами: поддерево освобождает native-раскладки, disposed-элемент отсоединяется от родителя (список детей пустеет), все потомки получают `isDisposed`, повторный dispose не освобождает ресурсы дважды, фокус снимается, disposed-элемент нельзя вернуть в дерево, `Window.dispose()` освобождает контент, а `close()` оставляет его жить.
+- CI-команды проверены локально: `dart format --output=none --set-exit-if-changed lib example test` возвращает 0, `dart analyze` чист, `dart test --exclude-tags clipboard,native` проходит 212 тестов, `dart test --tags native` проходит 35 native-тестов. YAML workflow разобран и проверен по структуре.
 - Legacy text drawing подтверждён native-тестом: ширина, возвращённая `dui_draw_text`, совпадает с шириной раскладки `dui_text_layout_create` для того же текста, шрифта и scale; ASCII, кириллица, emoji и RTL-строка рисуются во всех трёх выравниваниях.
 - Idle CPU после перевода `drawText` на SkParagraph не вырос: кэш раскладки на окне вернул 1.54% (до кэша было 3.08%), при этом текст теперь shaped.
 - `TextBox` измеряется теми же метриками раскладки, что и `Label`: desired width = ширина `Label` + 16, desired height = высота `Label` + 8. Текстовая часть масштабируется с `fontSize` (удвоение `fontSize` удваивает ширину текста), padding остаётся постоянным. Узкий available width клампится вместо падения, изменение текста и remount переизмеряют контрол.
@@ -299,7 +302,8 @@ example/native_scroll_viewer.dart   — ScrollViewer, прокрутка и smok
 test/                                — автоматические тесты
 test/text_box_measurement_test.dart — измерение TextBox по метрикам раскладки
 test/dispose_test.dart              — recursive dispose элементов и поддеревьев
-dart_test.yaml                       — объявление тега clipboard
+dart_test.yaml                       — объявление тегов clipboard и native
+.github/workflows/ci.yml            — CI: Dart на трёх ОС и best-effort native job
 ```
 
 ### 3.4. Команды
@@ -310,7 +314,8 @@ dart format lib example test
 dart analyze
 dart test
 dart test --exclude-tags clipboard
-dart test --tags clipboard
+dart test --exclude-tags clipboard,native
+dart test --tags native --exclude-tags clipboard
 dart run example/counter.dart
 dart run example/native_open_file_dialog.dart --diagnostics
 dart run example/native_aqua_button.dart --diagnostics
@@ -363,7 +368,7 @@ python tools/bootstrap_native.py --smoke --dart "<путь-к-dart>"
 6. **P1:** value layers, DataContext inheritance и styles реализованы, но универсальное inherited-property propagation и animation engine ещё отсутствуют; control templates пока поддержаны только у Button.
 7. **P1 (закрыт 2026-11-26):** единый recursive dispose реализован — `UIElement.dispose()` освобождает поддерево, `onDisposed()` отдаёт контролам их ресурсы, `removeChild()` унифицирует удаление ребёнка, `Window.dispose()` закрывает дерево окна.
 8. **P2:** accessibility ещё не реализован.
-9. **P2:** нет packaging runtime dependencies и кроссплатформенной CI.
+9. **P2 (частично закрыт 2026-11-26):** кроссплатформенный CI добавлен (Dart job на трёх ОС и best-effort native job), но packaging runtime dependencies и воспроизводимый release build ещё отсутствуют. Native job на macOS не запускается: у hosted-runner нет window server, а сборка Skia требует больше диска и времени, чем даёт раннер.
 
 ---
 
@@ -833,20 +838,20 @@ One-way local маскирует binding, но не отменяет его; `cl
 
 Порядок ближайших рабочих сессий:
 
-Пункты 1, 2, 4, 7, 8, 9, 10 требуют macOS/Linux, сторонних приложений или
-живого IME и выполняются пользователем; пункты 3, 5, 6 доступны для кодовой
+Пункты 1, 2, 4, 6, 7, 8, 9 требуют macOS/Linux, сторонних приложений или
+живого IME и выполняются пользователем; пункты 3, 5, 10 доступны для кодовой
 работы на текущей машине.
 
 1. **Ручная проверка этапа 8.2:** на macOS собрать Objective‑C++ backend и проверить `NSOpenPanel` в parent/ownerless-режимах, title/initialDirectory/filters и Unicode paths; на Linux аналогично проверить GTK 4.10+ на X11/Wayland (parent пока ownerless).
 2. **Ручная проверка clipboard:** проверить вставку CF_HTML в Word, браузер и другие сторонние приложения.
 3. **Этап 8.1:** добавить semantics к дереву и синхронизировать role/name/value/state/bounds с focus и selection.
 4. **Ручная проверка ScrollViewer:** автоматическая часть закрыта — `example/native_scroll_viewer.dart --smoke` проходит на Windows (wheel прокрутка, offsets, bounds, 3 кадра, scale 2.0); остаётся визуальная проверка track/thumb dragging, clipping и resize при разных display scales.
-5. **Этап 8.4 CI:** добавить `.github/workflows` с analyze/test и native build на Windows/macOS/Linux — это разблокирует ручные проверки на других ОС.
-6. **Автоматизация ScrollViewer:** thumb dragging и клавиатурная прокрутка доступны через публичные `dispatchPointerDown/Move/Up` и `dispatchKeyDown`, поэтому их можно закрыть в smoke-режиме.
-7. **Незавершённая часть этапа 1.2:** проверить сборку и Paragraph smoke на Linux (FontConfig/Freetype) и macOS (CoreText).
-8. **Ручная визуальная проверка:** открыть text gallery и TextBox на мониторах с разными масштабами, проверить clipping, selection и caret; отдельно посмотреть FPS-overlay в `--diagnostics` — после перевода на SkParagraph текст в нём стал shaped, baseline сдвинут на `y + font_size`, как и раньше.
-9. **Ручная проверка этапа 2.4:** русский, китайский/японский ввод и emoji через реальные системные IME.
-10. **Ручная проверка lifecycle:** dispose поддерева, повторное открытие окна после `close()`, поведение `Window.dispose()`.
+5. **Автоматизация ScrollViewer:** thumb dragging и клавиатурная прокрутка доступны через публичные `dispatchPointerDown/Move/Up` и `dispatchKeyDown`, поэтому их можно закрыть в smoke-режиме.
+6. **Незавершённая часть этапа 1.2:** проверить сборку и Paragraph smoke на Linux (FontConfig/Freetype) и macOS (CoreText).
+7. **Ручная визуальная проверка:** открыть text gallery и TextBox на мониторах с разными масштабами, проверить clipping, selection и caret; отдельно посмотреть FPS-overlay в `--diagnostics` — после перевода на SkParagraph текст в нём стал shaped, baseline сдвинут на `y + font_size`, как и раньше.
+8. **Ручная проверка этапа 2.4:** русский, китайский/японский ввод и emoji через реальные системные IME.
+9. **Ручная проверка lifecycle:** dispose поддерева, повторное открытие окна после `close()`, поведение `Window.dispose()`.
+10. **Этап 8.3 Packaging:** зависимости `dui_native` на чистой машине, rpath `$ORIGIN` для Linux, universal binary и codesign для macOS, runtime DLL для Windows, reproducible release build.
 
 GPU backend по-прежнему не входит в ближайшие этапы.
 
@@ -892,6 +897,31 @@ GPU backend по-прежнему не входит в ближайшие эта
 ---
 
 ## 9. Журнал работ
+
+### 2026-11-26 — этап 8.4, CI на трёх ОС
+
+Сделано:
+
+- Добавлен `.github/workflows/ci.yml`. Job `dart` работает на Windows, macOS и Linux: `dart pub get`, `dart format --output=none --set-exit-if-changed lib example test`, `dart analyze`, `dart test --exclude-tags clipboard,native`. Триггеры: push в `main`, pull request, ручной запуск и еженедельное расписание.
+- Job `native` собирает SDL3 и Skia из исходников через `tools/bootstrap_native.py`, затем гоняет native-тесты и smoke. Он помечен `continue-on-error`, запускается только вручную или по расписанию и работает на Windows и Ubuntu: сборка Skia требует больше диска и времени, чем даёт hosted-runner, а у macOS-runner нет window server, поэтому оконные проверки там невозможны.
+- Введён тег `native` для тестов, которым нужна собранная библиотека (`native_abi_test.dart`, `native_text_matrix_test.dart`); тег объявлен в `dart_test.yaml` вместе с `clipboard`.
+- Оказалось, что package:test читает аннотации уровня файла с **library directive**, а не с `main()` и не с импорта: `@Tags(['native'])` на `main()` молча не применялся, и `--tags native` не находил ни одного теста. Теги навешены на `library;`, после чего `--tags native` находит 35 тестов, а `--exclude-tags clipboard,native` — 212.
+
+Проверено:
+
+- `dart format --output=none --set-exit-if-changed lib example test` — код 0; `dart analyze` — без замечаний.
+- `dart test --exclude-tags clipboard,native` — 212/212; `dart test --tags native --exclude-tags clipboard` — 31/31; полный `dart test` — 247/247.
+- YAML workflow разобран парсером и проверен по структуре: два job, матрицы и триггеры на месте.
+
+Не проверено:
+
+- Сам GitHub Actions прогон выполнить отсюда нельзя: native job не проверен на раннере, включая MSVC-окружение для `clang-cl`, дисковое место под Skia и работу `xvfb-run` на Ubuntu.
+- macOS native job не включён: у hosted-runner нет window server, а Skia-сборка на нём не проверена.
+- Первая native-сборка в CI будет долгой — нужен прогрев кэша `.native-deps`.
+
+Следующий шаг:
+
+- Прогнать workflow вручную (`workflow_dispatch`) и довести native job до зелёного состояния; затем этап 8.1 semantics или этап 8.3 packaging.
 
 ### 2026-11-26 — P1, recursive dispose по дереву контролов
 

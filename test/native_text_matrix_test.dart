@@ -1,3 +1,6 @@
+@Tags(['native'])
+library;
+
 import 'package:duix/dui.dart';
 import 'package:duix/native.dart';
 import 'package:test/test.dart';

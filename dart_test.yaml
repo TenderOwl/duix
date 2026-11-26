@@ -4,3 +4,8 @@ tags:
       Tests that drive the real system clipboard of the host machine. They fail
       when another process holds the Windows clipboard, so they are excluded
       with `dart test --exclude-tags clipboard`.
+  native:
+    description: >
+      Tests that load the native dui_native library. They need a built native
+      library and are excluded from the pure Dart CI job with
+      `dart test --exclude-tags native`.
