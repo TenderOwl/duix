@@ -8,9 +8,9 @@ import 'package:duix/src/native/sdl_skia_host.dart';
 import 'package:ffi/ffi.dart';
 import 'package:test/test.dart';
 
-void main() {
-  late NativeBindings bindings;
+late NativeBindings bindings;
 
+void main() {
   setUpAll(() {
     bindings = NativeBindings.open();
   });
@@ -489,17 +489,13 @@ void main() {
     final host = bindings.hostCreate();
     expect(host, isNot(nullptr), reason: bindings.lastError);
     if (host == nullptr) return;
-    final previous = bindings.readClipboardText();
+    final previous = _captureNativeClipboard();
     const value = 'Clipboard: ASCII, кириллица, 😀';
     try {
       expect(bindings.writeClipboardText(value), isTrue);
       expect(bindings.readClipboardText(), value);
     } finally {
-      if (previous != null) {
-        bindings.writeClipboardText(previous);
-      } else {
-        bindings.writeClipboardText('');
-      }
+      _restoreNativeClipboard(previous);
       bindings.hostDestroy(host);
     }
   });
@@ -508,7 +504,7 @@ void main() {
     final host = bindings.hostCreate();
     expect(host, isNot(nullptr), reason: bindings.lastError);
     if (host == nullptr) return;
-    final previous = bindings.readClipboardText();
+    final previous = _captureNativeClipboard();
     const text = 'Formatted: кириллица, 😀';
     const html = '<strong>Привет, 😀</strong>';
     const binary = <int>[0, 1, 2, 0, 127, 128, 255];
@@ -550,7 +546,39 @@ void main() {
       expect(bindings.hasClipboardData('text/html'), isTrue);
       expect(bindings.readClipboardData('text/html'), isEmpty);
     } finally {
-      bindings.writeClipboardText(previous ?? '');
+      _restoreNativeClipboard(previous);
+      bindings.hostDestroy(host);
+    }
+  });
+
+  test('clipboard snapshot restores all MIME formats and empty state', () {
+    final host = bindings.hostCreate();
+    expect(host, isNot(nullptr), reason: bindings.lastError);
+    if (host == nullptr) return;
+    final previous = _captureNativeClipboard();
+    final seed = <String, List<int>>{
+      ClipboardMimeTypes.plainText: utf8.encode('Original text 😀'),
+      ClipboardMimeTypes.html: utf8.encode('<b>Original HTML 😀</b>'),
+      'application/xhtml+xml': utf8.encode('<b>Original XHTML</b>'),
+      'application/x-duix-binary': const <int>[0, 4, 0, 255],
+      'application/x-duix-empty': const <int>[],
+    };
+    try {
+      bindings.writeClipboardData(seed);
+      expect(bindings.readClipboardMimeTypes().toSet(), seed.keys.toSet());
+      final snapshot = _captureNativeClipboard();
+      expect(snapshot, seed);
+
+      bindings.writeClipboardText('Replacement');
+      _restoreNativeClipboard(snapshot);
+      expect(_captureNativeClipboard(), snapshot);
+
+      expect(bindings.clearClipboard(), isTrue);
+      expect(bindings.readClipboardMimeTypes(), isEmpty);
+      _restoreNativeClipboard(snapshot);
+      expect(_captureNativeClipboard(), snapshot);
+    } finally {
+      _restoreNativeClipboard(previous);
       bindings.hostDestroy(host);
     }
   });
@@ -559,7 +587,7 @@ void main() {
       () async {
     final host = await SdlSkiaHost.initialize();
     final window = Window()..clipboardHandler = host;
-    final previous = host.readClipboardText();
+    final previous = _capturePublicClipboard(host);
     const text = 'Public API: кириллица, 😀';
     const html = '<em>Public API: кириллица, 😀</em>';
     try {
@@ -577,7 +605,7 @@ void main() {
       );
       expect(window.readClipboardText(), text);
     } finally {
-      host.writeClipboardText(previous ?? '');
+      _restorePublicClipboard(host, previous);
       host.dispose();
     }
   });
@@ -587,4 +615,49 @@ void main() {
     expect(() => bindings.windowDestroy(nullptr, nullptr), returnsNormally);
     expect(() => bindings.textLayoutDestroy(nullptr), returnsNormally);
   });
+}
+
+Map<String, List<int>> _captureNativeClipboard() {
+  final snapshot = <String, List<int>>{};
+  for (final mimeType in bindings.readClipboardMimeTypes()) {
+    final data = bindings.readClipboardData(mimeType);
+    if (data == null) {
+      throw StateError(
+          'Clipboard format disappeared during capture: $mimeType');
+    }
+    snapshot[mimeType] = data;
+  }
+  return snapshot;
+}
+
+void _restoreNativeClipboard(Map<String, List<int>> snapshot) {
+  if (snapshot.isEmpty) {
+    bindings.clearClipboard();
+  } else {
+    bindings.writeClipboardData(snapshot);
+  }
+}
+
+Map<String, List<int>> _capturePublicClipboard(ClipboardHandler clipboard) {
+  final snapshot = <String, List<int>>{};
+  for (final mimeType in clipboard.readClipboardMimeTypes()) {
+    final data = clipboard.readClipboardData(mimeType);
+    if (data == null) {
+      throw StateError(
+          'Clipboard format disappeared during capture: $mimeType');
+    }
+    snapshot[mimeType] = data;
+  }
+  return snapshot;
+}
+
+void _restorePublicClipboard(
+  ClipboardHandler clipboard,
+  Map<String, List<int>> snapshot,
+) {
+  if (snapshot.isEmpty) {
+    clipboard.clearClipboard();
+  } else {
+    clipboard.writeClipboardData(snapshot);
+  }
 }

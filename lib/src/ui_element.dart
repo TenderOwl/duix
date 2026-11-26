@@ -30,6 +30,8 @@ abstract interface class WindowHost {
   bool hasClipboardData(String mimeType) => false;
   Uint8List? readClipboardData(String mimeType) => null;
   bool writeClipboardData(Map<String, List<int>> formats) => false;
+  List<String> readClipboardMimeTypes() => const <String>[];
+  bool clearClipboard() => false;
 }
 
 abstract class UIElement extends PropertyOwner {

@@ -124,6 +124,13 @@ final class Window extends ObservableObject implements WindowHost {
       clipboardHandler?.writeClipboardData(formats) ?? false;
 
   @override
+  List<String> readClipboardMimeTypes() =>
+      clipboardHandler?.readClipboardMimeTypes() ?? const <String>[];
+
+  @override
+  bool clearClipboard() => clipboardHandler?.clearClipboard() ?? false;
+
+  @override
   double get displayScale => _devicePixelRatio;
 
   @override

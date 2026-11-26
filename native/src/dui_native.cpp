@@ -659,6 +659,76 @@ void* dui_clipboard_get_data(const char* mime_type, size_t* out_size) {
 
 void dui_clipboard_free_data(void* data) { SDL_free(data); }
 
+int32_t dui_clipboard_clear(void) {
+  clear_error();
+  if (!retry_clipboard_write([] { return SDL_ClearClipboardData(); })) {
+    set_sdl_error();
+    return 0;
+  }
+  clipboard_formats.clear();
+  return 1;
+}
+
+char** dui_clipboard_get_mime_types(size_t* out_count) {
+  clear_error();
+  if (!out_count) {
+    set_error("Clipboard MIME type count must not be null.");
+    return nullptr;
+  }
+  *out_count = 0;
+  size_t sdl_count = 0;
+  SDL_ClearError();
+  char** sdl_types = SDL_GetClipboardMimeTypes(&sdl_count);
+  if (!sdl_types && SDL_GetError()[0]) {
+    set_sdl_error();
+    return nullptr;
+  }
+  std::unique_ptr<void, void (*)(void*)> sdl_owner(sdl_types, &SDL_free);
+  try {
+    std::vector<std::string> names;
+    for (size_t index = 0; index < sdl_count; ++index) {
+      if (sdl_types[index] &&
+          std::find(names.begin(), names.end(), sdl_types[index]) == names.end()) {
+        names.emplace_back(sdl_types[index]);
+      }
+    }
+#if defined(_WIN32)
+    const UINT html_format = html_clipboard_format();
+    if (html_format && IsClipboardFormatAvailable(html_format) &&
+        std::find(names.begin(), names.end(), "text/html") == names.end()) {
+      names.emplace_back("text/html");
+    }
+#endif
+    char** result = static_cast<char**>(
+        SDL_calloc(names.size() + 1, sizeof(char*)));
+    if (!result) {
+      set_error("Couldn't allocate clipboard MIME type list.");
+      return nullptr;
+    }
+    for (size_t index = 0; index < names.size(); ++index) {
+      const size_t size = names[index].size() + 1;
+      result[index] = static_cast<char*>(SDL_malloc(size));
+      if (!result[index]) {
+        dui_clipboard_free_mime_types(result, index);
+        set_error("Couldn't allocate clipboard MIME type.");
+        return nullptr;
+      }
+      std::memcpy(result[index], names[index].c_str(), size);
+    }
+    *out_count = names.size();
+    return result;
+  } catch (const std::exception& error) {
+    set_error(error.what());
+    return nullptr;
+  }
+}
+
+void dui_clipboard_free_mime_types(char** mime_types, size_t count) {
+  if (!mime_types) return;
+  for (size_t index = 0; index < count; ++index) SDL_free(mime_types[index]);
+  SDL_free(mime_types);
+}
+
 DuiHost* dui_host_create(void) {
   clear_error();
   try {

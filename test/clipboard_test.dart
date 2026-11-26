@@ -35,6 +35,8 @@ void main() {
 
     expect(window.hasClipboardData(ClipboardMimeTypes.html), isFalse);
     expect(window.readClipboardData(ClipboardMimeTypes.html), isNull);
+    expect(window.readClipboardMimeTypes(), isEmpty);
+    expect(window.clearClipboard(), isFalse);
     expect(
       window.writeClipboardData(<String, List<int>>{
         ClipboardMimeTypes.plainText: utf8.encode('text'),
@@ -77,6 +79,16 @@ final class _MemoryClipboard implements ClipboardHandler {
       ..addAll(formats.map(
         (mimeType, data) => MapEntry(mimeType, Uint8List.fromList(data)),
       ));
+    return true;
+  }
+
+  @override
+  List<String> readClipboardMimeTypes() =>
+      List<String>.unmodifiable(_formats.keys);
+
+  @override
+  bool clearClipboard() {
+    _formats.clear();
     return true;
   }
 }

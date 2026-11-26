@@ -251,6 +251,12 @@ final class SdlSkiaHost
   bool writeClipboardData(Map<String, List<int>> formats) =>
       bindings.writeClipboardData(formats);
 
+  @override
+  List<String> readClipboardMimeTypes() => bindings.readClipboardMimeTypes();
+
+  @override
+  bool clearClipboard() => bindings.clearClipboard();
+
   void pumpEvents() {
     _checkNotDisposed();
     _throwNativeCallbackError();

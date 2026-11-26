@@ -216,4 +216,10 @@ final class _FakeClipboard implements ClipboardHandler {
 
   @override
   bool writeClipboardData(Map<String, List<int>> formats) => false;
+
+  @override
+  List<String> readClipboardMimeTypes() => const <String>[];
+
+  @override
+  bool clearClipboard() => false;
 }

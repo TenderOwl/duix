@@ -130,6 +130,11 @@ DUI_API int32_t dui_clipboard_set_data(
 DUI_API int32_t dui_clipboard_has_data(const char* mime_type);
 DUI_API void* dui_clipboard_get_data(const char* mime_type, size_t* out_size);
 DUI_API void dui_clipboard_free_data(void* data);
+DUI_API int32_t dui_clipboard_clear(void);
+/* Returned array and strings must be freed with
+ * dui_clipboard_free_mime_types() using the returned count. */
+DUI_API char** dui_clipboard_get_mime_types(size_t* out_count);
+DUI_API void dui_clipboard_free_mime_types(char** mime_types, size_t count);
 
 DUI_API DuiHost* dui_host_create(void);
 DUI_API void dui_host_destroy(DuiHost* host);

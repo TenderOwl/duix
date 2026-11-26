@@ -223,6 +223,14 @@ typedef _ClipboardGetDataNative = Pointer<Uint8> Function(
   Pointer<Size>,
 );
 typedef _ClipboardFreeDataNative = Void Function(Pointer<Uint8>);
+typedef _ClipboardClearNative = Int32 Function();
+typedef _ClipboardGetMimeTypesNative = Pointer<Pointer<Utf8>> Function(
+  Pointer<Size>,
+);
+typedef _ClipboardFreeMimeTypesNative = Void Function(
+  Pointer<Pointer<Utf8>>,
+  Size,
+);
 typedef _HostCreateNative = Pointer<DuiHostOpaque> Function();
 typedef _HostDestroyNative = Void Function(Pointer<DuiHostOpaque>);
 typedef _HostNextEventNative = Int32 Function(
@@ -372,6 +380,14 @@ typedef _ClipboardGetDataDart = Pointer<Uint8> Function(
   Pointer<Size>,
 );
 typedef _ClipboardFreeDataDart = void Function(Pointer<Uint8>);
+typedef _ClipboardClearDart = int Function();
+typedef _ClipboardGetMimeTypesDart = Pointer<Pointer<Utf8>> Function(
+  Pointer<Size>,
+);
+typedef _ClipboardFreeMimeTypesDart = void Function(
+  Pointer<Pointer<Utf8>>,
+  int,
+);
 typedef _HostCreateDart = Pointer<DuiHostOpaque> Function();
 typedef _HostDestroyDart = void Function(Pointer<DuiHostOpaque>);
 typedef _HostNextEventDart = int Function(
@@ -531,6 +547,18 @@ final class NativeBindings {
             .lookupFunction<_ClipboardFreeDataNative, _ClipboardFreeDataDart>(
           'dui_clipboard_free_data',
         ),
+        _clipboardClear =
+            library.lookupFunction<_ClipboardClearNative, _ClipboardClearDart>(
+          'dui_clipboard_clear',
+        ),
+        _clipboardGetMimeTypes = library.lookupFunction<
+            _ClipboardGetMimeTypesNative, _ClipboardGetMimeTypesDart>(
+          'dui_clipboard_get_mime_types',
+        ),
+        _clipboardFreeMimeTypes = library.lookupFunction<
+            _ClipboardFreeMimeTypesNative, _ClipboardFreeMimeTypesDart>(
+          'dui_clipboard_free_mime_types',
+        ),
         hostCreate = library.lookupFunction<_HostCreateNative, _HostCreateDart>(
           'dui_host_create',
         ),
@@ -659,6 +687,9 @@ final class NativeBindings {
   final _ClipboardHasDataDart _clipboardHasData;
   final _ClipboardGetDataDart _clipboardGetData;
   final _ClipboardFreeDataDart _clipboardFreeData;
+  final _ClipboardClearDart _clipboardClear;
+  final _ClipboardGetMimeTypesDart _clipboardGetMimeTypes;
+  final _ClipboardFreeMimeTypesDart _clipboardFreeMimeTypes;
   final _HostCreateDart hostCreate;
   final _HostDestroyDart hostDestroy;
   final _HostNextEventDart hostNextEvent;
@@ -786,6 +817,31 @@ final class NativeBindings {
         return Uint8List.fromList(data.asTypedList(size.value));
       } finally {
         _clipboardFreeData(data);
+      }
+    });
+  }
+
+  bool clearClipboard() {
+    if (_clipboardClear() == 0) {
+      throw StateError('Could not clear clipboard: $lastError');
+    }
+    return true;
+  }
+
+  List<String> readClipboardMimeTypes() {
+    return using<List<String>>((arena) {
+      final count = arena<Size>();
+      final types = _clipboardGetMimeTypes(count);
+      if (types == nullptr) {
+        throw StateError('Could not read clipboard MIME types: $lastError');
+      }
+      try {
+        return List<String>.unmodifiable(List<String>.generate(
+          count.value,
+          (index) => types[index].toDartString(),
+        ));
+      } finally {
+        _clipboardFreeMimeTypes(types, count.value);
       }
     });
   }
