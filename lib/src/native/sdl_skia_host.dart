@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:ffi';
+import 'dart:typed_data';
 
 import 'package:ffi/ffi.dart';
 
@@ -238,6 +239,17 @@ final class SdlSkiaHost
 
   @override
   bool writeClipboardText(String text) => bindings.writeClipboardText(text);
+
+  @override
+  bool hasClipboardData(String mimeType) => bindings.hasClipboardData(mimeType);
+
+  @override
+  Uint8List? readClipboardData(String mimeType) =>
+      bindings.readClipboardData(mimeType);
+
+  @override
+  bool writeClipboardData(Map<String, List<int>> formats) =>
+      bindings.writeClipboardData(formats);
 
   void pumpEvents() {
     _checkNotDisposed();

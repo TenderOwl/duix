@@ -167,7 +167,8 @@ Skia canvas масштабируется через `displayScale`. Backbuffer �
 - `Button.isPressedProperty` и `Control.isPointerOverProperty` доступны шаблонам; Window обновляет hover по logical path, template replacement освобождает bindings старого subtree, а input/focus ring сохраняются;
 - `Border.colorProperty`/`paddingProperty` поддерживают styles и bindings; `example/native_aqua_button.dart` демонстрирует named Aqua style, persistent template с hover/pressed, капсульную форму, внутреннюю светлую кромку, верхний глянцевый блик и капсульный focus ring;
 - `DrawingContext.drawRoundedRect()` поддерживает fill/stroke в recording renderer и native Skia backend через `dui_draw_rounded_rect`;
-- 217 Dart-тестов, включая formatted clipboard, styles/templates, DataContext inheritance/accessors/reparenting, value precedence/transitions, binding lifecycle/diagnostics, ObservableCollection/ItemsControl/virtualization, ScrollViewer measure/scroll/input/clip, Grid tracks/span/gap/invalidate/HiDPI, DockPanel measure/arrange/invalidate, diagnostics FPS/render-on-demand, synchronous live-resize frame с увеличением physical backbuffer, layout constraints/alignment, infinite text width, clipping/rendering, horizontal scrolling, mouse caret/selection, pointer capture, surrogate pairs, composition, clipboard, render-on-demand и scheduler counters.
+- публичный backend-independent clipboard: `Window`/`WindowHost.writeClipboardData()`, `hasClipboardData()`, `readClipboardData()` с `Uint8List`, `ClipboardMimeTypes.plainText/html` и native adapter через `ClipboardHandler`;
+- 220 Dart-тестов, включая formatted clipboard, styles/templates, DataContext inheritance/accessors/reparenting, value precedence/transitions, binding lifecycle/diagnostics, ObservableCollection/ItemsControl/virtualization, ScrollViewer measure/scroll/input/clip, Grid tracks/span/gap/invalidate/HiDPI, DockPanel measure/arrange/invalidate, diagnostics FPS/render-on-demand, synchronous live-resize frame с увеличением physical backbuffer, layout constraints/alignment, infinite text width, clipping/rendering, horizontal scrolling, mouse caret/selection, pointer capture, surrogate pairs, composition, clipboard, render-on-demand и scheduler counters.
 
 ### 3.2. Проверенное поведение
 
@@ -178,8 +179,9 @@ Skia canvas масштабируется через `displayScale`. Backbuffer �
 - Белый фон окна отображается корректно.
 - HiDPI-масштабирование подтверждено на 4K-дисплее.
 - `dart analyze` проходит без замечаний.
-- Полный `dart test` проходит: все 217 тестов, включая 4 style-теста, 3 control-template-теста, 6 DataContext-тестов, 9 value-precedence-тестов, 13 binding-тестов, 17 ItemsControl/virtualization-тестов, 11 ScrollViewer-тестов, 18 Grid-тестов, 7 DockPanel-тестов и оба Windows clipboard-сценария.
-- В formatted clipboard тесте проходят round-trip и восстановление прежнего значения для Unicode plain text, Windows `text/html`/CF_HTML, `application/xhtml+xml`, binary с нулевыми байтами и empty payload. Оба clipboard-теста дополнительно прошли три повторных запуска. CF_HTML формируется с UTF-8 byte offsets, а чтение возвращает fragment без служебного header; остальные MIME-форматы сохраняются. Ручная вставка в сторонние приложения ещё не проверялась.
+- Полный `dart test` проходит: все 220 тестов, включая 4 style-теста, 3 control-template-теста, 6 DataContext-тестов, 9 value-precedence-тестов, 13 binding-тестов, 17 ItemsControl/virtualization-тестов, 11 ScrollViewer-тестов, 18 Grid-тестов, 7 DockPanel-тестов и все clipboard-сценарии.
+- В formatted clipboard тесте проходят round-trip и восстановление прежнего значения для Unicode plain text, Windows `text/html`/CF_HTML, `application/xhtml+xml`, binary с нулевыми байтами и empty payload. Базовые native clipboard-тесты дополнительно прошли три повторных запуска. CF_HTML формируется с UTF-8 byte offsets, а чтение возвращает fragment без служебного header; остальные MIME-форматы сохраняются. Ручная вставка в сторонние приложения ещё не проверялась.
+- Публичный `Window` clipboard API проверен отдельно на headless handler и реальном `SdlSkiaHost`: приложение использует MIME strings и Dart byte lists без FFI/native types. Отсутствие backend возвращает `false`/`null`; native HTML round-trip проходит через тот же `WindowHost` contract.
 - Style setters применяются и удаляются через style layer, local/binding маскируют их по общим правилам, несовместимый target type отклоняется. Template factory Button вызывается один раз; content replacement, text и pressed updates сохраняют visual identity. Custom render заменяет default background, keyboard/pointer activation и focus ring продолжают работать.
 - Native Aqua smoke на Windows проверяет hover enter/leave, pressed/release, pointer click, Space и сохранение template identity; Skia-вызов rounded rect проходит в native ABI-тесте, а smoke завершается после 3 кадров: scale 2.0, logical 520×320, physical 1040×640. Обновлённый визуальный результат ещё не подтверждён пользователем.
 - DataContext рекурсивно наследуется, публикует notifications descendants, восстанавливает актуальное inherited value после очистки local и меняется при detach/reparent. Item context в ItemsControl остаётся local и передаётся вложенным контролам. Typed accessors возвращают совпадение или null, а required accessor выбрасывает понятный `StateError` для absent/wrong type.
@@ -227,6 +229,7 @@ lib/dui.dart                         — публичный Dart API с явны
 lib/native.dart                      — публичный native API
 lib/src/application.dart             — Application
 lib/src/window.dart                  — Window и native host-контракты
+lib/src/clipboard.dart               — ClipboardHandler и стандартные MIME types
 lib/src/frame_scheduler.dart         — invalidate coalescing, layout/paint passes и counters
 lib/src/focus_manager.dart           — FocusManager
 lib/src/focus_decoration.dart        — общий focus ring для контролов
@@ -736,7 +739,7 @@ One-way local маскирует binding, но не отменяет его; `cl
 - [ ] Clipboard с форматами.
   - [x] Универсальный MIME C ABI/Dart FFI: multi-format write, has/read, binary и empty payloads.
   - [x] Windows `text/html` через CF_HTML: UTF-8 offsets, fragment read/write и совместимость с остальными MIME-форматами.
-  - [ ] Высокоуровневый backend-independent formatted clipboard API.
+  - [x] Высокоуровневый backend-independent formatted clipboard API через `Window`/`WindowHost`, `ClipboardHandler` и MIME-константы.
   - [ ] Сохранение/восстановление всех прежних MIME-форматов в integration-тестах; ручная проверка HTML в сторонних приложениях.
 - [ ] File dialogs.
 - [ ] Native menus.
@@ -783,7 +786,7 @@ One-way local маскирует binding, но не отменяет его; `cl
 
 Порядок ближайших рабочих сессий:
 
-1. **Этап 8.2, clipboard:** добавить backend-independent formatted clipboard API и сохранять все прежние MIME-форматы в integration-тестах; Windows CF_HTML уже реализован.
+1. **Этап 8.2, clipboard cleanup:** сохранять и восстанавливать все прежние MIME-форматы в integration-тестах; публичный API и Windows CF_HTML уже реализованы.
 2. **Этап 8.2, file dialogs:** добавить первый open-file vertical slice после завершения clipboard.
 3. **Этап 8.1:** добавить semantics к дереву и синхронизировать role/name/value/state/bounds с focus и selection.
 4. **Ручная проверка ScrollViewer:** запустить `example/native_scroll_viewer.dart`, проверить реальное SDL wheel, клавиатурную прокрутку из focused TextBox/Button, track/thumb dragging, clipping и resize при разных display scales.
@@ -830,6 +833,24 @@ GPU backend по-прежнему не входит в ближайшие эта
 ---
 
 ## 9. Журнал работ
+
+### 2026-11-26 — этап 8.2, backend-independent formatted clipboard API
+
+Сделано:
+
+- Добавлены `ClipboardMimeTypes.plainText/html` и методы `writeClipboardData`, `hasClipboardData`, `readClipboardData` в `Window` и `WindowHost`; binary data представлены `Uint8List`, без FFI-типов в публичном `dui.dart`.
+- `ClipboardHandler` вынесен в `src/clipboard.dart`; `SdlSkiaHost` делегирует formatted calls существующему native bindings API. Без handler сохраняется безопасное `false`/`null` поведение.
+- Добавлены headless contract tests и native integration через публичный `Window` API. Native clipboard integration оставлен в одном файле, чтобы параллельные test suites не конкурировали за системный clipboard.
+
+Проверено:
+
+- `dart analyze` — без замечаний; полный `dart test` — 220/220.
+- Headless round-trip проверяет HTML, binary с нулевыми байтами, empty payload и missing format; native integration проверяет Unicode plain text и CF_HTML через `WindowHost`.
+- `git diff --check` — без ошибок, только LF→CRLF warnings.
+
+Следующий шаг:
+
+- Сохранение и восстановление полного прежнего MIME-набора в clipboard integration cleanup; ручная проверка HTML в сторонних приложениях остаётся открытой.
 
 ### 2026-11-26 — этап 8.2, Windows CF_HTML
 

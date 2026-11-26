@@ -555,6 +555,33 @@ void main() {
     }
   });
 
+  test('native backend works through the public Window clipboard API',
+      () async {
+    final host = await SdlSkiaHost.initialize();
+    final window = Window()..clipboardHandler = host;
+    final previous = host.readClipboardText();
+    const text = 'Public API: кириллица, 😀';
+    const html = '<em>Public API: кириллица, 😀</em>';
+    try {
+      expect(
+        window.writeClipboardData(<String, List<int>>{
+          ClipboardMimeTypes.plainText: utf8.encode(text),
+          ClipboardMimeTypes.html: utf8.encode(html),
+        }),
+        isTrue,
+      );
+      expect(window.hasClipboardData(ClipboardMimeTypes.html), isTrue);
+      expect(
+        utf8.decode(window.readClipboardData(ClipboardMimeTypes.html)!),
+        html,
+      );
+      expect(window.readClipboardText(), text);
+    } finally {
+      host.writeClipboardText(previous ?? '');
+      host.dispose();
+    }
+  });
+
   test('null destruction arguments are ignored', () {
     expect(() => bindings.hostDestroy(nullptr), returnsNormally);
     expect(() => bindings.windowDestroy(nullptr, nullptr), returnsNormally);

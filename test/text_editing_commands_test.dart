@@ -1,3 +1,5 @@
+import 'dart:typed_data';
+
 import 'package:duix/dui.dart';
 import 'package:test/test.dart';
 
@@ -205,4 +207,13 @@ final class _FakeClipboard implements ClipboardHandler {
     this.text = text;
     return true;
   }
+
+  @override
+  bool hasClipboardData(String mimeType) => false;
+
+  @override
+  Uint8List? readClipboardData(String mimeType) => null;
+
+  @override
+  bool writeClipboardData(Map<String, List<int>> formats) => false;
 }

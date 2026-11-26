@@ -1,5 +1,7 @@
 import 'dart:async';
+import 'dart:typed_data';
 
+import 'clipboard.dart';
 import 'drawing.dart';
 import 'events.dart';
 import 'focus_manager.dart';
@@ -10,6 +12,8 @@ import 'observable.dart';
 import 'text_layout.dart';
 import 'ui_element.dart';
 
+export 'clipboard.dart' show ClipboardHandler, ClipboardMimeTypes;
+
 abstract interface class NativeHost {
   Future<void> showWindow(Window window);
   Future<void> closeWindow(Window window);
@@ -19,11 +23,6 @@ abstract interface class TextInputHandler {
   void startTextInput(Window window);
   void stopTextInput(Window window);
   void setTextInputArea(Window window, Rect area, double cursorX);
-}
-
-abstract interface class ClipboardHandler {
-  String? readClipboardText();
-  bool writeClipboardText(String text);
 }
 
 final class Window extends ObservableObject implements WindowHost {
@@ -111,6 +110,18 @@ final class Window extends ObservableObject implements WindowHost {
   @override
   bool writeClipboardText(String text) =>
       clipboardHandler?.writeClipboardText(text) ?? false;
+
+  @override
+  bool hasClipboardData(String mimeType) =>
+      clipboardHandler?.hasClipboardData(mimeType) ?? false;
+
+  @override
+  Uint8List? readClipboardData(String mimeType) =>
+      clipboardHandler?.readClipboardData(mimeType);
+
+  @override
+  bool writeClipboardData(Map<String, List<int>> formats) =>
+      clipboardHandler?.writeClipboardData(formats) ?? false;
 
   @override
   double get displayScale => _devicePixelRatio;

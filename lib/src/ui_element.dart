@@ -1,3 +1,5 @@
+import 'dart:typed_data';
+
 import 'drawing.dart';
 import 'events.dart';
 import 'geometry.dart';
@@ -25,6 +27,9 @@ abstract interface class WindowHost {
   ) {}
   String? readClipboardText() => null;
   bool writeClipboardText(String text) => false;
+  bool hasClipboardData(String mimeType) => false;
+  Uint8List? readClipboardData(String mimeType) => null;
+  bool writeClipboardData(Map<String, List<int>> formats) => false;
 }
 
 abstract class UIElement extends PropertyOwner {
