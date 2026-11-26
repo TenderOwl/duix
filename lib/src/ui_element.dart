@@ -27,6 +27,11 @@ abstract interface class WindowHost {
 }
 
 abstract class UIElement extends PropertyOwner {
+  static const dataContextProperty = DuiProperty<UIElement, Object?>(
+    name: 'dataContext',
+    defaultValue: null,
+  );
+
   static const previewPointerDown = RoutedEvent<PointerEventArgs>(
     'previewPointerDown',
     RoutingStrategy.tunnel,
@@ -79,7 +84,6 @@ abstract class UIElement extends PropertyOwner {
   bool _isVisible = true;
   bool _isEnabled = true;
   bool _isFocusScope = false;
-  Object? _dataContext;
   bool _measureValid = false;
   bool _arrangeValid = false;
 
@@ -208,16 +212,28 @@ abstract class UIElement extends PropertyOwner {
     notifyPropertyChanged('isFocusScope', oldValue, value);
   }
 
-  Object? get dataContext => _dataContext;
-  set dataContext(Object? value) {
-    if (_dataContext == value) return;
-    final oldValue = _dataContext;
-    _dataContext = value;
-    notifyPropertyChanged('dataContext', oldValue, value);
+  Object? get dataContext => getValue(dataContextProperty);
+  set dataContext(Object? value) => setValue(dataContextProperty, value);
+
+  /// Compatibility alias for the effective local or inherited context.
+  Object? get effectiveDataContext => dataContext;
+
+  /// Returns the context when it has type [T], otherwise returns null.
+  T? dataContextAs<T>() {
+    final value = dataContext;
+    return value is T ? value : null;
   }
 
-  Object? get effectiveDataContext =>
-      _dataContext ?? _logicalParent?.effectiveDataContext;
+  /// Returns the context as [T] or throws when it is absent or has another type.
+  T requireDataContext<T>() {
+    final value = dataContext;
+    if (value is! T) {
+      throw StateError(
+        'Expected data context of type $T, but got ${value.runtimeType}.',
+      );
+    }
+    return value;
+  }
 
   Size measure(Size availableSize) {
     _validateAvailableSize(availableSize);
@@ -410,13 +426,28 @@ abstract class UIElement extends PropertyOwner {
     if (property.affectsArrange) invalidateArrange();
     if (property.affectsPaint) invalidatePaint();
     super.onDuiPropertyChanged(property, oldValue, newValue);
+    if (identical(property, dataContextProperty)) {
+      for (final child in logicalChildren) {
+        child._inheritDataContext(dataContext);
+      }
+    }
   }
 
   void attachToParent(UIElement? parent) {
     if (identical(parent, this)) {
       throw ArgumentError('An element cannot be its own parent.');
     }
+    if (identical(_logicalParent, parent)) return;
     _logicalParent = parent;
+    _inheritDataContext(parent?.dataContext);
+  }
+
+  void _inheritDataContext(Object? value) {
+    if (value == null) {
+      clearInheritedValue(dataContextProperty);
+    } else {
+      setInheritedValue(dataContextProperty, value);
+    }
   }
 
   void mountTo(WindowHost? window) {

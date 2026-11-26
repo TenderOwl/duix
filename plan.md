@@ -160,7 +160,9 @@ Skia canvas масштабируется через `displayScale`. Backbuffer �
 - two-way writes подавляют reentrant duplicates и синхронизируются даже без callback notification; `BindingException` сообщает property, operation и cause;
 - value layers с приоритетом `default < inherited < style < binding < local < animation`, ручные set/clear API и `PropertyOwner.getValueSource()`;
 - one-way local маскирует binding без отписки, а `clearLocalValue()` восстанавливает актуальное binding value; constructor defaults не блокируют style/inherited;
-- 201 Dart-тест, включая value precedence/transitions, binding lifecycle/diagnostics, ObservableCollection/ItemsControl/virtualization, ScrollViewer measure/scroll/input/clip, Grid tracks/span/gap/invalidate/HiDPI, DockPanel measure/arrange/invalidate, diagnostics FPS/render-on-demand, synchronous live-resize frame с увеличением physical backbuffer, layout constraints/alignment, infinite text width, clipping/rendering, horizontal scrolling, mouse caret/selection, pointer capture, surrogate pairs, composition, clipboard, render-on-demand и scheduler counters.
+- `UIElement.dataContextProperty` автоматически наследуется по logical tree, обновляет descendants при изменениях и reparenting; local/binding layers сохраняют обычные приоритеты;
+- типобезопасные `dataContextAs<T>()` и `requireDataContext<T>()` без строковых paths, reflection и кодогенерации;
+- 207 Dart-тестов, включая DataContext inheritance/accessors/reparenting, value precedence/transitions, binding lifecycle/diagnostics, ObservableCollection/ItemsControl/virtualization, ScrollViewer measure/scroll/input/clip, Grid tracks/span/gap/invalidate/HiDPI, DockPanel measure/arrange/invalidate, diagnostics FPS/render-on-demand, synchronous live-resize frame с увеличением physical backbuffer, layout constraints/alignment, infinite text width, clipping/rendering, horizontal scrolling, mouse caret/selection, pointer capture, surrogate pairs, composition, clipboard, render-on-demand и scheduler counters.
 
 ### 3.2. Проверенное поведение
 
@@ -171,7 +173,8 @@ Skia canvas масштабируется через `displayScale`. Backbuffer �
 - Белый фон окна отображается корректно.
 - HiDPI-масштабирование подтверждено на 4K-дисплее.
 - `dart analyze` проходит без замечаний.
-- Все 199 тестов при исключении двух clipboard-сценариев проходят, включая 9 value-precedence-тестов, 13 binding-тестов, 17 ItemsControl/virtualization-тестов, 11 ScrollViewer-тестов, 18 Grid-тестов, 7 DockPanel-тестов и FPS/render-on-demand. Два прежних полных прогона остановились только на Windows clipboard `Couldn't open clipboard`.
+- Все 205 тестов при исключении двух clipboard-сценариев проходят, включая 6 DataContext-тестов, 9 value-precedence-тестов, 13 binding-тестов, 17 ItemsControl/virtualization-тестов, 11 ScrollViewer-тестов, 18 Grid-тестов, 7 DockPanel-тестов и FPS/render-on-demand. Два прежних полных прогона остановились только на Windows clipboard `Couldn't open clipboard`.
+- DataContext рекурсивно наследуется, публикует notifications descendants, восстанавливает актуальное inherited value после очистки local и меняется при detach/reparent. Item context в ItemsControl остаётся local и передаётся вложенным контролам. Typed accessors возвращают совпадение или null, а required accessor выбрасывает понятный `StateError` для absent/wrong type.
 - Полная цепочка value layers подтверждена тестами: masked source updates не создают ложных notifications, снятие верхнего слоя восстанавливает effective value, замена binding поверх local публикует корректное previous value. Two-way setter продолжает писать в источник под animation mask; nullable layers различаются по наличию записи, а не по `null`.
 - Native items smoke на Windows проходит прокрутку к середине и концу списка из 100 000 строк: после завершения создано 16 контейнеров, extent=2 400 000, отрисованы 3 кадра. Строки примера имеют фиксированную высоту 24; переменная высота проверяется headless-тестом. Ручная проверка примера подтверждена пользователем.
 - Cancel/dispose bindings не изменяют последнее effective value, source после отмены не влияет на контрол. Повторная запись того же two-way value и synchronous reentrant notification не создают дополнительных property changes; failed initial read оставляет прежний binding активным.
@@ -303,7 +306,7 @@ python tools/bootstrap_native.py --smoke --dart "<путь-к-dart>"
 3. **P1:** Windows clipboard cleanup нестабилен при восстановлении пустого прежнего значения: SDL `Couldn't open clipboard`; round-trip и запись самого значения при этом успешны.
 4. **P2:** SDL wait ограничен 16 мс, чтобы Dart timers получали управление; это не полностью event-driven async integration. Измеренные 1.53–1.54% idle process CPU и медианная latency около 16.3–16.5 мс пока не оправдывают усложнение backend.
 5. **P2:** поиск видимого диапазона и расчёт estimated extent в `VirtualizingStackPanel` линейны по числу items; переменная высота может уточнять позицию на последующих layout pass.
-6. **P1:** value layers и ручные setters реализованы, но automatic inherited-property propagation, styles/control templates и animation engine ещё отсутствуют.
+6. **P1:** value layers, ручные setters и DataContext inheritance реализованы, но универсальное inherited-property propagation, styles/control templates и animation engine ещё отсутствуют.
 7. **P1:** базовый `PropertyOwner.dispose()` отменяет bindings, но единый recursive dispose контролов и остальных ресурсов ещё не реализован.
 8. **P2:** нет общих styles/control templates и accessibility.
 9. **P2:** нет packaging runtime dependencies и кроссплатформенной CI.
@@ -678,13 +681,17 @@ default < inherited < style < binding < local < animation
 
 One-way local маскирует binding, но не отменяет его; `clearLocalValue()` восстанавливает актуальное binding value. Новый `bind()` удаляет прежний явный local, поэтому становится effective value. `cancel()` сохраняет последнее binding value как local только при отсутствии явного local поверх него. Two-way setter продолжает писать в источник даже под animation mask. Присваивание default без активного binding не создаёт явный local, поэтому constructor defaults контролов не блокируют style/inherited.
 
-Это ручные value layers, а не automatic inherited-property propagation, styles/control templates или animation engine; они относятся к следующим задачам.
+На этом шаге реализованы ручные value layers, а не универсальное automatic inherited-property propagation, styles/control templates или animation engine. Automatic propagation для `DataContext` добавлено отдельно в этапе 7.3.
 
 ## 7.3. DataContext
 
-- [ ] Наследование по logical tree.
-- [ ] Типобезопасные accessors.
-- [ ] Строковые paths только через кодогенерацию, без `dart:mirrors`.
+- [x] Наследование по logical tree.
+- [x] Типобезопасные accessors.
+- [x] Строковые paths, `dart:mirrors` и кодогенерация не используются.
+
+`UIElement.dataContextProperty` использует общие value layers. При attach/detach и изменении effective context предка inherited layer рекурсивно обновляется у descendants; local, style, binding и animation продолжают действовать по общим приоритетам. `effectiveDataContext` сохранён как compatibility alias.
+
+`dataContextAs<T>()` возвращает типизированное значение или null, `requireDataContext<T>()` возвращает значение либо выбрасывает `StateError`. `ItemsControl` задаёт item как local context корня шаблона, поэтому item перекрывает ancestor context и наследуется вложенными контролами.
 
 ## 7.4. Styles и templates
 
@@ -756,7 +763,7 @@ One-way local маскирует binding, но не отменяет его; `cl
 Порядок ближайших рабочих сессий:
 
 1. **Стабилизация Windows clipboard:** устранить повторяемый сбой `Couldn't open clipboard` в native ABI-тесте.
-2. **Этап 7.3:** реализовать наследование `DataContext` по logical tree и типобезопасные accessors.
+2. **Этап 7.4:** реализовать styles и persistent control templates без потери identity и input/focus поведения.
 3. **Ручная проверка ScrollViewer:** запустить `example/native_scroll_viewer.dart`, проверить реальное SDL wheel, клавиатурную прокрутку из focused TextBox/Button, track/thumb dragging, clipping и resize при разных display scales.
 4. **Незавершённая часть этапа 1.2:** проверить сборку и Paragraph smoke на Linux (FontConfig/Freetype) и macOS (CoreText).
 5. **Ручная визуальная проверка:** открыть text gallery и TextBox на мониторах с разными масштабами, проверить clipping, selection и caret; автоматический smoke этого не заменяет.
@@ -801,6 +808,27 @@ GPU backend по-прежнему не входит в ближайшие эта
 ---
 
 ## 9. Журнал работ
+
+### 2026-11-26 — этап 7.3, DataContext
+
+Сделано:
+
+- `DataContext` переведён на `UIElement.dataContextProperty` и общие value layers. Effective context автоматически наследуется по logical tree и рекурсивно обновляется при изменении предка.
+- Attach/detach/reparent синхронизируют inherited layer. Local context маскирует ancestor updates до `clearLocalValue()`, bound parent context распространяется по тем же правилам.
+- Добавлены `dataContextAs<T>()` и `requireDataContext<T>()`; строковые paths, reflection и кодогенерация не используются. `effectiveDataContext` сохранён как compatibility alias.
+- `ItemsControl` продолжает задавать item как local context корня шаблона; вложенные контролы теперь автоматически наследуют item.
+- Добавлены 6 тестов `test/data_context_test.dart`: recursive inheritance/notifications, local mask, binding propagation, detach/reparent, typed accessors и item context. C ABI и native C++ не изменялись.
+
+Проверено:
+
+- `dart format` и `dart analyze` — без замечаний.
+- `dart test test/data_context_test.dart test/items_control_test.dart test/value_precedence_test.dart` — все 26 тестов проходят.
+- `dart test --name '^(?!.*clipboard).*$'` — все 205 тестов проходят.
+- `git diff --check` — без ошибок; только известное предупреждение LF→CRLF.
+
+Следующий шаг:
+
+- Этап 7.4 — styles и persistent control templates.
 
 ### 2026-11-26 — этап 7.2, приоритеты значений
 
