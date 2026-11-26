@@ -178,8 +178,8 @@ Skia canvas масштабируется через `displayScale`. Backbuffer �
 - Белый фон окна отображается корректно.
 - HiDPI-масштабирование подтверждено на 4K-дисплее.
 - `dart analyze` проходит без замечаний.
-- Все 214 тестов при исключении трёх clipboard-сценариев проходят, включая 4 style-теста, 3 control-template-теста, 6 DataContext-тестов, 9 value-precedence-тестов, 13 binding-тестов, 17 ItemsControl/virtualization-тестов, 11 ScrollViewer-тестов, 18 Grid-тестов, 7 DockPanel-тестов и FPS/render-on-demand.
-- В formatted clipboard тесте все round-trip assertions проходят для Unicode plain text, `application/xhtml+xml`, binary с нулевыми байтами и empty payload; тест завершается ошибкой только при восстановлении прежнего системного clipboard. SDL Windows сводит `text/html` к `CF_UNICODETEXT`, поэтому настоящий HTML clipboard требует отдельной platform-specific реализации.
+- Полный `dart test` проходит: все 217 тестов, включая 4 style-теста, 3 control-template-теста, 6 DataContext-тестов, 9 value-precedence-тестов, 13 binding-тестов, 17 ItemsControl/virtualization-тестов, 11 ScrollViewer-тестов, 18 Grid-тестов, 7 DockPanel-тестов и оба Windows clipboard-сценария.
+- В formatted clipboard тесте проходят round-trip и восстановление прежнего значения для Unicode plain text, Windows `text/html`/CF_HTML, `application/xhtml+xml`, binary с нулевыми байтами и empty payload. Оба clipboard-теста дополнительно прошли три повторных запуска. CF_HTML формируется с UTF-8 byte offsets, а чтение возвращает fragment без служебного header; остальные MIME-форматы сохраняются. Ручная вставка в сторонние приложения ещё не проверялась.
 - Style setters применяются и удаляются через style layer, local/binding маскируют их по общим правилам, несовместимый target type отклоняется. Template factory Button вызывается один раз; content replacement, text и pressed updates сохраняют visual identity. Custom render заменяет default background, keyboard/pointer activation и focus ring продолжают работать.
 - Native Aqua smoke на Windows проверяет hover enter/leave, pressed/release, pointer click, Space и сохранение template identity; Skia-вызов rounded rect проходит в native ABI-тесте, а smoke завершается после 3 кадров: scale 2.0, logical 520×320, physical 1040×640. Обновлённый визуальный результат ещё не подтверждён пользователем.
 - DataContext рекурсивно наследуется, публикует notifications descendants, восстанавливает актуальное inherited value после очистки local и меняется при detach/reparent. Item context в ItemsControl остаётся local и передаётся вложенным контролам. Typed accessors возвращают совпадение или null, а required accessor выбрасывает понятный `StateError` для absent/wrong type.
@@ -205,7 +205,7 @@ Skia canvas масштабируется через `displayScale`. Backbuffer �
 - Текст, selection, composition и caret заключены в Skia clip content bounds; обычный selection рисуется до текста, caret — после него. Focus/collapsed/IME-состояния проверены render-командами.
 - Исправлена native-геометрия: `getRectsForRange()` получает UTF-16 offsets без преобразования в UTF-8 bytes, а caret строится по `getGlyphInfoAtUTF16Offset()` или последнему text box для конца строки с учётом направления текста.
 - Регрессионный тест на `A😀B` при scale 2.0 проверяет строго возрастающие caret coordinates на offsets 0/1/3/4 и соответствие selection rects диапазонам `0..1`, `1..3` и всего текста. До исправления тест воспроизводил caret `x = 0` после `A`.
-- SDL clipboard на Windows выполняет Unicode round-trip, освобождает native string через C ABI и в последнем полном прогоне успешно восстанавливает прежнее значение; ранее наблюдавшаяся нестабильность `Couldn't open clipboard` требует наблюдения на повторных запусках.
+- SDL clipboard на Windows выполняет Unicode round-trip, освобождает native string через C ABI и восстанавливает прежнее значение. Bounded retry устранил наблюдавшийся `Couldn't open clipboard` в трёх повторных запусках обоих clipboard-тестов и последующем полном прогоне.
 - `DuiEvent` с modifiers, composition range и SDL scancode имеет ABI size 80 байт; SDL byte offsets преобразуются в UTF-16. `KeyEventArgs.logicalKeyCode` получает SDL keycode, `physicalKeyCode` — scancode. OS key modifiers и маппинг SDL key codes покрыты косвенно, без синтеза системного keyboard input.
 - Composition видна до commit, не меняет `TextBuffer`/binding, поддерживает CJK/emoji selection range и кириллицу без selection; пустой editing event, focus loss, unmount и editing commands очищают её.
 - Матрица проверяет ASCII, кириллицу, emoji, CJK, Arabic, Hebrew, multiline, пустую и очень длинную строки, а также стабильность logical metrics на масштабах 1.0, 1.25, 1.5 и 2.0.
@@ -316,7 +316,7 @@ python tools/bootstrap_native.py --smoke --dart "<путь-к-dart>"
 
 1. **P0:** `TextBox.measureCore()` всё ещё приблизительно считает ширину через число символов.
 2. **P0:** legacy `drawText`, используемый `TextBox`, рисует через `drawSimpleText` без SkParagraph.
-3. **P1:** Windows clipboard cleanup нестабилен при восстановлении пустого прежнего значения: SDL `Couldn't open clipboard`; round-trip и запись самого значения при этом успешны.
+3. **P1:** Windows CF_HTML реализован поверх SDL; остаются backend-independent formatted clipboard API, сохранение полного MIME-набора в integration cleanup и ручная проверка обмена HTML со сторонними приложениями.
 4. **P2:** SDL wait ограничен 16 мс, чтобы Dart timers получали управление; это не полностью event-driven async integration. Измеренные 1.53–1.54% idle process CPU и медианная latency около 16.3–16.5 мс пока не оправдывают усложнение backend.
 5. **P2:** поиск видимого диапазона и расчёт estimated extent в `VirtualizingStackPanel` линейны по числу items; переменная высота может уточнять позицию на последующих layout pass.
 6. **P1:** value layers, DataContext inheritance и styles реализованы, но универсальное inherited-property propagation и animation engine ещё отсутствуют; control templates пока поддержаны только у Button.
@@ -735,8 +735,9 @@ One-way local маскирует binding, но не отменяет его; `cl
 
 - [ ] Clipboard с форматами.
   - [x] Универсальный MIME C ABI/Dart FFI: multi-format write, has/read, binary и empty payloads.
-  - [ ] Windows `text/html` (CF_HTML) и высокоуровневый backend-independent formatted clipboard API.
-  - [ ] Сохранение/восстановление всех прежних MIME-форматов в integration-тестах.
+  - [x] Windows `text/html` через CF_HTML: UTF-8 offsets, fragment read/write и совместимость с остальными MIME-форматами.
+  - [ ] Высокоуровневый backend-independent formatted clipboard API.
+  - [ ] Сохранение/восстановление всех прежних MIME-форматов в integration-тестах; ручная проверка HTML в сторонних приложениях.
 - [ ] File dialogs.
 - [ ] Native menus.
 - [ ] Drag-and-drop.
@@ -782,14 +783,13 @@ One-way local маскирует binding, но не отменяет его; `cl
 
 Порядок ближайших рабочих сессий:
 
-1. **Стабилизация Windows clipboard:** устранить повторяемый сбой `Couldn't open clipboard` при восстановлении прежнего значения в native ABI-тестах.
-2. **Этап 8.2, clipboard:** реализовать Windows `text/html`/CF_HTML и backend-independent formatted clipboard API; сохранять все прежние MIME-форматы в integration-тестах.
-3. **Этап 8.2, file dialogs:** добавить первый open-file vertical slice после завершения clipboard.
-4. **Этап 8.1:** добавить semantics к дереву и синхронизировать role/name/value/state/bounds с focus и selection.
-5. **Ручная проверка ScrollViewer:** запустить `example/native_scroll_viewer.dart`, проверить реальное SDL wheel, клавиатурную прокрутку из focused TextBox/Button, track/thumb dragging, clipping и resize при разных display scales.
-6. **Незавершённая часть этапа 1.2:** проверить сборку и Paragraph smoke на Linux (FontConfig/Freetype) и macOS (CoreText).
-7. **Ручная визуальная проверка:** открыть text gallery и TextBox на мониторах с разными масштабами, проверить clipping, selection и caret; автоматический smoke этого не заменяет.
-8. **Ручная проверка этапа 2.4:** русский, китайский/японский ввод и emoji через реальные системные IME.
+1. **Этап 8.2, clipboard:** добавить backend-independent formatted clipboard API и сохранять все прежние MIME-форматы в integration-тестах; Windows CF_HTML уже реализован.
+2. **Этап 8.2, file dialogs:** добавить первый open-file vertical slice после завершения clipboard.
+3. **Этап 8.1:** добавить semantics к дереву и синхронизировать role/name/value/state/bounds с focus и selection.
+4. **Ручная проверка ScrollViewer:** запустить `example/native_scroll_viewer.dart`, проверить реальное SDL wheel, клавиатурную прокрутку из focused TextBox/Button, track/thumb dragging, clipping и resize при разных display scales.
+5. **Незавершённая часть этапа 1.2:** проверить сборку и Paragraph smoke на Linux (FontConfig/Freetype) и macOS (CoreText).
+6. **Ручная визуальная проверка:** открыть text gallery и TextBox на мониторах с разными масштабами, проверить clipping, selection и caret; автоматический smoke этого не заменяет.
+7. **Ручная проверка этапа 2.4:** русский, китайский/японский ввод и emoji через реальные системные IME.
 
 GPU backend по-прежнему не входит в ближайшие этапы.
 
@@ -830,6 +830,44 @@ GPU backend по-прежнему не входит в ближайшие эта
 ---
 
 ## 9. Журнал работ
+
+### 2026-11-26 — этап 8.2, Windows CF_HTML
+
+Сделано:
+
+- `text/html` на Windows исключён из SDL text MIME mapping и обрабатывается через registered `HTML Format`/`CF_HTML` с `OpenClipboard` bounded retry.
+- Запись формирует CF_HTML header с UTF-8 byte offsets и fragment markers; чтение возвращает fragment по markers либо numeric offsets, без служебного header. HTML-only write поддержан без передачи пустого MIME-списка в SDL.
+- Остальные MIME-форматы по-прежнему записываются через SDL и сохраняются при добавлении CF_HTML. Integration-тест расширен настоящим `text/html` round-trip с кириллицей и emoji наряду с XHTML, binary и empty payload.
+
+Проверено:
+
+- Оба clipboard-теста прошли трижды подряд; полный `dart test` — 217/217.
+- Native library пересобрана, `dart analyze` — без замечаний, `git diff --check` — без ошибок, только LF→CRLF warnings.
+
+Не проверено / ограничения:
+
+- Ручная вставка HTML в Word, браузер и другие сторонние приложения не выполнялась. Linux/macOS в этом шаге не запускались; CF_HTML изолирован Windows guards.
+
+Следующий шаг:
+
+- Backend-independent formatted clipboard API и сохранение полного прежнего MIME-набора в integration cleanup.
+
+### 2026-11-26 — этап 8.2, стабилизация Windows clipboard
+
+Сделано:
+
+- Native text и formatted writes используют bounded retry на Windows: до 12 попыток с паузой 25 мс (максимум около 275 мс ожидания сверх внутренних retry SDL). На остальных ОС остаётся одна попытка.
+- `dui_clipboard_get_data` различает missing format и существующий empty payload: для последнего возвращает освобождаемый SDL buffer нулевой логической длины вместо `NULL`.
+
+Проверено:
+
+- Оба clipboard integration-теста трижды подряд прошли, включая восстановление прежнего plain text и empty custom payload.
+- Полный `dart test` — все 217 тестов проходят, включая оба Windows clipboard-сценария. Ранее воспроизводимый `Couldn't open clipboard` в этих прогонах не возник.
+- Native library пересобрана; `git diff --check` — без ошибок, только известные LF→CRLF warnings.
+
+Следующий шаг:
+
+- Windows CF_HTML и backend-independent formatted clipboard API; сохранение полного прежнего MIME-набора в integration cleanup.
 
 ### 2026-11-26 — этап 8.2, универсальный MIME clipboard
 

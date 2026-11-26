@@ -2,6 +2,13 @@
 
 #include <SDL3/SDL.h>
 
+#if defined(_WIN32)
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#include <windows.h>
+#endif
+
 #include "include/core/SkCanvas.h"
 #include "include/core/SkColor.h"
 #include "include/core/SkFont.h"
@@ -31,6 +38,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstdio>
 #include <cstring>
 #include <limits>
 #include <memory>
@@ -93,11 +101,188 @@ void SDLCALL clipboard_cleanup_callback(void*) {
   clipboard_formats.clear();
 }
 
+template <typename Write>
+bool retry_clipboard_write(Write&& write) {
+#if defined(_WIN32)
+  constexpr int max_attempts = 12;
+#else
+  constexpr int max_attempts = 1;
+#endif
+  for (int attempt = 0; attempt < max_attempts; ++attempt) {
+    if (write()) return true;
+    if (attempt + 1 < max_attempts) SDL_Delay(25);
+  }
+  return false;
+}
+
 void clear_error() { last_error.clear(); }
 
 void set_error(const char* message) { last_error = message; }
 
 void set_sdl_error() { last_error = SDL_GetError(); }
+
+bool is_html_mime(const char* mime_type) {
+  return mime_type && std::strcmp(mime_type, "text/html") == 0;
+}
+
+#if defined(_WIN32)
+UINT html_clipboard_format() {
+  static const UINT format = RegisterClipboardFormatA("HTML Format");
+  return format;
+}
+
+bool open_clipboard_for_html() {
+  return retry_clipboard_write([] { return OpenClipboard(nullptr) != 0; });
+}
+
+std::string make_cf_html(const std::vector<uint8_t>& fragment) {
+  constexpr char prefix[] = "<html>\r\n<body>\r\n<!--StartFragment-->";
+  constexpr char suffix[] = "<!--EndFragment-->\r\n</body>\r\n</html>\r\n";
+  constexpr char format[] =
+      "Version:0.9\r\n"
+      "StartHTML:%010llu\r\n"
+      "EndHTML:%010llu\r\n"
+      "StartFragment:%010llu\r\n"
+      "EndFragment:%010llu\r\n";
+  const int header_size =
+      std::snprintf(nullptr, 0, format, 0ULL, 0ULL, 0ULL, 0ULL);
+  const unsigned long long start_html = static_cast<unsigned>(header_size);
+  const unsigned long long start_fragment = start_html + sizeof(prefix) - 1;
+  const unsigned long long end_fragment = start_fragment + fragment.size();
+  const unsigned long long end_html = end_fragment + sizeof(suffix) - 1;
+  char header[256];
+  std::snprintf(
+      header,
+      sizeof(header),
+      format,
+      start_html,
+      end_html,
+      start_fragment,
+      end_fragment);
+  std::string result(header, static_cast<size_t>(header_size));
+  result.append(prefix, sizeof(prefix) - 1);
+  if (!fragment.empty()) {
+    result.append(reinterpret_cast<const char*>(fragment.data()), fragment.size());
+  }
+  result.append(suffix, sizeof(suffix) - 1);
+  return result;
+}
+
+bool clear_clipboard_for_html() {
+  if (!open_clipboard_for_html()) {
+    set_error("Couldn't open clipboard to write HTML data.");
+    return false;
+  }
+  const bool cleared = EmptyClipboard() != 0;
+  CloseClipboard();
+  if (!cleared) set_error("Couldn't clear clipboard for HTML data.");
+  return cleared;
+}
+
+bool write_html_clipboard(const std::vector<uint8_t>& fragment) {
+  const UINT format = html_clipboard_format();
+  const std::string html = make_cf_html(fragment);
+  if (!format || !open_clipboard_for_html()) {
+    set_error("Couldn't open clipboard to write HTML data.");
+    return false;
+  }
+  HGLOBAL memory = GlobalAlloc(GMEM_MOVEABLE, html.size() + 1);
+  if (!memory) {
+    CloseClipboard();
+    set_error("Couldn't allocate clipboard HTML data.");
+    return false;
+  }
+  void* destination = GlobalLock(memory);
+  if (!destination) {
+    GlobalFree(memory);
+    CloseClipboard();
+    set_error("Couldn't lock clipboard HTML data.");
+    return false;
+  }
+  std::memcpy(destination, html.data(), html.size());
+  static_cast<char*>(destination)[html.size()] = '\0';
+  GlobalUnlock(memory);
+  if (!SetClipboardData(format, memory)) {
+    GlobalFree(memory);
+    CloseClipboard();
+    set_error("Couldn't publish clipboard HTML data.");
+    return false;
+  }
+  CloseClipboard();
+  return true;
+}
+
+bool read_cf_html_offset(
+    const std::string& html,
+    const char* name,
+    size_t* offset) {
+  size_t current = html.find(name);
+  if (current == std::string::npos) return false;
+  current += std::strlen(name);
+  while (current < html.size() && html[current] == ' ') ++current;
+  if (current == html.size() || html[current] < '0' || html[current] > '9') {
+    return false;
+  }
+  size_t value = 0;
+  while (current < html.size() && html[current] >= '0' && html[current] <= '9') {
+    const size_t digit = static_cast<size_t>(html[current] - '0');
+    if (value > (std::numeric_limits<size_t>::max() - digit) / 10) return false;
+    value = value * 10 + digit;
+    ++current;
+  }
+  *offset = value;
+  return true;
+}
+
+bool read_html_clipboard(std::vector<uint8_t>* fragment) {
+  const UINT format = html_clipboard_format();
+  if (!format || !open_clipboard_for_html()) {
+    set_error("Couldn't open clipboard to read HTML data.");
+    return false;
+  }
+  HGLOBAL memory = static_cast<HGLOBAL>(GetClipboardData(format));
+  if (!memory) {
+    CloseClipboard();
+    set_error("Clipboard HTML data is unavailable.");
+    return false;
+  }
+  const char* source = static_cast<const char*>(GlobalLock(memory));
+  if (!source) {
+    CloseClipboard();
+    set_error("Couldn't lock clipboard HTML data.");
+    return false;
+  }
+  const size_t allocated_size = GlobalSize(memory);
+  const void* terminator = std::memchr(source, '\0', allocated_size);
+  const size_t size = terminator
+                          ? static_cast<const char*>(terminator) - source
+                          : allocated_size;
+  const std::string html(source, size);
+  GlobalUnlock(memory);
+  CloseClipboard();
+
+  constexpr char start_marker[] = "<!--StartFragment-->";
+  constexpr char end_marker[] = "<!--EndFragment-->";
+  const size_t marked_start = html.find(start_marker);
+  const size_t marked_end = html.find(end_marker);
+  size_t start = 0;
+  size_t end = html.size();
+  if (marked_start != std::string::npos && marked_end != std::string::npos) {
+    start = marked_start + sizeof(start_marker) - 1;
+    end = marked_end;
+  } else if (!read_cf_html_offset(html, "StartFragment:", &start) ||
+             !read_cf_html_offset(html, "EndFragment:", &end)) {
+    start = 0;
+    end = html.size();
+  }
+  if (start > end || end > html.size()) {
+    set_error("Clipboard HTML fragment offsets are invalid.");
+    return false;
+  }
+  fragment->assign(html.begin() + start, html.begin() + end);
+  return true;
+}
+#endif
 
 bool decode_utf8(
     const std::string& text,
@@ -334,7 +519,8 @@ int32_t dui_clipboard_set_text(const char* text_utf8) {
     set_error("Clipboard text must not be null.");
     return 0;
   }
-  if (!SDL_SetClipboardText(text_utf8)) {
+  if (!retry_clipboard_write(
+          [&] { return SDL_SetClipboardText(text_utf8); })) {
     set_sdl_error();
     return 0;
   }
@@ -376,19 +562,37 @@ int32_t dui_clipboard_set_data(
         bytes.assign(data[index], data[index] + sizes[index]);
       }
       replacement.emplace(mime_type, std::move(bytes));
+#if defined(_WIN32)
+      if (is_html_mime(mime_type)) continue;
+#endif
       mime_type_names.push_back(mime_type);
     }
     clipboard_formats = std::move(replacement);
-    if (!SDL_SetClipboardData(
-            clipboard_data_callback,
-            clipboard_cleanup_callback,
-            nullptr,
-            mime_type_names.data(),
-            count)) {
+    if (!mime_type_names.empty()) {
+      if (!retry_clipboard_write([&] {
+            return SDL_SetClipboardData(
+                clipboard_data_callback,
+                clipboard_cleanup_callback,
+                nullptr,
+                mime_type_names.data(),
+                mime_type_names.size());
+          })) {
+        clipboard_formats.clear();
+        set_sdl_error();
+        return 0;
+      }
+    }
+#if defined(_WIN32)
+    else if (!clear_clipboard_for_html()) {
       clipboard_formats.clear();
-      set_sdl_error();
       return 0;
     }
+    const auto html = clipboard_formats.find("text/html");
+    if (html != clipboard_formats.end() && !write_html_clipboard(html->second)) {
+      clipboard_formats.clear();
+      return 0;
+    }
+#endif
     return 1;
   } catch (const std::exception& error) {
     clipboard_formats.clear();
@@ -403,6 +607,12 @@ int32_t dui_clipboard_has_data(const char* mime_type) {
     set_error("Clipboard MIME type must not be empty.");
     return 0;
   }
+#if defined(_WIN32)
+  if (is_html_mime(mime_type)) {
+    const UINT format = html_clipboard_format();
+    return format && IsClipboardFormatAvailable(format) ? 1 : 0;
+  }
+#endif
   return SDL_HasClipboardData(mime_type) ? 1 : 0;
 }
 
@@ -413,8 +623,36 @@ void* dui_clipboard_get_data(const char* mime_type, size_t* out_size) {
     return nullptr;
   }
   *out_size = 0;
+#if defined(_WIN32)
+  if (is_html_mime(mime_type)) {
+    const UINT format = html_clipboard_format();
+    if (!format || !IsClipboardFormatAvailable(format)) return nullptr;
+    try {
+      std::vector<uint8_t> fragment;
+      if (!read_html_clipboard(&fragment)) return nullptr;
+      *out_size = fragment.size();
+      void* result = SDL_malloc(fragment.empty() ? 1 : fragment.size());
+      if (!result) {
+        *out_size = 0;
+        set_error("Couldn't allocate clipboard HTML result.");
+        return nullptr;
+      }
+      if (!fragment.empty()) std::memcpy(result, fragment.data(), fragment.size());
+      return result;
+    } catch (const std::exception& error) {
+      set_error(error.what());
+      return nullptr;
+    }
+  }
+#endif
   if (!SDL_HasClipboardData(mime_type)) return nullptr;
+  SDL_ClearError();
   void* data = SDL_GetClipboardData(mime_type, out_size);
+  if (!data && *out_size == 0 && !SDL_GetError()[0]) {
+    /* SDL represents a present empty payload as NULL; preserve the distinction
+     * between an empty format and a missing format at the C ABI boundary. */
+    data = SDL_malloc(1);
+  }
   if (!data) set_sdl_error();
   return data;
 }

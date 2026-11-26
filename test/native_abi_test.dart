@@ -516,6 +516,7 @@ void main() {
       expect(
         bindings.writeClipboardData({
           'text/plain': utf8.encode(text),
+          'text/html': utf8.encode(html),
           'application/xhtml+xml': utf8.encode(html),
           'application/x-duix-binary': binary,
           'application/x-duix-empty': const <int>[],
@@ -523,15 +524,31 @@ void main() {
         isTrue,
       );
 
+      expect(bindings.hasClipboardData('text/html'), isTrue);
       expect(bindings.hasClipboardData('application/xhtml+xml'), isTrue);
       expect(bindings.hasClipboardData('image/png'), isFalse);
       expect(utf8.decode(bindings.readClipboardData('text/plain')!), text);
+      expect(utf8.decode(bindings.readClipboardData('text/html')!), html);
       expect(utf8.decode(bindings.readClipboardData('application/xhtml+xml')!),
           html);
       expect(bindings.readClipboardData('application/x-duix-binary'), binary);
       expect(bindings.readClipboardData('application/x-duix-empty'), isEmpty);
       expect(bindings.readClipboardData('image/png'), isNull);
       expect(bindings.readClipboardText(), text);
+
+      expect(
+        bindings.writeClipboardData({'text/html': utf8.encode(html)}),
+        isTrue,
+      );
+      expect(bindings.hasClipboardData('text/html'), isTrue);
+      expect(utf8.decode(bindings.readClipboardData('text/html')!), html);
+
+      expect(
+        bindings.writeClipboardData({'text/html': const <int>[]}),
+        isTrue,
+      );
+      expect(bindings.hasClipboardData('text/html'), isTrue);
+      expect(bindings.readClipboardData('text/html'), isEmpty);
     } finally {
       bindings.writeClipboardText(previous ?? '');
       bindings.hostDestroy(host);
