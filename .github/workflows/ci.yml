@@ -68,6 +68,11 @@ jobs:
         with:
           sdk: stable
 
+      # The native job drives the packaging scripts, which are Python.
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
       # clang-cl needs the Windows SDK and the MSVC environment to find the
       # headers and the import libraries.
       - name: Set up the MSVC environment
@@ -112,3 +117,9 @@ jobs:
       - name: Smoke
         if: runner.os != 'Linux'
         run: dart run example/native_smoke.dart --smoke --diagnostics
+
+      # The packaging step installs the library with the CMake install rules,
+      # reports the runtime dependencies and checks that a program loads the
+      # library from the release bundle.
+      - name: Package
+        run: python tools/package.py

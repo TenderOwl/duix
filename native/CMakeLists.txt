@@ -91,3 +91,46 @@ set_target_properties(dui_native PROPERTIES
   RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin
   LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin
 )
+
+# The ICU data file is loaded from the directory of the executable or of the
+# native library, so it has to be installed next to the library.
+set(SKIA_ICU_DATA "${SKIA_ROOT}/out/Release/icudtl.dat" CACHE FILEPATH
+    "Path to the Skia ICU data file (icudtl.dat)")
+
+# CMake re-parses install() arguments at install time, and a Windows path with
+# backslashes would be read as an escape sequence ("\U" is invalid). Normalize
+# the path to forward slashes once, at configure time.
+if(SKIA_ICU_DATA)
+  file(TO_CMAKE_PATH "${SKIA_ICU_DATA}" DUI_ICU_DATA)
+endif()
+
+if(WIN32)
+  install(TARGETS dui_native RUNTIME DESTINATION bin)
+  set(DUI_ICU_DESTINATION bin)
+else()
+  install(TARGETS dui_native LIBRARY DESTINATION lib)
+  set(DUI_ICU_DESTINATION lib)
+endif()
+
+if(DUI_ICU_DATA AND EXISTS "${DUI_ICU_DATA}")
+  install(FILES "${DUI_ICU_DATA}" DESTINATION ${DUI_ICU_DESTINATION})
+else()
+  message(WARNING "Skia ICU data file not found (${SKIA_ICU_DATA}); "
+                  "Unicode shaping will be limited.")
+endif()
+
+if(APPLE)
+  # A packaged application loads the library from its own bundle, so the
+  # install name and the runtime search path stay relative to the executable.
+  set_target_properties(dui_native PROPERTIES
+    BUILD_WITH_INSTALL_NAME_DIR TRUE
+    INSTALL_NAME_DIR "@rpath"
+    INSTALL_RPATH "@executable_path;@loader_path;@executable_path/../Frameworks"
+  )
+elseif(UNIX)
+  # Private dependencies are shipped next to the library.
+  set_target_properties(dui_native PROPERTIES
+    BUILD_RPATH "$ORIGIN"
+    INSTALL_RPATH "$ORIGIN"
+  )
+endif()

@@ -188,7 +188,14 @@ Skia canvas масштабируется через `displayScale`. Backbuffer �
 - элементы без роли плоско сворачиваются (их дети поднимаются к родителю), а контрол с именем забирает имя своего label-контента, чтобы текст не дублировался;
 - `Window.semanticsTree` — снимок семантики дерева контента; фокус и выделение читаются в момент построения, поэтому снимок всегда актуален;
 - `Label` → label, `Button` → button (с pressed), `TextBox` → textBox (value, editable, выделение), `ItemsControl` → list, `ContentControl` берёт имя из своего контента;
-- 258 Dart-тестов, включая file-dialog contract, formatted clipboard snapshots, styles/templates, DataContext inheritance/accessors/reparenting, value precedence/transitions, binding lifecycle/diagnostics, ObservableCollection/ItemsControl/virtualization, ScrollViewer measure/scroll/input/clip, Grid tracks/span/gap/invalidate/HiDPI, DockPanel measure/arrange/invalidate, diagnostics FPS/render-on-demand, synchronous live-resize frame с увеличением physical backbuffer, layout constraints/alignment, infinite text width, clipping/rendering, horizontal scrolling, mouse caret/selection, pointer capture, surrogate pairs, composition, clipboard, recursive dispose, semantics tree, render-on-demand и scheduler counters.
+- native-библиотека ищется сначала в каталоге исполняемого файла (`Platform.resolvedExecutable`), потом по `DUI_NATIVE_LIBRARY` и по абсолютному пути: упакованное приложение кладёт библиотеку рядом с exe;
+- install-правила CMake: библиотека уходит в `bin/` (Windows) или `lib/` (Unix), `icudtl.dat` ставится рядом с ней же, `INSTALL_RPATH "$ORIGIN"` на Linux, install name `@rpath` и `@executable_path;@loader_path;@executable_path/../Frameworks` на macOS;
+- `tools/package.py`: ставит библиотеку через CMake install-правила, разбирает runtime-зависимости (PE import table / `ldd` / `otool -L`), делит их на системные и private, собирает бандл `build/release/dui_native-<version>-<platform>-<arch>/` с `manifest.json` и sha256 каждого файла;
+- архив бандла воспроизводим: фиксированные timestamps и отсортированные записи дают одинаковый sha256 при повторных прогонах;
+- `tool/verify_native.dart` — AOT-программа, которая грузит библиотеку из каталога рядом с exe и шейпит Unicode-текст, доказывая, что ICU-данные найдены рядом с библиотекой;
+- CI native job запускает `python tools/package.py`, а workflow получил `setup-python` (на ubuntu-раннере нет команды `python`);
+- тест `test/native_packaging_test.dart`: порядок поиска библиотеки и раскладка install-дерева;
+- 260 Dart-тестов, включая file-dialog contract, formatted clipboard snapshots, styles/templates, DataContext inheritance/accessors/reparenting, value precedence/transitions, binding lifecycle/diagnostics, ObservableCollection/ItemsControl/virtualization, ScrollViewer measure/scroll/input/clip, Grid tracks/span/gap/invalidate/HiDPI, DockPanel measure/arrange/invalidate, diagnostics FPS/render-on-demand, synchronous live-resize frame с увеличением physical backbuffer, layout constraints/alignment, infinite text width, clipping/rendering, horizontal scrolling, mouse caret/selection, pointer capture, surrogate pairs, composition, clipboard, recursive dispose, semantics tree, packaging, render-on-demand и scheduler counters.
 
 ### 3.2. Проверенное поведение
 
@@ -199,7 +206,12 @@ Skia canvas масштабируется через `displayScale`. Backbuffer �
 - Белый фон окна отображается корректно.
 - HiDPI-масштабирование подтверждено на 4K-дисплее.
 - `dart analyze` проходит без замечаний.
-- Полный `dart test` проходит: все 258 тестов, включая 6 file-dialog contract-тестов, 4 style-теста, 3 control-template-теста, 6 DataContext-тестов, 9 value-precedence-тестов, 13 binding-тестов, 17 ItemsControl/virtualization-тестов, 11 ScrollViewer-тестов, 18 Grid-тестов, 7 DockPanel-тестов, 5 TextBox measurement-тестов, 2 native text-drawing-теста, 12 recursive dispose-тестов, 11 semantics-тестов и все clipboard-сценарии.
+- Полный `dart test` проходит: все 260 тестов, включая 6 file-dialog contract-тестов, 4 style-теста, 3 control-template-теста, 6 DataContext-тестов, 9 value-precedence-тестов, 13 binding-тестов, 17 ItemsControl/virtualization-тестов, 11 ScrollViewer-тестов, 18 Grid-тестов, 7 DockPanel-тестов, 5 TextBox measurement-тестов, 2 native text-drawing-теста, 12 recursive dispose-тестов, 11 semantics-тестов и все clipboard-сценарии.
+- Packaging на Windows x64 проверен end-to-end: `cmake --install` кладёт `dui_native.dll` (8 347 648 байт) и `icudtl.dat` (10 468 208 байт) в один каталог install-дерева; DLL тянет только системные Windows DLL (ole32, KERNEL32, USER32, SHELL32, WINMM, ADVAPI32, SETUPAPI, GDI32, OLEAUT32, IMM32, VERSION), private-зависимостей нет.
+- Бандл воспроизводим: два подряд прогона `python tools/package.py` дали одинаковый sha256 архива `7553dc6e1a9a450f25cc9ea8a8609d69543d6a1172e087e5f06fdc6f18f6deec`.
+- Сквозная проверка бандла проходит: программа, запущенная из другого рабочего каталога, находит библиотеку рядом с exe и шейпит Unicode-текст — «dui_native ABI 2 loaded from the bundle, shaped width 93.4». Негативный контроль: без `icudtl.dat` рядом с библиотекой раскладка не создаётся (`SkParagraph creation failed`), то есть проверка не пустая.
+- Классификация зависимостей проверена синтетическими случаями: на Linux private — только библиотеки из дерева сборки проекта (GTK и libstdc++ считаются системными), на macOS private — `@rpath`-зависимости, на Windows — DLL, которых нет в System32.
+- Install-правила покрыты тестом с тегом `native`: он запускает `cmake --install` во временный каталог и требует, чтобы библиотека и ICU-файл лежали в одном каталоге.
 - Дерево семантики подтверждено тестами: роли и имена зеркалят дерево UI, элементы без роли сворачиваются, фокус и выделение отражаются в снимке, состояние disabled и границы совпадают с контролом, контрол забирает имя label-контента, `ItemsControl` даёт list с элементами, а disposed-контрол в дерево не попадает.
 - Recursive dispose подтверждён тестами: поддерево освобождает native-раскладки, disposed-элемент отсоединяется от родителя (список детей пустеет), все потомки получают `isDisposed`, повторный dispose не освобождает ресурсы дважды, фокус снимается, disposed-элемент нельзя вернуть в дерево, `Window.dispose()` освобождает контент, а `close()` оставляет его жить.
 - CI-команды проверены локально: `dart format --output=none --set-exit-if-changed lib example test` возвращает 0, `dart analyze` чист, `dart test --exclude-tags clipboard,native` проходит 212 тестов, `dart test --tags native` проходит 35 native-тестов. YAML workflow разобран и проверен по структуре.
@@ -296,6 +308,8 @@ native/src/file_dialog_macos.mm      — macOS NSOpenPanel и SDL NSWindow paren
 native/src/paragraph_smoke.cpp       — SkParagraph smoke-проверка
 native/CMakeLists.txt                — нативная сборка; Linux требует pkg-config и GTK 4.10+ (`libgtk-4-dev`)
 tools/bootstrap_native.py            — зависимости и сборка
+tools/package.py                    — install-правила, разбор зависимостей, воспроизводимый бандл
+tool/verify_native.dart             — сквозная проверка бандла: загрузка библиотеки и shaping
 example/native_counter.dart          — нативный интерактивный пример
 example/native_open_file_dialog.dart — системный Windows/Linux/macOS open-file dialog
 example/native_aqua_button.dart      — Aqua style/template, hover/pressed и smoke
@@ -309,6 +323,7 @@ test/                                — автоматические тесты
 test/text_box_measurement_test.dart — измерение TextBox по метрикам раскладки
 test/dispose_test.dart              — recursive dispose элементов и поддеревьев
 test/semantics_test.dart            — дерево семантики, фокус и выделение
+test/native_packaging_test.dart     — порядок поиска библиотеки и раскладка install-дерева
 dart_test.yaml                       — объявление тегов clipboard и native
 .github/workflows/ci.yml            — CI: Dart на трёх ОС и best-effort native job
 ```
@@ -354,6 +369,18 @@ python tools/bootstrap_native.py --textbox
 python tools/bootstrap_native.py --textbox --smoke --diagnostics
 ```
 
+Упаковка и проверка зависимостей:
+
+```bash
+python tools/package.py                  # install + проверка зависимостей + бандл + сквозная проверка
+python tools/package.py --check-only     # только состав runtime-зависимостей
+python tools/package.py --skip-install   # бандл из каталога сборки, без install-правил
+cmake --install native/build --prefix build/release/install-tree
+```
+
+Бандл собирается в `build/release/dui_native-<version>-<platform>-<arch>/` и
+рядом с ним — архив `.zip` (Windows) или `.tar.gz` (Unix).
+
 Если Dart не в `PATH`:
 
 ```bash
@@ -375,7 +402,7 @@ python tools/bootstrap_native.py --smoke --dart "<путь-к-dart>"
 6. **P1:** value layers, DataContext inheritance и styles реализованы, но универсальное inherited-property propagation и animation engine ещё отсутствуют; control templates пока поддержаны только у Button.
 7. **P1 (закрыт 2026-11-26):** единый recursive dispose реализован — `UIElement.dispose()` освобождает поддерево, `onDisposed()` отдаёт контролам их ресурсы, `removeChild()` унифицирует удаление ребёнка, `Window.dispose()` закрывает дерево окна.
 8. **P2 (частично закрыт 2026-11-26):** accessibility — реализована backend-independent модель семантики (`SemanticsTree`, role/name/value/state/bounds, синхронизация focus и selection), но платформенные мосты UI Automation, NSAccessibility и AT-SPI ещё нет.
-9. **P2 (частично закрыт 2026-11-26):** кроссплатформенный CI добавлен (Dart job на трёх ОС и best-effort native job), но packaging runtime dependencies и воспроизводимый release build ещё отсутствуют. Native job на macOS не запускается: у hosted-runner нет window server, а сборка Skia требует больше диска и времени, чем даёт раннер.
+9. **P2 (закрыт 2026-11-26 на Windows x64):** кроссплатформенный CI добавлен (Dart job на трёх ОС и best-effort native job), packaging runtime dependencies и воспроизводимый release build реализованы: `tools/package.py` разбирает зависимости, проверяет, что private-зависимостей нет, собирает бандл с manifest и sha256 и воспроизводимым архивом, а install-правила CMake кладут `icudtl.dat` рядом с библиотекой. Осталось проверить macOS (universal binary, codesign), arm64 и Linux на реальных дистрибутивах. Native job на macOS не запускается: у hosted-runner нет window server, а сборка Skia требует больше диска и времени, чем даёт раннер.
 
 ---
 
@@ -814,11 +841,22 @@ One-way local маскирует binding, но не отменяет его; `cl
 
 ## 8.3. Packaging
 
-- [ ] Проверить зависимости `dui_native` на чистой машине.
-- [ ] Windows: runtime DLL и архитектуры x64/arm64.
-- [ ] macOS: dylib rpath, universal binary, codesign/notarization.
-- [ ] Linux: rpath `$ORIGIN`, dependencies и supported distros.
-- [ ] Добавить reproducible release build.
+- [x] Разбор runtime-зависимостей `dui_native`: PE import table на Windows, `ldd` на
+  Linux, `otool -L` на macOS; зависимость считается private, если её не providing
+  система — она обязана лежать рядом с библиотекой.
+- [x] Windows: runtime DLL проверены на x64 (11 зависимостей, все системные).
+  Архитектура arm64 ещё не собрана.
+- [ ] macOS: dylib rpath задан (`@executable_path;@loader_path;@executable_path/../Frameworks`,
+  install name `@rpath`), но universal binary и codesign/notarization не сделаны.
+- [ ] Linux: rpath `$ORIGIN` задан, зависимости классифицируются по `ldd`, но сборка
+  и проверка на реальном дистрибутиве не выполнялись.
+- [x] Воспроизводимый release build: `tools/package.py` собирает бандл с
+  `manifest.json` и sha256, архив с фиксированными timestamps даёт одинаковый
+  sha256 при повторных прогонах.
+- [x] Install-правила CMake: библиотека в `bin/` (Windows) или `lib/` (Unix),
+  `icudtl.dat` рядом с библиотекой, относительный rpath.
+- [ ] Проверка зависимостей на чистой машине — не выполнена, есть только
+  автоматическая проверка состава импортов.
 
 ## 8.4. CI и тестирование
 
@@ -852,9 +890,9 @@ One-way local маскирует binding, но не отменяет его; `cl
 
 Порядок ближайших рабочих сессий:
 
-Пункты 1, 2, 4, 6, 7, 8, 9 требуют macOS/Linux, сторонних приложений или
-живого IME и выполняются пользователем; пункты 3, 5, 10 доступны для кодовой
-работы на текущей машине.
+Пункты 1, 2, 4, 6, 7, 8, 9, 10, 11 требуют macOS/Linux, сторонних приложений
+или живого IME и выполняются пользователем; пункт 3 доступен для кодовой
+работы на текущей машине, пункт 5 — там же.
 
 1. **Ручная проверка этапа 8.2:** на macOS собрать Objective‑C++ backend и проверить `NSOpenPanel` в parent/ownerless-режимах, title/initialDirectory/filters и Unicode paths; на Linux аналогично проверить GTK 4.10+ на X11/Wayland (parent пока ownerless).
 2. **Ручная проверка clipboard:** проверить вставку CF_HTML в Word, браузер и другие сторонние приложения.
@@ -865,7 +903,8 @@ One-way local маскирует binding, но не отменяет его; `cl
 7. **Ручная визуальная проверка:** открыть text gallery и TextBox на мониторах с разными масштабами, проверить clipping, selection и caret; отдельно посмотреть FPS-overlay в `--diagnostics` — после перевода на SkParagraph текст в нём стал shaped, baseline сдвинут на `y + font_size`, как и раньше.
 8. **Ручная проверка этапа 2.4:** русский, китайский/японский ввод и emoji через реальные системные IME.
 9. **Ручная проверка lifecycle:** dispose поддерева, повторное открытие окна после `close()`, поведение `Window.dispose()`.
-10. **Этап 8.3 Packaging:** зависимости `dui_native` на чистой машине, rpath `$ORIGIN` для Linux, universal binary и codesign для macOS, runtime DLL для Windows, reproducible release build.
+10. **Этап 8.3, остаток — нужны другие машины:** macOS — universal binary (x64+arm64) и codesign/notarization, проверка dylib rpath в собранном приложении; Linux — сборка на реальном дистрибутиве и проверка rpath `$ORIGIN` вместе с зависимостями; Windows — сборка arm64 и проверка, что arm64-библиотека тоже ставится install-правилами.
+11. **Этап 8.3, чистая машина:** развернуть бандл из `build/release/` на машине без Skia, SDL и ICU. Сейчас состав импортов DLL проверяется автоматически, но запуск на «голой» системе не выполнялся.
 
 GPU backend по-прежнему не входит в ближайшие этапы.
 
@@ -883,12 +922,16 @@ GPU backend по-прежнему не входит в ближайшие эта
    dart analyze
    dart test --exclude-tags clipboard
    python tools/bootstrap_native.py --check
+   python tools/package.py --check-only
    ```
 
    `dart test --exclude-tags clipboard` — надёжный gate: четыре native
    clipboard-теста работают с реальным системным clipboard и падают, если буфер
    удерживает другой процесс. Полный `dart test` тоже проходит, когда clipboard
    свободен.
+
+   `python tools/package.py --check-only` — проверка состава runtime-зависимостей
+   библиотеки; она же ставит библиотеку через install-правила CMake.
 
 4. Если менялся C++ или C ABI — пересобрать native:
 
@@ -911,6 +954,39 @@ GPU backend по-прежнему не входит в ближайшие эта
 ---
 
 ## 9. Журнал работ
+
+### 2026-11-26 — этап 8.3, Packaging
+
+Сделано:
+
+- `native/CMakeLists.txt` получил install-правила: библиотека уходит в `bin/` (Windows) или `lib/` (Unix), `icudtl.dat` кладётся рядом с ней же. Путь к ICU-файлу нормализуется через `file(TO_CMAKE_PATH)`: Windows-путь с обратными слэшами CMake при установке читал как escape-последовательность и установка падала с `Invalid character escape '\U'`. Путь переопределяется через `SKIA_ICU_DATA`; если файла нет, install-правило пропускается с предупреждением, а не с ошибкой.
+- rpath задан явно: `$ORIGIN` на Linux (библиотека и её приватные зависимости лежат рядом), `@executable_path;@loader_path;@executable_path/../Frameworks` и install name `@rpath` на macOS.
+- Новый `tools/package.py`: ставит библиотеку через install-правила CMake, разбирает runtime-зависимости (свой PE-парсер import table на Windows, `ldd` на Linux, `otool -L` на macOS), делит их на системные и private, собирает бандл `build/release/dui_native-<version>-<platform>-<arch>/` с `manifest.json` и sha256 каждого файла и пишет воспроизводимый архив (фиксированные timestamps, отсортированные записи).
+- Классификация зависимостей переписана на resolved paths: на Linux private — только библиотеки из дерева сборки проекта, на macOS private — `@rpath`-зависимости, на Windows — DLL, которых нет в System32. Прежняя версия считала private любую Linux-зависимость, не начинающуюся с `libc.so`/`libm.so`, и сломала бы упаковку на Linux (GTK, libstdc++).
+- `package.py` умеет `--check-only` (только состав зависимостей) и `--skip-install` (бандл из каталога сборки). Префикс install передаётся относительным путём, чтобы в сгенерированный скрипт не попали обратные слэши.
+- Новый `tool/verify_native.dart` — AOT-программа, которая грузит библиотеку из каталога рядом с exe и шейпит Unicode-текст. Это доказывает, что ICU-данные найдены рядом с библиотекой: без `icudtl.dat` раскладка не создаётся (`SkParagraph creation failed`).
+- Поиск native-библиотеки в Dart начинается с каталога исполняемого файла (`Platform.resolvedExecutable`), дальше `DUI_NATIVE_LIBRARY` и абсолютный путь: упакованное приложение кладёт библиотеку рядом с exe.
+- Новый `test/native_packaging_test.dart`: первый кандидат поиска — библиотека рядом с exe; тест с тегом `native` запускает `cmake --install` во временный каталог и требует, чтобы библиотека и ICU-файл лежали в одном каталоге.
+- CI native job получил шаг `python tools/package.py` и `actions/setup-python`: на ubuntu-раннере нет команды `python`, а без неё и существующий `python tools/bootstrap_native.py` упал бы.
+
+Проверено:
+
+- `dart analyze` — No issues found; `dart format lib example test` — 0 изменений.
+- `dart test` — 260/260; `dart test --exclude-tags clipboard,native` — 224/224; `dart test --tags native --exclude-tags clipboard` — 32/32.
+- `cmake --install native/build --prefix build/release/install-tree` — установлены `dui_native.dll` (8 347 648 байт) и `icudtl.dat` (10 468 208 байт) в одном каталоге.
+- `python tools/package.py` — 11 runtime-зависимостей, все системные; бандл и архив собраны; сквозная проверка из другого CWD: «dui_native ABI 2 loaded from the bundle, shaped width 93.4».
+- Воспроизводимость: два подряд прогона дали одинаковый sha256 архива `7553dc6e1a9a450f25cc9ea8a8609d69543d6a1172e087e5f06fdc6f18f6deec`.
+- Негативный контроль: без `icudtl.dat` рядом с библиотекой verify-программа падает с `SkParagraph creation failed`, то есть проверка бандла не пустая.
+- Классификация зависимостей проверена синтетическими случаями для Linux, macOS и Windows.
+- Native smokes (smoke, textbox) проходят; idle CPU не менялся (1.54%).
+
+Не проверено:
+
+- macOS и Linux: сборка, rpath в реальном приложении, universal binary, codesign. Разбор зависимостей для этих ОС написан, но на живых системах не запускался.
+- Windows arm64: библиотека не собиралась.
+- Запуск бандла на чистой машине без Skia/SDL/ICU не выполнялся — проверен только состав импортов DLL.
+
+Дальше: пункт 10 «Этап 8.3, остаток — нужны другие машины» и пункт 11 «Этап 8.3, чистая машина» в §7.
 
 ### 2026-11-26 — этап 8.1, backend-independent семантика
 

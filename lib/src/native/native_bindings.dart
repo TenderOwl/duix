@@ -1173,22 +1173,35 @@ final class NativeBindings {
   }
 
   static List<String> get defaultLibraryCandidates {
+    final directory = _executableDirectory();
     if (Platform.isWindows) {
-      return const [
+      return [
+        if (directory != null) '$directory\\dui_native.dll',
         'dui_native.dll',
         'native/build/bin/dui_native.dll',
         'native/build/bin/Release/dui_native.dll',
       ];
     }
     if (Platform.isMacOS) {
-      return const [
+      return [
+        if (directory != null) '$directory/libdui_native.dylib',
         'libdui_native.dylib',
         'native/build/bin/libdui_native.dylib',
       ];
     }
-    return const [
+    return [
+      if (directory != null) '$directory/libdui_native.so',
       'libdui_native.so',
       'native/build/bin/libdui_native.so',
     ];
+  }
+
+  /// The directory of the running executable, where a packaged application
+  /// keeps its native library.
+  static String? _executableDirectory() {
+    final executable = Platform.resolvedExecutable;
+    if (executable.isEmpty) return null;
+    final directory = File(executable).parent.path;
+    return directory.isEmpty ? null : directory;
   }
 }

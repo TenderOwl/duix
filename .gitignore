@@ -4,3 +4,4 @@
 build/
 native/build/
 pubspec.lock
+__pycache__/
