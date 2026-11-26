@@ -63,6 +63,10 @@ set_target_properties(dui_paragraph_smoke PROPERTIES
   RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin
 )
 
+if(WIN32)
+  target_link_libraries(dui_native PRIVATE ole32)
+endif()
+
 if(MSVC)
   target_compile_options(dui_native PRIVATE /W4 /EHsc)
 else()

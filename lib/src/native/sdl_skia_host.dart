@@ -83,7 +83,11 @@ final class NativeWindowDiagnostics {
 }
 
 final class SdlSkiaHost
-    implements NativeHost, TextInputHandler, ClipboardHandler {
+    implements
+        NativeHost,
+        TextInputHandler,
+        ClipboardHandler,
+        FileDialogHandler {
   SdlSkiaHost._(this.bindings, {required this.diagnosticsEnabled})
       : _host = bindings.hostCreate() {
     if (_host == nullptr) {
@@ -171,6 +175,7 @@ final class SdlSkiaHost
       _windowsById[id] = window;
       window.textInputHandler = this;
       window.clipboardHandler = this;
+      window.fileDialogHandler = this;
       window.setFrameRequestHandler(_wakeUp);
       await window.show();
       presentWindow(window);
@@ -185,6 +190,7 @@ final class SdlSkiaHost
     _destroySession(window);
     window.textInputHandler = null;
     window.clipboardHandler = null;
+    window.fileDialogHandler = null;
     window.setFrameRequestHandler(null);
   }
 
@@ -256,6 +262,16 @@ final class SdlSkiaHost
 
   @override
   bool clearClipboard() => bindings.clearClipboard();
+
+  @override
+  Future<String?> showOpenFileDialog(Window? parent, {String? title}) async {
+    final session = parent == null ? null : _sessions[parent];
+    if (parent != null && (session == null || !session.open)) return null;
+    return bindings.openFileDialog(
+      session?.pointer ?? nullptr,
+      title: title,
+    );
+  }
 
   void pumpEvents() {
     _checkNotDisposed();
@@ -448,6 +464,7 @@ final class SdlSkiaHost
     _destroySession(window);
     window.textInputHandler = null;
     window.clipboardHandler = null;
+    window.fileDialogHandler = null;
     window.setFrameRequestHandler(null);
   }
 

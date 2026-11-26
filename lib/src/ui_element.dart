@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:typed_data';
 
 import 'drawing.dart';
@@ -32,6 +33,8 @@ abstract interface class WindowHost {
   bool writeClipboardData(Map<String, List<int>> formats) => false;
   List<String> readClipboardMimeTypes() => const <String>[];
   bool clearClipboard() => false;
+  Future<String?> showOpenFileDialog({String? title}) =>
+      Future<String?>.value();
 }
 
 abstract class UIElement extends PropertyOwner {

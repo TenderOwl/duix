@@ -7,6 +7,7 @@
 #define NOMINMAX
 #endif
 #include <windows.h>
+#include <shobjidl.h>
 #endif
 
 #include "include/core/SkCanvas.h"
@@ -1002,6 +1003,100 @@ int32_t dui_window_set_size(
 uint64_t dui_window_get_id(const DuiWindow* window) {
   return window && window->window ? SDL_GetWindowID(window->window) : 0;
 }
+
+char* dui_window_open_file_dialog(DuiWindow* window, const char* title_utf8) {
+  clear_error();
+#if defined(_WIN32)
+  HRESULT initialized = CoInitializeEx(
+      nullptr, COINIT_APARTMENTTHREADED | COINIT_DISABLE_OLE1DDE);
+  const bool uninitialize = SUCCEEDED(initialized);
+  if (FAILED(initialized) && initialized != RPC_E_CHANGED_MODE) {
+    set_error("Couldn't initialize COM for the open-file dialog.");
+    return nullptr;
+  }
+  IFileOpenDialog* dialog = nullptr;
+  HRESULT result = CoCreateInstance(
+      CLSID_FileOpenDialog,
+      nullptr,
+      CLSCTX_INPROC_SERVER,
+      IID_PPV_ARGS(&dialog));
+  if (FAILED(result)) {
+    if (uninitialize) CoUninitialize();
+    set_error("Couldn't create the system open-file dialog.");
+    return nullptr;
+  }
+  auto finish = [&] {
+    dialog->Release();
+    if (uninitialize) CoUninitialize();
+  };
+  if (title_utf8 && *title_utf8) {
+    const int title_length = MultiByteToWideChar(
+        CP_UTF8, MB_ERR_INVALID_CHARS, title_utf8, -1, nullptr, 0);
+    if (title_length > 0) {
+      std::wstring title(static_cast<size_t>(title_length), L'\0');
+      MultiByteToWideChar(
+          CP_UTF8,
+          MB_ERR_INVALID_CHARS,
+          title_utf8,
+          -1,
+          title.data(),
+          title_length);
+      dialog->SetTitle(title.c_str());
+    }
+  }
+  DWORD options = 0;
+  if (SUCCEEDED(dialog->GetOptions(&options))) {
+    dialog->SetOptions(options | FOS_FILEMUSTEXIST | FOS_PATHMUSTEXIST);
+  }
+  HWND owner = nullptr;
+  if (window && window->window) {
+    owner = static_cast<HWND>(SDL_GetPointerProperty(
+        SDL_GetWindowProperties(window->window),
+        SDL_PROP_WINDOW_WIN32_HWND_POINTER,
+        nullptr));
+  }
+  result = dialog->Show(owner);
+  if (result == HRESULT_FROM_WIN32(ERROR_CANCELLED)) {
+    finish();
+    return nullptr;
+  }
+  if (FAILED(result)) {
+    finish();
+    set_error("The system open-file dialog failed.");
+    return nullptr;
+  }
+  IShellItem* item = nullptr;
+  result = dialog->GetResult(&item);
+  if (FAILED(result)) {
+    finish();
+    set_error("Couldn't read the selected file.");
+    return nullptr;
+  }
+  PWSTR path = nullptr;
+  result = item->GetDisplayName(SIGDN_FILESYSPATH, &path);
+  item->Release();
+  if (FAILED(result)) {
+    finish();
+    set_error("Couldn't read the selected file path.");
+    return nullptr;
+  }
+  const int size = WideCharToMultiByte(
+      CP_UTF8, 0, path, -1, nullptr, 0, nullptr, nullptr);
+  char* utf8 = size > 0 ? static_cast<char*>(SDL_malloc(size)) : nullptr;
+  if (utf8) {
+    WideCharToMultiByte(CP_UTF8, 0, path, -1, utf8, size, nullptr, nullptr);
+  }
+  CoTaskMemFree(path);
+  finish();
+  if (!utf8) set_error("Couldn't allocate the selected file path.");
+  return utf8;
+#else
+  set_error("The system open-file dialog is not implemented on this platform.");
+  return nullptr;
+#endif
+}
+
+void dui_file_dialog_free_path(char* path) { SDL_free(path); }
 
 double dui_window_get_content_scale(const DuiWindow* window) {
   return window ? window_display_scale(window->window) : 1.0;

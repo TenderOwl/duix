@@ -281,6 +281,11 @@ typedef _WindowSetSizeNative = Int32 Function(
   Int32,
 );
 typedef _WindowIdNative = Uint64 Function(Pointer<DuiWindowOpaque>);
+typedef _WindowOpenFileDialogNative = Pointer<Utf8> Function(
+  Pointer<DuiWindowOpaque>,
+  Pointer<Utf8>,
+);
+typedef _FileDialogFreePathNative = Void Function(Pointer<Utf8>);
 typedef _WindowContentScaleNative = Double Function(Pointer<DuiWindowOpaque>);
 typedef _WindowMetricsNative = Int32 Function(
   Pointer<DuiWindowOpaque>,
@@ -416,6 +421,11 @@ typedef _WindowSetSizeDart = int Function(
   int,
 );
 typedef _WindowIdDart = int Function(Pointer<DuiWindowOpaque>);
+typedef _WindowOpenFileDialogDart = Pointer<Utf8> Function(
+  Pointer<DuiWindowOpaque>,
+  Pointer<Utf8>,
+);
+typedef _FileDialogFreePathDart = void Function(Pointer<Utf8>);
 typedef _WindowContentScaleDart = double Function(Pointer<DuiWindowOpaque>);
 typedef _WindowMetricsDart = int Function(
   Pointer<DuiWindowOpaque>,
@@ -596,6 +606,14 @@ final class NativeBindings {
         windowGetId = library.lookupFunction<_WindowIdNative, _WindowIdDart>(
           'dui_window_get_id',
         ),
+        _windowOpenFileDialog = library.lookupFunction<
+            _WindowOpenFileDialogNative, _WindowOpenFileDialogDart>(
+          'dui_window_open_file_dialog',
+        ),
+        _fileDialogFreePath = library
+            .lookupFunction<_FileDialogFreePathNative, _FileDialogFreePathDart>(
+          'dui_file_dialog_free_path',
+        ),
         windowGetContentScale = library
             .lookupFunction<_WindowContentScaleNative, _WindowContentScaleDart>(
           'dui_window_get_content_scale',
@@ -700,6 +718,8 @@ final class NativeBindings {
   final _WindowDestroyDart windowDestroy;
   final _WindowSetSizeDart windowSetSize;
   final _WindowIdDart windowGetId;
+  final _WindowOpenFileDialogDart _windowOpenFileDialog;
+  final _FileDialogFreePathDart _fileDialogFreePath;
   final _WindowContentScaleDart windowGetContentScale;
   final _WindowMetricsDart _windowGetMetrics;
   final _WindowBackgroundDart windowSetBackground;
@@ -727,6 +747,29 @@ final class NativeBindings {
     return pointer == nullptr
         ? 'Unknown native error.'
         : pointer.toDartString();
+  }
+
+  String? openFileDialog(
+    Pointer<DuiWindowOpaque> window, {
+    String? title,
+  }) {
+    return using<String?>((arena) {
+      final Pointer<Utf8> nativeTitle =
+          title?.toNativeUtf8(allocator: arena) ?? nullptr;
+      final path = _windowOpenFileDialog(window, nativeTitle);
+      if (path == nullptr) {
+        final error = lastError;
+        if (error.isNotEmpty) {
+          throw StateError('Could not show open-file dialog: $error');
+        }
+        return null;
+      }
+      try {
+        return path.toDartString();
+      } finally {
+        _fileDialogFreePath(path);
+      }
+    });
   }
 
   void pushClipRect(

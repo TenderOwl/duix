@@ -10,6 +10,7 @@ export 'src/control_template.dart';
 export 'src/dock_panel.dart';
 export 'src/drawing.dart';
 export 'src/events.dart';
+export 'src/file_dialog.dart';
 export 'src/focus_decoration.dart' show FocusRingShape;
 export 'src/focus_manager.dart';
 export 'src/geometry.dart';

@@ -159,6 +159,13 @@ DUI_API int32_t dui_window_set_size(
     int32_t logical_width,
     int32_t logical_height);
 DUI_API uint64_t dui_window_get_id(const DuiWindow* window);
+/* Shows the platform open-file dialog. A NULL window creates an unowned dialog.
+ * A NULL result means cancellation; errors are available through
+ * dui_last_error_message(). Free paths with dui_file_dialog_free_path(). */
+DUI_API char* dui_window_open_file_dialog(
+    DuiWindow* window,
+    const char* title_utf8);
+DUI_API void dui_file_dialog_free_path(char* path);
 DUI_API double dui_window_get_content_scale(const DuiWindow* window);
 DUI_API int32_t dui_window_get_metrics(
     const DuiWindow* window,

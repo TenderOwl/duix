@@ -4,6 +4,7 @@ import 'dart:typed_data';
 import 'clipboard.dart';
 import 'drawing.dart';
 import 'events.dart';
+import 'file_dialog.dart';
 import 'focus_manager.dart';
 import 'frame_scheduler.dart';
 import 'geometry.dart';
@@ -13,6 +14,7 @@ import 'text_layout.dart';
 import 'ui_element.dart';
 
 export 'clipboard.dart' show ClipboardHandler, ClipboardMimeTypes;
+export 'file_dialog.dart' show FileDialogHandler;
 
 abstract interface class NativeHost {
   Future<void> showWindow(Window window);
@@ -51,6 +53,7 @@ final class Window extends ObservableObject implements WindowHost {
   Set<Control> _hoveredControls = <Control>{};
   TextInputHandler? textInputHandler;
   ClipboardHandler? clipboardHandler;
+  FileDialogHandler? fileDialogHandler;
   final _scheduler = FrameScheduler();
   bool _isVisible = false;
 
@@ -129,6 +132,11 @@ final class Window extends ObservableObject implements WindowHost {
 
   @override
   bool clearClipboard() => clipboardHandler?.clearClipboard() ?? false;
+
+  @override
+  Future<String?> showOpenFileDialog({String? title}) =>
+      fileDialogHandler?.showOpenFileDialog(this, title: title) ??
+      Future<String?>.value();
 
   @override
   double get displayScale => _devicePixelRatio;
