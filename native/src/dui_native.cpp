@@ -82,6 +82,16 @@ struct DuiHost {
   bool live_resize_active = false;
 };
 
+#if defined(__APPLE__)
+char* dui_macos_open_file_dialog(
+    SDL_Window* window,
+    const char* title_utf8,
+    const char* initial_directory_utf8,
+    const DuiFileDialogFilter* filters,
+    size_t filter_count,
+    std::string* error);
+#endif
+
 namespace {
 
 thread_local std::string last_error;
@@ -1289,6 +1299,14 @@ char* dui_window_open_file_dialog(
   }
   g_free(path);
   return utf8;
+#elif defined(__APPLE__)
+  return dui_macos_open_file_dialog(
+      window ? window->window : nullptr,
+      title_utf8,
+      initial_directory_utf8,
+      filters,
+      filter_count,
+      &last_error);
 #else
   set_error("The system open-file dialog is not implemented on this platform.");
   return nullptr;
