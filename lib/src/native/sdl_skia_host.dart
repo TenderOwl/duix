@@ -120,6 +120,12 @@ final class SdlSkiaHost
   StackTrace? _nativeCallbackStack;
   bool _disposed = false;
 
+  /// Creates the native host of the process.
+  ///
+  /// SDL has a single global event queue, so only one native host may exist
+  /// per process: a second host, for example in another isolate, would steal
+  /// the events of the first one. The host owns any number of windows, and it
+  /// is released again by [dispose].
   static Future<SdlSkiaHost> initialize({
     String? libraryPath,
     bool diagnosticsEnabled = false,

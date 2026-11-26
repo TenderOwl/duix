@@ -621,8 +621,10 @@ void main() {
       expect(bindings.writeClipboardText(value), isTrue);
       expect(bindings.readClipboardText(), value);
     } finally {
-      _restoreNativeClipboard(previous);
+      // The host is destroyed first: a failing clipboard restore must
+      // not leak it, because the process allows only one host at a time.
       bindings.hostDestroy(host);
+      _restoreNativeClipboard(previous);
     }
   }, tags: _nativeClipboardTag);
 
@@ -672,8 +674,10 @@ void main() {
       expect(bindings.hasClipboardData('text/html'), isTrue);
       expect(bindings.readClipboardData('text/html'), isEmpty);
     } finally {
-      _restoreNativeClipboard(previous);
+      // The host is destroyed first: a failing clipboard restore must
+      // not leak it, because the process allows only one host at a time.
       bindings.hostDestroy(host);
+      _restoreNativeClipboard(previous);
     }
   }, tags: _nativeClipboardTag);
 
@@ -704,8 +708,10 @@ void main() {
       _restoreNativeClipboard(snapshot);
       expect(_captureNativeClipboard(), snapshot);
     } finally {
-      _restoreNativeClipboard(previous);
+      // The host is destroyed first: a failing clipboard restore must
+      // not leak it, because the process allows only one host at a time.
       bindings.hostDestroy(host);
+      _restoreNativeClipboard(previous);
     }
   }, tags: _nativeClipboardTag);
 
@@ -731,8 +737,11 @@ void main() {
       );
       expect(window.readClipboardText(), text);
     } finally {
-      _restorePublicClipboard(host, previous);
-      host.dispose();
+      try {
+        _restorePublicClipboard(host, previous);
+      } finally {
+        host.dispose();
+      }
     }
   }, tags: _nativeClipboardTag);
 

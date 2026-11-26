@@ -195,7 +195,13 @@ Skia canvas масштабируется через `displayScale`. Backbuffer �
 - `tool/verify_native.dart` — AOT-программа, которая грузит библиотеку из каталога рядом с exe и шейпит Unicode-текст, доказывая, что ICU-данные найдены рядом с библиотекой;
 - CI native job запускает `python tools/package.py`, а workflow получил `setup-python` (на ubuntu-раннере нет команды `python`);
 - тест `test/native_packaging_test.dart`: порядок поиска библиотеки и раскладка install-дерева;
-- 260 Dart-тестов, включая file-dialog contract, formatted clipboard snapshots, styles/templates, DataContext inheritance/accessors/reparenting, value precedence/transitions, binding lifecycle/diagnostics, ObservableCollection/ItemsControl/virtualization, ScrollViewer measure/scroll/input/clip, Grid tracks/span/gap/invalidate/HiDPI, DockPanel measure/arrange/invalidate, diagnostics FPS/render-on-demand, synchronous live-resize frame с увеличением physical backbuffer, layout constraints/alignment, infinite text width, clipping/rendering, horizontal scrolling, mouse caret/selection, pointer capture, surrogate pairs, composition, clipboard, recursive dispose, semantics tree, packaging, render-on-demand и scheduler counters.
+- автоматизация ScrollViewer: native-тест `test/native_scroll_viewer_test.dart` прогоняет drag полосы прокрутки, клавиатурную прокрутку и клик по треку через публичные `dispatchPointerDown/Move/Up` и `dispatchKeyDown` на реальном native backend;
+- native smoke `example/native_scroll_viewer.dart --smoke` проверяет то же: drag до конца и обратно с клампингом, клик по треку, клавиши `down`/`end`/`home`;
+- `dart_test.yaml` задаёт `concurrency: 1`: native-тесты создают host, а host в процессе может быть только один, поэтому файлы идут последовательно (тестовые файлы маленькие, suite занимает секунды);
+- native-слой сериализует все обращения к SDL process-wide рекурсивным мьютексом: изоляты Dart работают в своих OS-потоках, а SDL не потокобезопасен;
+- в процессе разрешён только один native host: SDL имеет одну глобальную очередь событий, поэтому второй host забрал бы события первого; второй host получает явную ошибку вместо тихой поломки;
+- видеоподсистема SDL живёт до конца процесса: `SDL_Quit()` при разрушении host рвал подсистему под окном другого изолята, а повторная инициализация SDL после `SDL_Quit` ненадёжна;
+- 264 Dart-теста, включая file-dialog contract, formatted clipboard snapshots, styles/templates, DataContext inheritance/accessors/reparenting, value precedence/transitions, binding lifecycle/diagnostics, ObservableCollection/ItemsControl/virtualization, ScrollViewer measure/scroll/input/clip, Grid tracks/span/gap/invalidate/HiDPI, DockPanel measure/arrange/invalidate, diagnostics FPS/render-on-demand, synchronous live-resize frame с увеличением physical backbuffer, layout constraints/alignment, infinite text width, clipping/rendering, horizontal scrolling, mouse caret/selection, pointer capture, surrogate pairs, composition, clipboard, recursive dispose, semantics tree, packaging, native ScrollViewer automation, render-on-demand и scheduler counters.
 
 ### 3.2. Проверенное поведение
 
@@ -206,15 +212,18 @@ Skia canvas масштабируется через `displayScale`. Backbuffer �
 - Белый фон окна отображается корректно.
 - HiDPI-масштабирование подтверждено на 4K-дисплее.
 - `dart analyze` проходит без замечаний.
-- Полный `dart test` проходит: все 260 тестов, включая 6 file-dialog contract-тестов, 4 style-теста, 3 control-template-теста, 6 DataContext-тестов, 9 value-precedence-тестов, 13 binding-тестов, 17 ItemsControl/virtualization-тестов, 11 ScrollViewer-тестов, 18 Grid-тестов, 7 DockPanel-тестов, 5 TextBox measurement-тестов, 2 native text-drawing-теста, 12 recursive dispose-тестов, 11 semantics-тестов и все clipboard-сценарии.
+- Полный `dart test` проходит: все 264 теста, включая 6 file-dialog contract-тестов, 4 style-теста, 3 control-template-теста, 6 DataContext-тестов, 9 value-precedence-тестов, 13 binding-тестов, 17 ItemsControl/virtualization-тестов, 11 ScrollViewer-тестов, 18 Grid-тестов, 7 DockPanel-тестов, 5 TextBox measurement-тестов, 2 native text-drawing-теста, 12 recursive dispose-тестов, 11 semantics-тестов, native ScrollViewer automation и все clipboard-сценарии.
 - Packaging на Windows x64 проверен end-to-end: `cmake --install` кладёт `dui_native.dll` (8 347 648 байт) и `icudtl.dat` (10 468 208 байт) в один каталог install-дерева; DLL тянет только системные Windows DLL (ole32, KERNEL32, USER32, SHELL32, WINMM, ADVAPI32, SETUPAPI, GDI32, OLEAUT32, IMM32, VERSION), private-зависимостей нет.
 - Бандл воспроизводим: два подряд прогона `python tools/package.py` дали одинаковый sha256 архива `7553dc6e1a9a450f25cc9ea8a8609d69543d6a1172e087e5f06fdc6f18f6deec`.
 - Сквозная проверка бандла проходит: программа, запущенная из другого рабочего каталога, находит библиотеку рядом с exe и шейпит Unicode-текст — «dui_native ABI 2 loaded from the bundle, shaped width 93.4». Негативный контроль: без `icudtl.dat` рядом с библиотекой раскладка не создаётся (`SkParagraph creation failed`), то есть проверка не пустая.
 - Классификация зависимостей проверена синтетическими случаями: на Linux private — только библиотеки из дерева сборки проекта (GTK и libstdc++ считаются системными), на macOS private — `@rpath`-зависимости, на Windows — DLL, которых нет в System32.
 - Install-правила покрыты тестом с тегом `native`: он запускает `cmake --install` во временный каталог и требует, чтобы библиотека и ICU-файл лежали в одном каталоге.
+- ScrollViewer автоматизирован на реальном native backend: drag вертикального ползунка на всю свободную длину трека прокручивает до конца (offset 540 при extent 740 и viewport 200), перетаскивание дальше границ клампится в 0 и в максимум, ползунок следует за offset, клик по треку прокручивает на один viewport, клавиши `down`/`pageup`/`end`/`home` дают 240/40/540/0. Проверено и в native-тесте, и в smoke примера.
+- Найдена и устранена опасность параллельных native-тестов: SDL video не потокобезопасен, и два файла с native-окнами в параллельных изолятах (`dart test` запускает файлы параллельно) роняли процесс с `STATUS_STACK_BUFFER_OVERRUN`. Воспроизведено и на двух копиях одного и того же pre-existing файла, то есть проблема не в новом тесте. `dart_test.yaml` теперь задаёт `concurrency: 1`; native-прогон стабильно проходит 36/36 при повторных запусках.
+- Потокобезопасность native-слоя закрыта: все SDL-вызовы сериализованы process-wide рекурсивным мьютексом, второй host в процессе отклоняется с явным сообщением, `SDL_Quit()` больше не вызывается. Параллельный прогон native-файлов (`--concurrency=4`) больше не роняет процесс: вместо аварии тесты получают ошибку «Only one native host per process is supported». Три новых теста в `test/native_thread_safety_test.dart` доказывают это изолированно: два изолята одновременно тянут host (один выигрывает, второй получает понятную ошибку, процесс жив), host снова доступен после освобождения, два изолята одновременно шейпят текст.
 - Дерево семантики подтверждено тестами: роли и имена зеркалят дерево UI, элементы без роли сворачиваются, фокус и выделение отражаются в снимке, состояние disabled и границы совпадают с контролом, контрол забирает имя label-контента, `ItemsControl` даёт list с элементами, а disposed-контрол в дерево не попадает.
 - Recursive dispose подтверждён тестами: поддерево освобождает native-раскладки, disposed-элемент отсоединяется от родителя (список детей пустеет), все потомки получают `isDisposed`, повторный dispose не освобождает ресурсы дважды, фокус снимается, disposed-элемент нельзя вернуть в дерево, `Window.dispose()` освобождает контент, а `close()` оставляет его жить.
-- CI-команды проверены локально: `dart format --output=none --set-exit-if-changed lib example test` возвращает 0, `dart analyze` чист, `dart test --exclude-tags clipboard,native` проходит 212 тестов, `dart test --tags native` проходит 35 native-тестов. YAML workflow разобран и проверен по структуре.
+- CI-команды проверены локально: `dart format --output=none --set-exit-if-changed lib example test` возвращает 0, `dart analyze` чист, `dart test --exclude-tags clipboard,native` проходит 224 теста, `dart test --tags native --exclude-tags clipboard` проходит 36 native-тестов. YAML workflow разобран и проверен по структуре.
 - Legacy text drawing подтверждён native-тестом: ширина, возвращённая `dui_draw_text`, совпадает с шириной раскладки `dui_text_layout_create` для того же текста, шрифта и scale; ASCII, кириллица, emoji и RTL-строка рисуются во всех трёх выравниваниях.
 - Idle CPU после перевода `drawText` на SkParagraph не вырос: кэш раскладки на окне вернул 1.54% (до кэша было 3.08%), при этом текст теперь shaped.
 - `TextBox` измеряется теми же метриками раскладки, что и `Label`: desired width = ширина `Label` + 16, desired height = высота `Label` + 8. Текстовая часть масштабируется с `fontSize` (удвоение `fontSize` удваивает ширину текста), padding остаётся постоянным. Узкий available width клампится вместо падения, изменение текста и remount переизмеряют контрол.
@@ -324,7 +333,9 @@ test/text_box_measurement_test.dart — измерение TextBox по метр
 test/dispose_test.dart              — recursive dispose элементов и поддеревьев
 test/semantics_test.dart            — дерево семантики, фокус и выделение
 test/native_packaging_test.dart     — порядок поиска библиотеки и раскладка install-дерева
-dart_test.yaml                       — объявление тегов clipboard и native
+test/native_scroll_viewer_test.dart — drag полосы прокрутки и клавиатура на native backend
+test/native_thread_safety_test.dart — несколько изолят одновременно используют native-слой
+dart_test.yaml                       — объявление тегов clipboard и native, concurrency: 1
 .github/workflows/ci.yml            — CI: Dart на трёх ОС и best-effort native job
 ```
 
@@ -403,6 +414,7 @@ python tools/bootstrap_native.py --smoke --dart "<путь-к-dart>"
 7. **P1 (закрыт 2026-11-26):** единый recursive dispose реализован — `UIElement.dispose()` освобождает поддерево, `onDisposed()` отдаёт контролам их ресурсы, `removeChild()` унифицирует удаление ребёнка, `Window.dispose()` закрывает дерево окна.
 8. **P2 (частично закрыт 2026-11-26):** accessibility — реализована backend-independent модель семантики (`SemanticsTree`, role/name/value/state/bounds, синхронизация focus и selection), но платформенные мосты UI Automation, NSAccessibility и AT-SPI ещё нет.
 9. **P2 (закрыт 2026-11-26 на Windows x64):** кроссплатформенный CI добавлен (Dart job на трёх ОС и best-effort native job), packaging runtime dependencies и воспроизводимый release build реализованы: `tools/package.py` разбирает зависимости, проверяет, что private-зависимостей нет, собирает бандл с manifest и sha256 и воспроизводимым архивом, а install-правила CMake кладут `icudtl.dat` рядом с библиотекой. Осталось проверить macOS (universal binary, codesign), arm64 и Linux на реальных дистрибутивах. Native job на macOS не запускается: у hosted-runner нет window server, а сборка Skia требует больше диска и времени, чем даёт раннер.
+10. **P2 (закрыт 2026-11-26):** SDL video не потокобезопасен, а native-слой не сериализовал обращения к нему — два изолята с окнами роняли процесс. Теперь все SDL-вызовы идут под process-wide рекурсивным мьютексом, host в процессе может быть только один (второй получает явную ошибку), а `SDL_Quit()` не вызывается. Ограничение «один host на процесс» остаётся осознанным: у SDL одна глобальная очередь событий, и поддержка нескольких host потребовала бы её переделки на стороне Dart.
 
 ---
 
@@ -892,19 +904,20 @@ One-way local маскирует binding, но не отменяет его; `cl
 
 Пункты 1, 2, 4, 6, 7, 8, 9, 10, 11 требуют macOS/Linux, сторонних приложений
 или живого IME и выполняются пользователем; пункт 3 доступен для кодовой
-работы на текущей машине, пункт 5 — там же.
+работы на текущей машине.
 
 1. **Ручная проверка этапа 8.2:** на macOS собрать Objective‑C++ backend и проверить `NSOpenPanel` в parent/ownerless-режимах, title/initialDirectory/filters и Unicode paths; на Linux аналогично проверить GTK 4.10+ на X11/Wayland (parent пока ownerless).
 2. **Ручная проверка clipboard:** проверить вставку CF_HTML в Word, браузер и другие сторонние приложения.
 3. **Этап 8.1, мосты:** модель семантики готова; остались native-мосты accessibility — Windows UI Automation, macOS NSAccessibility и Linux AT-SPI. Начинать с Windows UI Automation: его можно собрать и проверить на этой машине, тогда как macOS и Linux требуют чужих машин.
-4. **Ручная проверка ScrollViewer:** автоматическая часть закрыта — `example/native_scroll_viewer.dart --smoke` проходит на Windows (wheel прокрутка, offsets, bounds, 3 кадра, scale 2.0); остаётся визуальная проверка track/thumb dragging, clipping и resize при разных display scales.
-5. **Автоматизация ScrollViewer:** thumb dragging и клавиатурная прокрутка доступны через публичные `dispatchPointerDown/Move/Up` и `dispatchKeyDown`, поэтому их можно закрыть в smoke-режиме.
+4. **Ручная проверка ScrollViewer:** автоматическая часть закрыта полностью — `example/native_scroll_viewer.dart --smoke` проходит на Windows (wheel, drag ползунка, клик по треку, клавиатура, offsets, bounds, 3 кадра, scale 2.0); остаётся только визуальная проверка clipping и resize при разных display scales.
+5. **Автоматизация ScrollViewer (закрыт 2026-11-26):** thumb dragging, клик по треку и клавиатурная прокрутка закрыты в native-тесте `test/native_scroll_viewer_test.dart` и в smoke-режиме примера — через публичные `dispatchPointerDown/Move/Up` и `dispatchKeyDown`.
 6. **Незавершённая часть этапа 1.2:** проверить сборку и Paragraph smoke на Linux (FontConfig/Freetype) и macOS (CoreText).
 7. **Ручная визуальная проверка:** открыть text gallery и TextBox на мониторах с разными масштабами, проверить clipping, selection и caret; отдельно посмотреть FPS-overlay в `--diagnostics` — после перевода на SkParagraph текст в нём стал shaped, baseline сдвинут на `y + font_size`, как и раньше.
 8. **Ручная проверка этапа 2.4:** русский, китайский/японский ввод и emoji через реальные системные IME.
 9. **Ручная проверка lifecycle:** dispose поддерева, повторное открытие окна после `close()`, поведение `Window.dispose()`.
 10. **Этап 8.3, остаток — нужны другие машины:** macOS — universal binary (x64+arm64) и codesign/notarization, проверка dylib rpath в собранном приложении; Linux — сборка на реальном дистрибутиве и проверка rpath `$ORIGIN` вместе с зависимостями; Windows — сборка arm64 и проверка, что arm64-библиотека тоже ставится install-правилами.
 11. **Этап 8.3, чистая машина:** развернуть бандл из `build/release/` на машине без Skia, SDL и ICU. Сейчас состав импортов DLL проверяется автоматически, но запуск на «голой» системе не выполнялся.
+12. **Потокобезопасность native-слоя (закрыт 2026-11-26):** SDL-вызовы сериализованы process-wide мьютексом, host в процессе может быть только один, `SDL_Quit()` не вызывается; поведение закреплено тремя native-тестами с двумя изолятами. Дальше по этой теме можно думать только про несколько host — для этого нужна переделка глобальной очереди событий SDL.
 
 GPU backend по-прежнему не входит в ближайшие этапы.
 
@@ -930,6 +943,12 @@ GPU backend по-прежнему не входит в ближайшие эта
    удерживает другой процесс. Полный `dart test` тоже проходит, когда clipboard
    свободен.
 
+   `dart_test.yaml` задаёт `concurrency: 1`: native-тесты создают host, а host
+   в процессе может быть только один (у SDL одна глобальная очередь событий),
+   поэтому тестовые файлы идут последовательно. Флаг `--concurrency` в
+   командной строке переопределяет это значение — вернуть параллельный прогон
+   можно, но native-тесты тогда конфликтуют за host.
+
    `python tools/package.py --check-only` — проверка состава runtime-зависимостей
    библиотеки; она же ставит библиотеку через install-правила CMake.
 
@@ -954,6 +973,55 @@ GPU backend по-прежнему не входит в ближайшие эта
 ---
 
 ## 9. Журнал работ
+
+### 2026-11-26 — потокобезопасность native-слоя
+
+Сделано:
+
+- В `native/src/dui_native.cpp` введён process-wide рекурсивный мьютекс `sdl_mutex()` и класс `SdlScope`. Все экспортированные функции, работающие с SDL или с общим состоянием, берут этот мьютекс: clipboard (включая глобальную карту `clipboard_formats`), host (create/destroy/set callback/next event/wait event/wake up), window (create/destroy/size/metrics/background/text input/begin frame/clip/present), drawing (rect, rounded rect, text) и все text layout функции. Мьютекс рекурсивный, потому что live-resize event watch вызывает Dart, а тот возвращается в native.
+- `SDL_Quit()` больше не вызывается: видеоподсистема живёт до конца процесса. Раньше разрушение host в одном изоляте рвал подсистему под окном другого, а повторный `SDL_Init` после `SDL_Quit` ненадёжен.
+- В процессе разрешён только один native host. SDL имеет одну глобальную очередь событий, поэтому второй host забрал бы события первого; теперь второй `dui_host_create` возвращает ошибку «Only one native host per process is supported: SDL has a single global event queue…», а Dart превращает её в `StateError('Could not create SDL host: …')`.
+- `SdlSkiaHost.initialize()` получил документацию этого правила: один host на процесс, host владеет любым числом окон.
+- Новый `test/native_thread_safety_test.dart` (тег `native`): два изолята одновременно создают host (один выигрывает, второй получает явную ошибку, процесс не падает), host снова доступен после освобождения, два изолята одновременно шейпят текст через общий font collection.
+- Попутно найден и закрыт баг гигиены native-тестов: три clipboard-теста создавали raw host, а в `finally` сначала восстанавливали clipboard и только потом уничтожали host. Когда восстановление падало («Couldn't open clipboard», буфер держит другой процесс), host не освобождался и ломал все следующие тесты. Теперь host уничтожается первым, а в тесте с публичным clipboard API dispose обёрнут во вложенный `finally`.
+
+Проверено:
+
+- `dart analyze` — No issues found; `dart format lib example test` — 0 изменений.
+- `dart test --exclude-tags clipboard,native` — 224/224; `dart test --tags native --exclude-tags clipboard` — 36/36, три подряд запуска стабильны. Полный `dart test` — 261 проходят, падают только clipboard-тесты (environmental).
+- Решающая проверка: `dart test --tags native --exclude-tags clipboard --concurrency=4` (параллельные файлы). До правки этот прогон ронял процесс с `STATUS_STACK_BUFFER_OVERRUN`; теперь процесс живёт, а конкурирующий host получает явную ошибку вместо аварии.
+- Native библиотека пересобрана (`cmake --build` и полный `python tools/bootstrap_native.py`): Paragraph smoke проходит (width 124.945, height 21).
+- Все native smokes проходят: smoke, textbox, items control (16 контейнеров, extent 2 400 000), scroll viewer, aqua button.
+- Idle CPU не изменился: 1.55% (один прогон показал 4.63% — это шум загруженной машины, тот же процесс, что держит системный clipboard).
+- Бандл пересобран под новую библиотеку: runtime-зависимости по-прежнему 11 и все системные, сквозная проверка «dui_native ABI 2 loaded from the bundle, shaped width 93.4», новый sha256 архива `b65e90e78fc82dbb096cbffc7eb8ba2f16fc3cb688ae7f45bf97b11fea86e8e7`.
+
+Ограничение, которое остаётся осознанным: в процессе может быть только один native host. Поддержка нескольких host потребовала бы переделки глобальной очереди событий SDL на стороне Dart.
+
+Дальше: пункт 3 «Этап 8.1, мосты accessibility» доступен на текущей машине.
+
+### 2026-11-26 — автоматизация ScrollViewer
+
+Сделано:
+
+- Новый `test/native_scroll_viewer_test.dart` (тег `native`) прогоняет ScrollViewer на реальном native backend: drag вертикального ползунка, клавиатурную прокрутку и клик по треку через публичные `window.dispatchPointerDown/Move/Up` и `window.dispatchKeyDown`.
+- Smoke-режим `example/native_scroll_viewer.dart` дополнен теми же проверками: drag до конца и обратно с клампингом на границах, клик по треку, клавиши `down`/`end`/`home` после `scrollViewer.focus()`.
+- Найдена опасность, которую добавлял новый тестовый файл: **два файла с native-окнами, идущие в параллельных изолятах, роняют процесс** (`STATUS_STACK_BUFFER_OVERRUN`, `GetAndValidateCurrentThreadStackBounds failed`). Причина — SDL video не потокобезопасен, а `dart test` запускает файлы параллельно. Опасность не в новом тесте: она воспроизведена на двух копиях pre-existing `native_abi_test.dart` и проявляется даже без `host.dispose()` (то есть `SDL_Quit` не причина).
+- `dart_test.yaml` теперь задаёт `concurrency: 1`: тестовые файлы выполняются последовательно. Раньше это держалось случайно — native-окна создавал только один файл.
+
+Проверено:
+
+- `dart analyze` — No issues found; `dart format lib example test` — 0 изменений.
+- `dart test --exclude-tags clipboard,native` — 224/224; `dart test --tags native --exclude-tags clipboard` — 33/33, два подряд запуска стабильны.
+- Полный `dart test` — 257 проходят, падают только 4 известных clipboard-теста («Couldn't open clipboard»: системный буфер удерживает другой процесс — это environmental, не регресс).
+- Реальная геометрия ScrollViewer на native backend: viewport 308×200, extent 308×740, максимальный offset 540; drag на всю свободную длину трека даёт 540, дальше — клампинг в 540 и в 0; клик по треку даёт 200 (viewport), `down` → 240, `pageup` → 40, `end` → 540, `home` → 0.
+- Native smokes (`native_smoke`, `native_scroll_viewer`) проходят; idle CPU не менялся.
+
+Не проверено:
+
+- Визуальная часть ScrollViewer (clipping, resize при разных display scales) — по-прежнему ручная проверка пользователем.
+- Потокобезопасность native-слоя для приложений с несколькими изолятами не исправлена: в тестах это закрыто `concurrency: 1`, сам `dui_native` по-прежнему не сериализует SDL-вызовы (пункт 10 в §4 и пункт 12 в §7).
+
+Дальше: пункт 3 «Этап 8.1, мосты accessibility» и пункт 12 «Потокобезопасность native-слоя» доступны на текущей машине.
 
 ### 2026-11-26 — этап 8.3, Packaging
 

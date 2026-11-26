@@ -45,6 +45,7 @@
 #include <cstring>
 #include <limits>
 #include <memory>
+#include <mutex>
 #include <new>
 #include <stdexcept>
 #include <string>
@@ -163,6 +164,48 @@ void clear_error() { last_error.clear(); }
 void set_error(const char* message) { last_error = message; }
 
 void set_sdl_error() { last_error = SDL_GetError(); }
+
+// SDL owns a single global event queue and a single video subsystem, and it
+// is not thread safe. The Dart runtime can run several isolates, each with its
+// own host, so every call that touches SDL is serialized with a process wide
+// recursive mutex. The mutex is recursive because the live resize event watch
+// calls back into Dart, which calls back into the native layer.
+std::recursive_mutex& sdl_mutex() {
+  static std::recursive_mutex mutex;
+  return mutex;
+}
+
+class SdlScope {
+ public:
+  SdlScope() { sdl_mutex().lock(); }
+  ~SdlScope() { sdl_mutex().unlock(); }
+
+  SdlScope(const SdlScope&) = delete;
+  SdlScope& operator=(const SdlScope&) = delete;
+};
+
+// The video subsystem stays initialized for the lifetime of the process.
+// Quitting it while another isolate still owns a window would tear the
+// subsystem down under it, and initializing it again afterwards is not
+// reliable, so the process cleans SDL up when it exits.
+bool ensure_sdl_initialized() {
+  static bool initialized = false;
+  if (initialized) return true;
+  if (!SDL_Init(SDL_INIT_VIDEO | SDL_INIT_EVENTS)) {
+    set_sdl_error();
+    return false;
+  }
+  initialized = true;
+  return true;
+}
+
+// Only one host may exist per process: SDL has one global event queue, so two
+// hosts in two isolates would steal the events of each other. A window is
+// created through the host, so a single host still serves many windows.
+int& live_host_count() {
+  static int count = 0;
+  return count;
+}
 
 bool is_html_mime(const char* mime_type) {
   return mime_type && std::strcmp(mime_type, "text/html") == 0;
@@ -640,6 +683,7 @@ uint32_t dui_abi_version(void) { return 2; }
 const char* dui_last_error_message(void) { return last_error.c_str(); }
 
 int32_t dui_clipboard_set_text(const char* text_utf8) {
+SdlScope lock;
   clear_error();
   if (!text_utf8) {
     set_error("Clipboard text must not be null.");
@@ -654,6 +698,7 @@ int32_t dui_clipboard_set_text(const char* text_utf8) {
 }
 
 char* dui_clipboard_get_text(void) {
+  SdlScope lock;
   clear_error();
   if (!SDL_HasClipboardText()) return nullptr;
   char* text = SDL_GetClipboardText();
@@ -668,6 +713,7 @@ int32_t dui_clipboard_set_data(
     const uint8_t* const* data,
     const size_t* sizes,
     size_t count) {
+    SdlScope lock;
   clear_error();
   if (!mime_types || !data || !sizes || count == 0) {
     set_error("Formatted clipboard requires at least one data entry.");
@@ -728,6 +774,7 @@ int32_t dui_clipboard_set_data(
 }
 
 int32_t dui_clipboard_has_data(const char* mime_type) {
+SdlScope lock;
   clear_error();
   if (!mime_type || !*mime_type) {
     set_error("Clipboard MIME type must not be empty.");
@@ -743,6 +790,7 @@ int32_t dui_clipboard_has_data(const char* mime_type) {
 }
 
 void* dui_clipboard_get_data(const char* mime_type, size_t* out_size) {
+  SdlScope lock;
   clear_error();
   if (!mime_type || !*mime_type || !out_size) {
     set_error("Invalid formatted clipboard read arguments.");
@@ -786,6 +834,7 @@ void* dui_clipboard_get_data(const char* mime_type, size_t* out_size) {
 void dui_clipboard_free_data(void* data) { SDL_free(data); }
 
 int32_t dui_clipboard_clear(void) {
+SdlScope lock;
   clear_error();
   if (!retry_clipboard_write([] { return SDL_ClearClipboardData(); })) {
     set_sdl_error();
@@ -796,6 +845,7 @@ int32_t dui_clipboard_clear(void) {
 }
 
 char** dui_clipboard_get_mime_types(size_t* out_count) {
+  SdlScope lock;
   clear_error();
   if (!out_count) {
     set_error("Clipboard MIME type count must not be null.");
@@ -856,44 +906,51 @@ void dui_clipboard_free_mime_types(char** mime_types, size_t count) {
 }
 
 DuiHost* dui_host_create(void) {
+  SdlScope lock;
   clear_error();
   try {
-    if (!SDL_Init(SDL_INIT_VIDEO | SDL_INIT_EVENTS)) {
-      set_sdl_error();
+    if (!ensure_sdl_initialized()) {
+      return nullptr;
+    }
+    if (live_host_count() > 0) {
+      set_error(
+          "Only one native host per process is supported: SDL has a single "
+          "global event queue, so a second host would steal the events of "
+          "the first one.");
       return nullptr;
     }
     auto host = std::make_unique<DuiHost>();
     host->thread_id = SDL_GetCurrentThreadID();
     if (!SDL_AddEventWatch(live_resize_event_watch, host.get())) {
       set_sdl_error();
-      SDL_Quit();
       return nullptr;
     }
+    live_host_count() = 1;
     return host.release();
   } catch (const std::exception& error) {
     set_error(error.what());
-    SDL_Quit();
     return nullptr;
   } catch (...) {
     set_error("Unknown native host creation error.");
-    SDL_Quit();
     return nullptr;
   }
 }
 
 void dui_host_destroy(DuiHost* host) {
   if (!host) return;
+  SdlScope lock;
   SDL_RemoveEventWatch(live_resize_event_watch, host);
   for (auto& window : host->windows) destroy_window_resources(window.get());
   host->windows.clear();
   delete host;
-  SDL_Quit();
+  if (live_host_count() > 0) live_host_count() = 0;
 }
 
 int32_t dui_host_set_live_resize_callback(
     DuiHost* host,
     DuiLiveResizeCallback callback,
     void* user_data) {
+    SdlScope lock;
   clear_error();
   if (!host) {
     set_error("Invalid host.");
@@ -996,6 +1053,7 @@ static int32_t translate_event(
 }
 
 int32_t dui_host_next_event(DuiHost* host, DuiEvent* out_event) {
+SdlScope lock;
   clear_error();
   if (!host || !out_event) {
     set_error("Invalid event arguments.");
@@ -1010,6 +1068,7 @@ int32_t dui_host_next_event(DuiHost* host, DuiEvent* out_event) {
 
 int32_t dui_host_wait_event(
     DuiHost* host, DuiEvent* out_event, int32_t timeout_ms) {
+    SdlScope lock;
   clear_error();
   if (!host || !out_event || timeout_ms < -1) {
     set_error("Invalid event arguments.");
@@ -1027,6 +1086,7 @@ int32_t dui_host_wait_event(
 }
 
 int32_t dui_host_wake_up(DuiHost* host) {
+SdlScope lock;
   clear_error();
   if (!host) {
     set_error("Invalid host.");
@@ -1047,6 +1107,7 @@ DuiWindow* dui_window_create(
     const char* title_utf8,
     int32_t width,
     int32_t height) {
+    SdlScope lock;
   clear_error();
   if (!host || width <= 0 || height <= 0) {
     set_error("Invalid window creation arguments.");
@@ -1094,6 +1155,7 @@ DuiWindow* dui_window_create(
 }
 
 void dui_window_destroy(DuiHost* host, DuiWindow* window) {
+SdlScope lock;
   if (!host || !window) return;
   const auto found = std::find_if(
       host->windows.begin(),
@@ -1108,6 +1170,7 @@ int32_t dui_window_set_size(
     DuiWindow* window,
     int32_t logical_width,
     int32_t logical_height) {
+    SdlScope lock;
   clear_error();
   if (!window || !window->window || logical_width <= 0 || logical_height <= 0) {
     set_error("Invalid window size arguments.");
@@ -1126,6 +1189,7 @@ int32_t dui_window_set_size(
 }
 
 uint64_t dui_window_get_id(const DuiWindow* window) {
+  SdlScope lock;
   return window && window->window ? SDL_GetWindowID(window->window) : 0;
 }
 
@@ -1411,12 +1475,14 @@ char* dui_window_open_file_dialog(
 void dui_file_dialog_free_path(char* path) { SDL_free(path); }
 
 double dui_window_get_content_scale(const DuiWindow* window) {
+  SdlScope lock;
   return window ? window_display_scale(window->window) : 1.0;
 }
 
 int32_t dui_window_get_metrics(
     const DuiWindow* window,
     DuiWindowMetrics* out_metrics) {
+    SdlScope lock;
   clear_error();
   if (!window || !window->window || !out_metrics) {
     set_error("Invalid window metrics arguments.");
@@ -1439,10 +1505,12 @@ int32_t dui_window_get_metrics(
 }
 
 void dui_window_set_background(DuiWindow* window, uint32_t rgba) {
+SdlScope lock;
   if (window) window->background_rgba = rgba;
 }
 
 int32_t dui_window_start_text_input(DuiWindow* window) {
+SdlScope lock;
   clear_error();
   if (!window || !window->window) {
     set_error("Invalid text input window.");
@@ -1456,6 +1524,7 @@ int32_t dui_window_start_text_input(DuiWindow* window) {
 }
 
 int32_t dui_window_stop_text_input(DuiWindow* window) {
+SdlScope lock;
   clear_error();
   if (!window || !window->window) {
     set_error("Invalid text input window.");
@@ -1469,6 +1538,7 @@ int32_t dui_window_stop_text_input(DuiWindow* window) {
 }
 
 int32_t dui_window_text_input_active(const DuiWindow* window) {
+SdlScope lock;
   clear_error();
   if (!window || !window->window) {
     set_error("Invalid text input window.");
@@ -1484,6 +1554,7 @@ int32_t dui_window_set_text_input_area(
     double width,
     double height,
     double cursor_x) {
+    SdlScope lock;
   clear_error();
   if (!window || !window->window || !std::isfinite(x) ||
       !std::isfinite(y) || !std::isfinite(width) ||
@@ -1510,6 +1581,7 @@ int32_t dui_window_set_text_input_area(
 }
 
 int32_t dui_window_begin_frame(DuiWindow* window) {
+SdlScope lock;
   clear_error();
   if (!window) {
     set_error("Invalid window frame arguments.");
@@ -1533,6 +1605,7 @@ int32_t dui_window_push_clip_rect(
     double y,
     double width,
     double height) {
+    SdlScope lock;
   clear_error();
   if (!window || !window->frame_active || !window->surface ||
       !std::isfinite(x) || !std::isfinite(y) || !std::isfinite(width) ||
@@ -1548,6 +1621,7 @@ int32_t dui_window_push_clip_rect(
 }
 
 int32_t dui_window_pop_clip(DuiWindow* window) {
+  SdlScope lock;
   clear_error();
   if (!window || !window->frame_active || !window->surface) {
     set_error("Cannot restore clip without an active frame.");
@@ -1564,6 +1638,7 @@ void dui_draw_rect(
     double width,
     double height,
     uint32_t rgba) {
+    SdlScope lock;
   if (!window || !window->frame_active) return;
   SkPaint paint;
   paint.setColor(static_cast<SkColor>(rgba));
@@ -1583,6 +1658,7 @@ void dui_draw_rounded_rect(
     double radius_y,
     uint32_t rgba,
     double stroke_width) {
+    SdlScope lock;
   if (!window || !window->frame_active) return;
   SkPaint paint;
   paint.setColor(static_cast<SkColor>(rgba));
@@ -1608,6 +1684,7 @@ int32_t dui_draw_text(
     uint32_t rgba,
     int32_t alignment,
     double* out_width) {
+    SdlScope lock;
   clear_error();
   if (!window || !window->frame_active || !window->surface || !text_utf8 ||
       !out_width || !std::isfinite(x) || !std::isfinite(y) ||
@@ -1688,6 +1765,7 @@ int32_t dui_draw_text(
 }
 
 DuiTextLayout* dui_text_layout_create(const DuiTextLayoutOptions* options) {
+SdlScope lock;
   clear_error();
   if (!options || options->struct_size != sizeof(*options) ||
       (!options->text_utf8 && options->text_length != 0) ||
@@ -1751,6 +1829,7 @@ DuiTextLayout* dui_text_layout_create(const DuiTextLayoutOptions* options) {
 }
 
 void dui_text_layout_destroy(DuiTextLayout* layout) {
+SdlScope lock;
   clear_error();
   delete layout;
 }
@@ -1758,6 +1837,7 @@ void dui_text_layout_destroy(DuiTextLayout* layout) {
 int32_t dui_text_layout_measure(
     DuiTextLayout* layout,
     DuiTextMetrics* out_metrics) {
+    SdlScope lock;
   clear_error();
   if (!layout || !layout->paragraph || !out_metrics) {
     set_error("Invalid text measurement arguments.");
@@ -1789,6 +1869,7 @@ int32_t dui_text_layout_draw(
     double x,
     double y,
     uint32_t rgba) {
+    SdlScope lock;
   clear_error();
   if (!window || !window->frame_active || !window->surface ||
       !layout || !layout->paragraph ||
@@ -1828,6 +1909,7 @@ int32_t dui_text_layout_hit_test(
     double x,
     double y,
     DuiTextPosition* out_position) {
+    SdlScope lock;
   clear_error();
   if (!layout || !layout->paragraph || !out_position ||
       !std::isfinite(x) || !std::isfinite(y)) {
@@ -1861,6 +1943,7 @@ int32_t dui_text_layout_caret_rect(
     DuiTextLayout* layout,
     uint32_t offset_utf16,
     DuiRect* out_rect) {
+    SdlScope lock;
   clear_error();
   if (!layout || !layout->paragraph || !out_rect) {
     set_error("Invalid caret rectangle arguments.");
@@ -1927,6 +2010,7 @@ int32_t dui_text_layout_selection_rects(
     DuiRect* out_rects,
     uint32_t rect_capacity,
     uint32_t* out_count) {
+    SdlScope lock;
   clear_error();
   if (!layout || !layout->paragraph || !out_count || start_utf16 > end_utf16) {
     set_error("Invalid selection rectangle arguments.");
@@ -1970,6 +2054,7 @@ int32_t dui_text_layout_selection_rects(
 }
 
 int32_t dui_window_present(DuiWindow* window) {
+SdlScope lock;
   clear_error();
   if (!window || !window->frame_active || !window->surface) {
     set_error("No active frame to present.");
