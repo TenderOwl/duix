@@ -59,6 +59,11 @@ target_link_libraries(dui_paragraph_smoke
     ${SKIA_LIBRARY}
     ${SKIA_EXTRA_LIBRARIES}
 )
+if(MSVC)
+  target_compile_options(
+    dui_paragraph_smoke PRIVATE /D_ALLOW_COMPILER_AND_STL_VERSION_MISMATCH
+  )
+endif()
 set_target_properties(dui_paragraph_smoke PROPERTIES
   RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin
 )
@@ -72,7 +77,8 @@ elseif(APPLE)
     src/file_dialog_macos.mm PROPERTIES COMPILE_OPTIONS "-fobjc-arc"
   )
   target_link_libraries(
-    dui_native PRIVATE "-framework AppKit" "-weak_framework UniformTypeIdentifiers"
+    dui_native PRIVATE "-framework" "AppKit" "-weak_framework"
+    "UniformTypeIdentifiers"
   )
 elseif(UNIX)
   find_package(PkgConfig REQUIRED)
@@ -82,6 +88,12 @@ endif()
 
 if(MSVC)
   target_compile_options(dui_native PRIVATE /W4 /EHsc)
+  # Newer Visual Studio versions ship an STL that refuses older clang
+  # versions, and Skia silences the same check for its own build. The native
+  # library uses the same compiler, so the check has to be silenced here too.
+  target_compile_options(
+    dui_native PRIVATE /D_ALLOW_COMPILER_AND_STL_VERSION_MISMATCH
+  )
 else()
   target_compile_options(dui_native PRIVATE -Wall -Wextra -Wpedantic)
 endif()
