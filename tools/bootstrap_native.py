@@ -99,6 +99,10 @@ def build_sdl() -> Path:
             "-DCMAKE_CXX_COMPILER=clang-cl",
             "-DCMAKE_MSVC_RUNTIME_LIBRARY=MultiThreaded",
         ]
+    else:
+        # The static SDL is linked into the shared native library, so its
+        # objects have to be position independent.
+        command += ["-DCMAKE_POSITION_INDEPENDENT_CODE=ON"]
     run(command)
     run(["cmake", "--build", str(build), "--parallel"])
     run(["cmake", "--install", str(build)])

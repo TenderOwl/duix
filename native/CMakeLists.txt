@@ -76,21 +76,26 @@ elseif(APPLE)
   set_source_files_properties(
     src/file_dialog_macos.mm PROPERTIES COMPILE_OPTIONS "-fobjc-arc"
   )
-  # CMake keeps the link flags and the libraries apart, so a framework has to
-  # be handed over as one shell fragment. Otherwise the linker looks for a
-  # plain library named "AppKit".
-  set(DUI_APPLE_FRAMEWORKS
-    "SHELL:-framework AppKit"
-    "SHELL:-framework ApplicationServices"
-    "SHELL:-framework CoreText"
-    "SHELL:-framework CoreGraphics"
-    "SHELL:-framework Foundation")
-  target_link_libraries(dui_native PRIVATE ${DUI_APPLE_FRAMEWORKS})
-  target_link_libraries(
-    dui_native PRIVATE "SHELL:-weak_framework UniformTypeIdentifiers"
-  )
-  # The Skia libraries of the paragraph smoke need the same frameworks.
-  target_link_libraries(dui_paragraph_smoke PRIVATE ${DUI_APPLE_FRAMEWORKS})
+  # A plain name would be turned into "-lAppKit", which does not find a
+  # framework. A framework has to be passed as a path, and CMake then links it
+  # with "-framework". The same frameworks are needed by the Skia libraries of
+  # the paragraph smoke.
+  foreach(framework
+      AppKit
+      ApplicationServices
+      CoreText
+      CoreGraphics
+      Foundation
+      UniformTypeIdentifiers)
+    find_library(DUI_FRAMEWORK_${framework} ${framework})
+    if(NOT DUI_FRAMEWORK_${framework})
+      message(FATAL_ERROR "The ${framework} framework was not found.")
+    endif()
+    target_link_libraries(dui_native PRIVATE ${DUI_FRAMEWORK_${framework}})
+    target_link_libraries(
+      dui_paragraph_smoke PRIVATE ${DUI_FRAMEWORK_${framework}}
+    )
+  endforeach()
 elseif(UNIX)
   find_package(PkgConfig REQUIRED)
   pkg_check_modules(GTK4 REQUIRED IMPORTED_TARGET gtk4>=4.10)
