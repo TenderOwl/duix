@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:ffi';
 
 import 'package:duix/dui.dart';
@@ -499,6 +500,40 @@ void main() {
       } else {
         bindings.writeClipboardText('');
       }
+      bindings.hostDestroy(host);
+    }
+  });
+
+  test('formatted clipboard round-trips text, HTML and binary data', () {
+    final host = bindings.hostCreate();
+    expect(host, isNot(nullptr), reason: bindings.lastError);
+    if (host == nullptr) return;
+    final previous = bindings.readClipboardText();
+    const text = 'Formatted: кириллица, 😀';
+    const html = '<strong>Привет, 😀</strong>';
+    const binary = <int>[0, 1, 2, 0, 127, 128, 255];
+    try {
+      expect(
+        bindings.writeClipboardData({
+          'text/plain': utf8.encode(text),
+          'application/xhtml+xml': utf8.encode(html),
+          'application/x-duix-binary': binary,
+          'application/x-duix-empty': const <int>[],
+        }),
+        isTrue,
+      );
+
+      expect(bindings.hasClipboardData('application/xhtml+xml'), isTrue);
+      expect(bindings.hasClipboardData('image/png'), isFalse);
+      expect(utf8.decode(bindings.readClipboardData('text/plain')!), text);
+      expect(utf8.decode(bindings.readClipboardData('application/xhtml+xml')!),
+          html);
+      expect(bindings.readClipboardData('application/x-duix-binary'), binary);
+      expect(bindings.readClipboardData('application/x-duix-empty'), isEmpty);
+      expect(bindings.readClipboardData('image/png'), isNull);
+      expect(bindings.readClipboardText(), text);
+    } finally {
+      bindings.writeClipboardText(previous ?? '');
       bindings.hostDestroy(host);
     }
   });

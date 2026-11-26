@@ -37,6 +37,7 @@
 #include <new>
 #include <stdexcept>
 #include <string>
+#include <unordered_map>
 #include <utility>
 #include <vector>
 
@@ -73,6 +74,24 @@ struct DuiHost {
 namespace {
 
 thread_local std::string last_error;
+std::unordered_map<std::string, std::vector<uint8_t>> clipboard_formats;
+
+const void* SDLCALL clipboard_data_callback(
+    void*,
+    const char* mime_type,
+    size_t* size) {
+  const auto found = clipboard_formats.find(mime_type);
+  if (found == clipboard_formats.end()) {
+    *size = 0;
+    return nullptr;
+  }
+  *size = found->second.size();
+  return found->second.data();
+}
+
+void SDLCALL clipboard_cleanup_callback(void*) {
+  clipboard_formats.clear();
+}
 
 void clear_error() { last_error.clear(); }
 
@@ -331,6 +350,76 @@ char* dui_clipboard_get_text(void) {
 }
 
 void dui_clipboard_free_text(char* text) { SDL_free(text); }
+
+int32_t dui_clipboard_set_data(
+    const char* const* mime_types,
+    const uint8_t* const* data,
+    const size_t* sizes,
+    size_t count) {
+  clear_error();
+  if (!mime_types || !data || !sizes || count == 0) {
+    set_error("Formatted clipboard requires at least one data entry.");
+    return 0;
+  }
+  try {
+    std::unordered_map<std::string, std::vector<uint8_t>> replacement;
+    std::vector<const char*> mime_type_names;
+    mime_type_names.reserve(count);
+    for (size_t index = 0; index < count; ++index) {
+      const char* mime_type = mime_types[index];
+      if (!mime_type || !*mime_type || (sizes[index] > 0 && !data[index])) {
+        set_error("Invalid formatted clipboard entry.");
+        return 0;
+      }
+      std::vector<uint8_t> bytes;
+      if (sizes[index] > 0) {
+        bytes.assign(data[index], data[index] + sizes[index]);
+      }
+      replacement.emplace(mime_type, std::move(bytes));
+      mime_type_names.push_back(mime_type);
+    }
+    clipboard_formats = std::move(replacement);
+    if (!SDL_SetClipboardData(
+            clipboard_data_callback,
+            clipboard_cleanup_callback,
+            nullptr,
+            mime_type_names.data(),
+            count)) {
+      clipboard_formats.clear();
+      set_sdl_error();
+      return 0;
+    }
+    return 1;
+  } catch (const std::exception& error) {
+    clipboard_formats.clear();
+    set_error(error.what());
+    return 0;
+  }
+}
+
+int32_t dui_clipboard_has_data(const char* mime_type) {
+  clear_error();
+  if (!mime_type || !*mime_type) {
+    set_error("Clipboard MIME type must not be empty.");
+    return 0;
+  }
+  return SDL_HasClipboardData(mime_type) ? 1 : 0;
+}
+
+void* dui_clipboard_get_data(const char* mime_type, size_t* out_size) {
+  clear_error();
+  if (!mime_type || !*mime_type || !out_size) {
+    set_error("Invalid formatted clipboard read arguments.");
+    return nullptr;
+  }
+  *out_size = 0;
+  if (!SDL_HasClipboardData(mime_type)) return nullptr;
+  void* data = SDL_GetClipboardData(mime_type, out_size);
+  if (!data) set_sdl_error();
+  return data;
+}
+
+void dui_clipboard_free_data(void* data) { SDL_free(data); }
 
 DuiHost* dui_host_create(void) {
   clear_error();

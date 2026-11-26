@@ -119,6 +119,18 @@ DUI_API int32_t dui_clipboard_set_text(const char* text_utf8);
 DUI_API char* dui_clipboard_get_text(void);
 DUI_API void dui_clipboard_free_text(char* text);
 
+/* Formatted clipboard data is copied on write. Returned read buffers belong to
+ * SDL and must be freed with dui_clipboard_free_data(). Missing formats return
+ * NULL with out_size set to zero. */
+DUI_API int32_t dui_clipboard_set_data(
+    const char* const* mime_types,
+    const uint8_t* const* data,
+    const size_t* sizes,
+    size_t count);
+DUI_API int32_t dui_clipboard_has_data(const char* mime_type);
+DUI_API void* dui_clipboard_get_data(const char* mime_type, size_t* out_size);
+DUI_API void dui_clipboard_free_data(void* data);
+
 DUI_API DuiHost* dui_host_create(void);
 DUI_API void dui_host_destroy(DuiHost* host);
 DUI_API int32_t dui_host_next_event(DuiHost* host, DuiEvent* out_event);

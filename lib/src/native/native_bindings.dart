@@ -3,6 +3,7 @@
 import 'dart:convert';
 import 'dart:ffi';
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:ffi/ffi.dart';
 
@@ -210,6 +211,18 @@ typedef _LastErrorNative = Pointer<Utf8> Function();
 typedef _ClipboardSetNative = Int32 Function(Pointer<Utf8>);
 typedef _ClipboardGetNative = Pointer<Utf8> Function();
 typedef _ClipboardFreeNative = Void Function(Pointer<Utf8>);
+typedef _ClipboardSetDataNative = Int32 Function(
+  Pointer<Pointer<Utf8>>,
+  Pointer<Pointer<Uint8>>,
+  Pointer<Size>,
+  Size,
+);
+typedef _ClipboardHasDataNative = Int32 Function(Pointer<Utf8>);
+typedef _ClipboardGetDataNative = Pointer<Uint8> Function(
+  Pointer<Utf8>,
+  Pointer<Size>,
+);
+typedef _ClipboardFreeDataNative = Void Function(Pointer<Uint8>);
 typedef _HostCreateNative = Pointer<DuiHostOpaque> Function();
 typedef _HostDestroyNative = Void Function(Pointer<DuiHostOpaque>);
 typedef _HostNextEventNative = Int32 Function(
@@ -347,6 +360,18 @@ typedef _LastErrorDart = Pointer<Utf8> Function();
 typedef _ClipboardSetDart = int Function(Pointer<Utf8>);
 typedef _ClipboardGetDart = Pointer<Utf8> Function();
 typedef _ClipboardFreeDart = void Function(Pointer<Utf8>);
+typedef _ClipboardSetDataDart = int Function(
+  Pointer<Pointer<Utf8>>,
+  Pointer<Pointer<Uint8>>,
+  Pointer<Size>,
+  int,
+);
+typedef _ClipboardHasDataDart = int Function(Pointer<Utf8>);
+typedef _ClipboardGetDataDart = Pointer<Uint8> Function(
+  Pointer<Utf8>,
+  Pointer<Size>,
+);
+typedef _ClipboardFreeDataDart = void Function(Pointer<Uint8>);
 typedef _HostCreateDart = Pointer<DuiHostOpaque> Function();
 typedef _HostDestroyDart = void Function(Pointer<DuiHostOpaque>);
 typedef _HostNextEventDart = int Function(
@@ -490,6 +515,22 @@ final class NativeBindings {
             library.lookupFunction<_ClipboardFreeNative, _ClipboardFreeDart>(
           'dui_clipboard_free_text',
         ),
+        _clipboardSetData = library
+            .lookupFunction<_ClipboardSetDataNative, _ClipboardSetDataDart>(
+          'dui_clipboard_set_data',
+        ),
+        _clipboardHasData = library
+            .lookupFunction<_ClipboardHasDataNative, _ClipboardHasDataDart>(
+          'dui_clipboard_has_data',
+        ),
+        _clipboardGetData = library
+            .lookupFunction<_ClipboardGetDataNative, _ClipboardGetDataDart>(
+          'dui_clipboard_get_data',
+        ),
+        _clipboardFreeData = library
+            .lookupFunction<_ClipboardFreeDataNative, _ClipboardFreeDataDart>(
+          'dui_clipboard_free_data',
+        ),
         hostCreate = library.lookupFunction<_HostCreateNative, _HostCreateDart>(
           'dui_host_create',
         ),
@@ -614,6 +655,10 @@ final class NativeBindings {
   final _ClipboardSetDart _clipboardSet;
   final _ClipboardGetDart _clipboardGet;
   final _ClipboardFreeDart _clipboardFree;
+  final _ClipboardSetDataDart _clipboardSetData;
+  final _ClipboardHasDataDart _clipboardHasData;
+  final _ClipboardGetDataDart _clipboardGetData;
+  final _ClipboardFreeDataDart _clipboardFreeData;
   final _HostCreateDart hostCreate;
   final _HostDestroyDart hostDestroy;
   final _HostNextEventDart hostNextEvent;
@@ -692,6 +737,57 @@ final class NativeBindings {
     } finally {
       _clipboardFree(pointer);
     }
+  }
+
+  bool writeClipboardData(Map<String, List<int>> formats) {
+    if (formats.isEmpty) {
+      throw ArgumentError.value(formats, 'formats', 'Must not be empty.');
+    }
+    using((arena) {
+      final mimeTypes = arena<Pointer<Utf8>>(formats.length);
+      final data = arena<Pointer<Uint8>>(formats.length);
+      final sizes = arena<Size>(formats.length);
+      var index = 0;
+      for (final entry in formats.entries) {
+        if (entry.key.isEmpty) {
+          throw ArgumentError.value(entry.key, 'formats', 'Empty MIME type.');
+        }
+        final bytes =
+            arena<Uint8>(entry.value.isEmpty ? 1 : entry.value.length);
+        bytes.asTypedList(entry.value.length).setAll(0, entry.value);
+        mimeTypes[index] = entry.key.toNativeUtf8(allocator: arena);
+        data[index] = bytes;
+        sizes[index] = entry.value.length;
+        index++;
+      }
+      if (_clipboardSetData(mimeTypes, data, sizes, formats.length) == 0) {
+        throw StateError('Could not write formatted clipboard: $lastError');
+      }
+    });
+    return true;
+  }
+
+  bool hasClipboardData(String mimeType) {
+    final pointer = mimeType.toNativeUtf8();
+    try {
+      return _clipboardHasData(pointer) != 0;
+    } finally {
+      calloc.free(pointer);
+    }
+  }
+
+  Uint8List? readClipboardData(String mimeType) {
+    return using<Uint8List?>((arena) {
+      final mime = mimeType.toNativeUtf8(allocator: arena);
+      final size = arena<Size>();
+      final data = _clipboardGetData(mime, size);
+      if (data == nullptr) return null;
+      try {
+        return Uint8List.fromList(data.asTypedList(size.value));
+      } finally {
+        _clipboardFreeData(data);
+      }
+    });
   }
 
   NativeWindowMetrics windowMetrics(
