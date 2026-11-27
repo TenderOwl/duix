@@ -29,6 +29,11 @@
   the scroll bars of `ScrollViewer`, and it is ready for a combo box or a list.
 - `ScrollViewer` is built on two `ScrollBar` controls now, available as
   `horizontalScrollBar` and `verticalScrollBar`.
+- `SelectionModel` is the selection of a list of items: it keeps the selected
+  indexes, the current item and the anchor of a range selection, reports every
+  change to its listeners and walks through the items with `moveSelection`,
+  `selectFirst` and `selectLast`. A list view, a tree view or a combo box can
+  bind its state to it.
 - **Breaking:** while a scroll bar thumb is dragged, the pointer capture belongs
   to the scroll bar and not to the viewer. The hit test on a scroll bar returns
   the scroll bar, and clicking a scroll bar does not move the focus: the bar is

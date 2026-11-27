@@ -90,6 +90,7 @@ Skia canvas масштабируется через `displayScale`. Backbuffer �
 - модель размеров GTK: `SizeRequest` (minimum + natural) — элемент сообщает, какого размера он хочет и какого ему нужно; `UIElement` мержит запрос, отдаёт desired = max(natural, minimum) в пределах доступного места, а `arrange` не сжимает элемент ниже минимума, если место есть; доступны `minimumSize`, `naturalSize`, `allocatedSize`; `TextBox` объявляет минимум 80×30 (вместо внутреннего пола на natural);
 - `UIElement`, `Control`, `ContentControl`, `Panel`;
 - отдельный виджет `ScrollBar`: свой контрол с полосой и бегунком, бегунок перетаскивается, клик по полосе листает на одну страницу, значение — свойство (`minimum`, `maximum`, `value`, `viewportSize`, `thickness`, `orientation`); `ScrollViewer` построен на двух таких контролах (`horizontalScrollBar`, `verticalScrollBar`) и больше не рисует полосы сам;
+- модель выделения `SelectionModel`: одиночное и множественное выделение, текущий элемент и якорь диапазона, уведомления об изменениях, переходы клавиатурой (`moveSelection`, `selectFirst`, `selectLast`);
 - шаблоны для любого контрола: `TemplatedControl` — базовый класс с механикой шаблона (создание, замена и освобождение persistent-поддерева, `templateRoot`, `hasTemplate`, хук `onTemplateReplacing`); `ContentControl extends TemplatedControl`; собственный контент виджета реализуется через `measureContentCore`/`arrangeContentCore`/`renderContentCore`/`hitTestContentCore`, чтобы шаблон нельзя было случайно перекрыть подкласом; focus ring рисует база (после контента, сверху), а не каждый виджет отдельно; типизированный шаблон живёт в конкретном классе (`Button.templateProperty` → `ControlTemplate<Button>`), база хранит `ControlTemplate<dynamic>?`;
 - `Label`, `TextBox`, `Button`, `Border`, `StackPanel`, `DockPanel`, `Grid`;
 - постоянное дерево и lifecycle mount/unmount;
@@ -980,6 +981,8 @@ GPU backend по-прежнему не входит в ближайшие эта
 5. **Модель выделения** (`SelectionModel`): выделенные элементы, множественное
    выделение, клавиатурная навигация, перенос фокуса и выделения. Это
    подсистема, а не виджет: на ней стоят ListView, TreeView, ComboBox.
+   **Готово (2026-11-27):** `SelectionModel` с одиночным и множественным
+   выделением, якорем диапазона и переходами клавиатурой.
 6. **Мосты accessibility** (п. 3 выше): UI Automation, NSAccessibility, AT-SPI.
 
 **Слой 1 — простые элементы ввода** (по одной сессии, native-работ нет):
@@ -1093,6 +1096,23 @@ GPU backend по-прежнему не входит в ближайшие эта
 ---
 
 ## 9. Журнал работ
+
+### 2026-11-27 — слой 0, пункт 5: модель выделения `SelectionModel`
+
+Сделано:
+
+- Добавлена `SelectionModel` (`lib/src/selection_model.dart`): одиночное и множественное выделение (`SelectionMode.single` / `SelectionMode.multiple`), выбранные индексы, текущий элемент (`selectedIndex`), якорь диапазона (`anchorIndex`), счётчик элементов (`count`).
+- Операции: `select`, `toggle`, `extendTo` (диапазон от якоря), `selectAll`, `clear`, `moveSelection(delta, {extend})`, `selectFirst`, `selectLast`. Индекс вне списка отклоняется через `RangeError`.
+- Модель сообщает об изменениях: `addSelectionChangedListener` получает модель, добавленные и удалённые индексы.
+- Когда элементы исчезают (`count` уменьшается), выделение обрезается, а текущий элемент переходит на последний оставшийся выбранным.
+
+Проверено:
+
+- `dart analyze` — No issues found; `dart format` — 0 изменений.
+- `dart test --exclude-tags clipboard,native` — 269/269; `dart test --tags native --exclude-tags clipboard` — 41/41.
+- Новый `test/selection_model_test.dart` (9 тестов): одиночное и множественное выделение, уведомления, диапазон от якоря, переходы клавиатурой, расширенный переход, обрезка при уменьшении списка, выделение всего списка и очистка, отказ для индекса вне списка.
+
+Дальше: слой 0, пункт 2 — popup-слой (всплывающие окна).
 
 ### 2026-11-27 — слой 0, пункт 4: отдельный виджет `ScrollBar`
 

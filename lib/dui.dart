@@ -25,6 +25,7 @@ export 'src/properties.dart';
 export 'src/recording_renderer.dart';
 export 'src/scroll_bar.dart';
 export 'src/scroll_viewer.dart';
+export 'src/selection_model.dart';
 export 'src/semantics.dart';
 export 'src/size_request.dart';
 export 'src/stack_panel.dart';
