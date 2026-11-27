@@ -1,9 +1,17 @@
 name: duix
-description: Experimental retained-mode declarative UI kernel for Dart.
+description: >-
+  A retained-mode UI toolkit for Dart: a declarative tree of controls with
+  real-time rendering through SDL3 and Skia.
 version: 0.1.0
 publish_to: none
 homepage: https://github.com/TenderOwl/duix
 repository: https://github.com/TenderOwl/duix
+topics:
+  - ui
+  - widgets
+  - graphics
+  - rendering
+  - layout
 
 environment:
   sdk: ^3.5.0
