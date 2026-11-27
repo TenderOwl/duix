@@ -39,6 +39,20 @@ Future<void> main(List<String> args) async {
     if (activations != 2) {
       throw StateError('Native Button keyboard activation failed.');
     }
+
+    // The popup layer is drawn above the content of the window.
+    window.overlay.open(
+      Border(
+        color: const Color(0xFF202020),
+        padding: const EdgeInsets.all(8),
+        content: Label(text: 'Popup', color: const Color(0xFFFFFFFF)),
+      ),
+      ownerArea: button.bounds,
+    );
+    if (!window.overlay.isOpen) {
+      throw StateError('The popup layer did not open.');
+    }
+
     for (var frame = 0; frame < 3 && host.isOpen(window); frame++) {
       host.pumpEvents();
       host.presentWindow(window);

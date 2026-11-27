@@ -10,6 +10,7 @@ import 'frame_scheduler.dart';
 import 'geometry.dart';
 import 'headless_text_layout.dart';
 import 'observable.dart';
+import 'popup.dart';
 import 'semantics.dart';
 import 'text_layout.dart';
 import 'ui_element.dart';
@@ -47,6 +48,7 @@ final class Window extends ObservableObject implements WindowHost {
         _logicalSize = Size(width, height),
         _background = background,
         _textLayoutFactory = textLayoutFactory {
+    overlay.mountTo(this);
     this.content = content;
   }
 
@@ -56,6 +58,12 @@ final class Window extends ObservableObject implements WindowHost {
   TextLayoutFactory _textLayoutFactory;
   double _devicePixelRatio = 1;
   UIElement? _content;
+
+  /// The layer of the window that holds the open popup.
+  ///
+  /// The layer is drawn above the content of the window and takes the clicks
+  /// that fall outside of the popup.
+  final PopupLayer overlay = PopupLayer();
   late final FocusManager focusManager = FocusManager(this);
   Control? _pointerCapture;
   Set<Control> _hoveredControls = <Control>{};
@@ -216,6 +224,7 @@ final class Window extends ObservableObject implements WindowHost {
     _isVisible = false;
     _clearHover();
     _content?.mountTo(null);
+    overlay.mountTo(null);
   }
 
   /// Releases the content tree and the resources it owns.
@@ -226,6 +235,7 @@ final class Window extends ObservableObject implements WindowHost {
     final content = _content;
     this.content = null;
     content?.dispose();
+    overlay.dispose();
   }
 
   void resize(double width, double height) {
@@ -266,7 +276,7 @@ final class Window extends ObservableObject implements WindowHost {
     PointerButton button = PointerButton.primary,
   }) {
     updateLayout();
-    final target = _content?.hitTest(position);
+    final target = _hitTest(position);
     if (target == null) return;
     final preview = PointerEventArgs(
       pointerId: 1,
@@ -283,7 +293,7 @@ final class Window extends ObservableObject implements WindowHost {
   }
 
   void dispatchPointerMove(Point position) {
-    final target = _pointerCapture ?? _content?.hitTest(position);
+    final target = _pointerCapture ?? _hitTest(position);
     _updateHover(target);
     target?.raiseEvent(
       UIElement.pointerMove,
@@ -319,7 +329,7 @@ final class Window extends ObservableObject implements WindowHost {
     Point position, {
     PointerButton button = PointerButton.primary,
   }) {
-    final target = _pointerCapture ?? _content?.hitTest(position);
+    final target = _pointerCapture ?? _hitTest(position);
     target?.raiseEvent(
       UIElement.pointerUp,
       PointerEventArgs(pointerId: 1, position: position, button: button)
@@ -337,7 +347,7 @@ final class Window extends ObservableObject implements WindowHost {
       throw ArgumentError('Mouse wheel deltas must be finite.');
     }
     updateLayout();
-    final target = _content?.hitTest(position);
+    final target = _hitTest(position);
     target?.raiseEvent(
       UIElement.mouseWheel,
       MouseWheelEventArgs(
@@ -391,19 +401,37 @@ final class Window extends ObservableObject implements WindowHost {
   }
 
   void updateLayout() {
-    final root = _content;
-    if (root == null) return;
     _scheduler.layout(() {
-      root.measure(logicalSize);
-      root.arrange(Rect.fromLTWH(0, 0, logicalSize.width, logicalSize.height));
+      final root = _content;
+      if (root != null) {
+        root.measure(logicalSize);
+        root.arrange(
+            Rect.fromLTWH(0, 0, logicalSize.width, logicalSize.height));
+      }
+      overlay.measure(logicalSize);
+      overlay
+          .arrange(Rect.fromLTWH(0, 0, logicalSize.width, logicalSize.height));
     });
   }
 
   void renderFrame(DrawingContext context) {
     if (!_scheduler.tryBeginFrame()) return;
+    if (!_isVisible) return;
     final root = _content;
-    if (root == null || !_isVisible) return;
+    if (root == null && !overlay.isVisible) return;
     updateLayout();
-    _scheduler.paint(() => root.render(context));
+    _scheduler.paint(() {
+      root?.render(context);
+      overlay.render(context);
+    });
+  }
+
+  /// The control under the position.
+  ///
+  /// The overlay of the window is above its content, so it is checked first.
+  UIElement? _hitTest(Point position) {
+    final overlayTarget = overlay.hitTest(position);
+    if (overlayTarget != null) return overlayTarget;
+    return _content?.hitTest(position);
   }
 }

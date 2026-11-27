@@ -34,6 +34,12 @@
   change to its listeners and walks through the items with `moveSelection`,
   `selectFirst` and `selectLast`. A list view, a tree view or a combo box can
   bind its state to it.
+- `Window.overlay` is the layer of the window that holds an open popup. The
+  popup is drawn above the content of the window, it is clipped to the window
+  and it takes the clicks that fall outside of it, so a combo box, a menu or a
+  tooltip can open above the content. The popup is placed below, above, left,
+  right, at the pointer or at the owner area, Escape closes it, and the focus
+  goes back to the control that opened it.
 - **Breaking:** while a scroll bar thumb is dragged, the pointer capture belongs
   to the scroll bar and not to the viewer. The hit test on a scroll bar returns
   the scroll bar, and clicking a scroll bar does not move the focus: the bar is
