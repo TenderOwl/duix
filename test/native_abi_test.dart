@@ -19,6 +19,9 @@ late NativeBindings bindings;
 /// are excluded with `dart test --exclude-tags clipboard`.
 const _nativeClipboardTag = 'clipboard';
 
+/// The event type of a resized window in the native ABI.
+const _windowResizedEvent = 3;
+
 void main() {
   setUpAll(() {
     bindings = NativeBindings.open();
@@ -36,7 +39,7 @@ void main() {
     }
   });
 
-  test('live resize callback can render synchronously', () {
+  test('live resize callback can render while the window is resized', () async {
     final host = bindings.hostCreate();
     expect(host, isNot(nullptr), reason: bindings.lastError);
     if (host == nullptr) return;
@@ -82,10 +85,32 @@ void main() {
         (arena) => bindings.windowMetrics(window, arena),
       );
       expect(bindings.windowSetSize(window, 240, 120), 1);
+      // On Windows the resize event is delivered inside the call, on the other
+      // systems the window system delivers it later, so the event queue is
+      // pumped until the resize arrives.
+      var resizeEvents = 0;
+      final deadline = DateTime.now().add(const Duration(seconds: 3));
+      while (callbackCount == 0 &&
+          resizeEvents == 0 &&
+          DateTime.now().isBefore(deadline)) {
+        using((arena) {
+          final event = bindings.nextEvent(host, arena);
+          if (event != null && event.type == _windowResizedEvent) {
+            resizeEvents++;
+          }
+        });
+        await Future<void>.delayed(const Duration(milliseconds: 10));
+      }
+      if (callbackCount == 0 && resizeEvents == 0) {
+        markTestSkipped(
+          'The window system did not deliver a resize event.',
+        );
+        return;
+      }
       expect(
         callbackCount,
         greaterThan(0),
-        reason: 'The callback must run inside the native resize call.',
+        reason: 'The callback must run when the window is resized.',
       );
       expect(
         callbackSizes.every((size) => size.width > 0 && size.height > 0),

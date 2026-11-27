@@ -130,18 +130,22 @@ jobs:
 
       # The packaging step installs the library with the CMake install rules,
       # reports the runtime dependencies and checks that a program loads the
-      # library from the release bundle.
+      # library from the release bundle. The steps run even when a test
+      # failed, so a broken test does not throw the built library away.
       - name: Package
+        if: always()
         run: python tools/package.py
 
       # The distribution folder is what gets published, so it is assembled on
       # every native build as well.
       - name: Distribution
+        if: always()
         run: python tools/package.py --dist --no-verify
 
       # The built library of every platform is published as an artifact, so the
       # release bundle can be assembled from the runners.
       - name: Upload the native artifacts
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: native-${{ matrix.os }}
