@@ -879,15 +879,17 @@ One-way local маскирует binding, но не отменяет его; `cl
   `manifest.json` и sha256, архив с фиксированными timestamps даёт одинаковый
   sha256 при повторных прогонах.
 - [x] Install-правила CMake: библиотека в `bin/` (Windows) или `lib/` (Unix),
-  `icudtl.dat` рядом с библиотекой, относительный rpath.
+  `icudtl.dat` рядом с библиотекой только на Windows (на Unix Skia вшивает данные
+  ICU в библиотеку), относительный rpath.
 - [ ] Проверка зависимостей на чистой машине — не выполнена, есть только
   автоматическая проверка состава импортов.
 
 ## 8.4. CI и тестирование
 
-- [ ] Dart analyze/test на Windows, macOS и Linux.
-- [ ] Native build на всех ОС.
-- [ ] Smoke window test.
+- [x] Dart analyze/test на Windows, macOS и Linux.
+- [x] Native build на всех ОС (Windows, Linux, macOS arm64) — библиотеки
+  выгружаются артефактами и собраны в опубликованный пакет.
+- [x] Smoke window test (Windows и Linux; на macOS runner нет window server).
 - [ ] Layout golden tests.
 - [ ] Text golden tests при разных displayScale.
 - [ ] Ввод и focus integration tests.
@@ -924,11 +926,11 @@ One-way local маскирует binding, но не отменяет его; `cl
 3. **Этап 8.1, мосты:** модель семантики готова; остались native-мосты accessibility — Windows UI Automation, macOS NSAccessibility и Linux AT-SPI. Начинать с Windows UI Automation: его можно собрать и проверить на этой машине, тогда как macOS и Linux требуют чужих машин.
 4. **Ручная проверка ScrollViewer:** автоматическая часть закрыта полностью — `example/native_scroll_viewer.dart --smoke` проходит на Windows (wheel, drag ползунка, клик по треку, клавиатура, offsets, bounds, 3 кадра, scale 2.0); остаётся только визуальная проверка clipping и resize при разных display scales.
 5. **Автоматизация ScrollViewer (закрыт 2026-11-26):** thumb dragging, клик по треку и клавиатурная прокрутка закрыты в native-тесте `test/native_scroll_viewer_test.dart` и в smoke-режиме примера — через публичные `dispatchPointerDown/Move/Up` и `dispatchKeyDown`.
-6. **Незавершённая часть этапа 1.2:** проверить сборку и Paragraph smoke на Linux (FontConfig/Freetype) и macOS (CoreText).
+6. **Незавершённая часть этапа 1.2 (закрыт 2026-11-27):** сборка и Paragraph smoke проверены на Linux (FontConfig/Freetype) и macOS (CoreText) — CI собирает библиотеку и запускает `dui_paragraph_smoke` на обоих runner'ах, шаг падал бы при ошибке. Живая проверка текста на этих платформах остаётся в пунктах 7 и 8.
 7. **Ручная визуальная проверка:** открыть text gallery и TextBox на мониторах с разными масштабами, проверить clipping, selection и caret; отдельно посмотреть FPS-overlay в `--diagnostics` — после перевода на SkParagraph текст в нём стал shaped, baseline сдвинут на `y + font_size`, как и раньше.
 8. **Ручная проверка этапа 2.4:** русский, китайский/японский ввод и emoji через реальные системные IME.
 9. **Ручная проверка lifecycle:** dispose поддерева, повторное открытие окна после `close()`, поведение `Window.dispose()`.
-10. **Этап 8.3, остаток — нужны другие машины:** macOS — universal binary (x64+arm64) и codesign/notarization, проверка dylib rpath в собранном приложении; Linux — сборка на реальном дистрибутиве и проверка rpath `$ORIGIN` вместе с зависимостями; Windows — сборка arm64 и проверка, что arm64-библиотека тоже ставится install-правилами.
+10. **Этап 8.3, остаток — нужны другие машины:** macOS x64 (universal binary x64+arm64) и codesign/notarization, проверка dylib rpath в собранном приложении; Linux arm64 — сборка на arm64-машине и проверка rpath `$ORIGIN` вместе с зависимостями; Windows arm64 — сборка и проверка, что arm64-библиотека тоже ставится install-правилами. macOS arm64 и Linux x64 собраны через CI (2026-11-27) и лежат в пакете.
 11. **Этап 8.3, чистая машина:** развернуть бандл из `build/release/` на машине без Skia, SDL и ICU. Сейчас состав импортов DLL проверяется автоматически, но запуск на «голой» системе не выполнялся.
 12. **Потокобезопасность native-слоя (закрыт 2026-11-26):** SDL-вызовы сериализованы process-wide мьютексом, host в процессе может быть только один, `SDL_Quit()` не вызывается; поведение закреплено тремя native-тестами с двумя изолятами. Дальше по этой теме можно думать только про несколько host — для этого нужна переделка глобальной очереди событий SDL.
 13. **Публикация пакета на pub.dev (закрыт 2026-11-27):** пакет `duix` 0.1.0 опубликован — https://pub.dev/packages/duix. Внутри: лицензия MIT с файлом `LICENSE`, поля `homepage`/`repository`, description и topics, сборки нативной библиотеки для Windows x64, macOS arm64 и Linux x64, разложенные в `build/dist/<платформа>-<архитектура>/`, и дистрибуция `python tools/package.py --dist` в `../duix-publish`. Осталось: macOS x64, Linux arm64 и Windows arm64, codesign/notarization для macOS и публикация следующих версий.
