@@ -325,6 +325,7 @@ native/CMakeLists.txt                — нативная сборка; Linux т
 tools/bootstrap_native.py            — зависимости и сборка
 tools/package.py                    — install-правила, разбор зависимостей, воспроизводимый бандл, папка дистрибуции
 tool/verify_native.dart             — сквозная проверка бандла: загрузка библиотеки и shaping
+tool/verify_published.dart          — загрузка библиотеки из папки дистрибуции (проверка опубликованного пакета)
 bin/setup_native.dart               — копирование нативной библиотеки рядом с exe собранного приложения
 README.md                           — quick start, порядок поиска библиотеки, сборка и публикация (английский)
 CHANGELOG.md                        — журнал изменений пакета (английский)
@@ -930,7 +931,7 @@ One-way local маскирует binding, но не отменяет его; `cl
 10. **Этап 8.3, остаток — нужны другие машины:** macOS — universal binary (x64+arm64) и codesign/notarization, проверка dylib rpath в собранном приложении; Linux — сборка на реальном дистрибутиве и проверка rpath `$ORIGIN` вместе с зависимостями; Windows — сборка arm64 и проверка, что arm64-библиотека тоже ставится install-правилами.
 11. **Этап 8.3, чистая машина:** развернуть бандл из `build/release/` на машине без Skia, SDL и ICU. Сейчас состав импортов DLL проверяется автоматически, но запуск на «голой» системе не выполнялся.
 12. **Потокобезопасность native-слоя (закрыт 2026-11-26):** SDL-вызовы сериализованы process-wide мьютексом, host в процессе может быть только один, `SDL_Quit()` не вызывается; поведение закреплено тремя native-тестами с двумя изолятами. Дальше по этой теме можно думать только про несколько host — для этого нужна переделка глобальной очереди событий SDL.
-13. **Публикация пакета на pub.dev:** выбрать лицензию и добавить файл `LICENSE`, добавить в pubspec поля `homepage`/`repository`, собрать нативную библиотеку для macOS x64/arm64 и Linux x64/arm64, разложить сборки в `build/dist/<платформа>-<архитектура>/`, собрать `python tools/package.py --dist` и опубликовать `dart pub publish --directory ../duix-publish`. Нужны аккаунт pub.dev и решение по лицензии; сборка остальных платформ требует чужих машин.
+13. **Публикация пакета на pub.dev (закрыт 2026-11-27):** пакет `duix` 0.1.0 опубликован — https://pub.dev/packages/duix. Внутри: лицензия MIT с файлом `LICENSE`, поля `homepage`/`repository`, description и topics, сборки нативной библиотеки для Windows x64, macOS arm64 и Linux x64, разложенные в `build/dist/<платформа>-<архитектура>/`, и дистрибуция `python tools/package.py --dist` в `../duix-publish`. Осталось: macOS x64, Linux arm64 и Windows arm64, codesign/notarization для macOS и публикация следующих версий.
 
 GPU backend по-прежнему не входит в ближайшие этапы.
 
@@ -1016,7 +1017,11 @@ GPU backend по-прежнему не входит в ближайшие эта
 - Windows-библиотека из пакета проверена локально: `tool/verify_published.dart` грузит её из папки дистрибуции и measures text (ширина 93,4).
 - `dart pub publish --dry-run --directory ../duix-publish` — 0 ошибок, 0 предупреждений.
 
-Дальше: публикация пакета на pub.dev (нужен токен издателя).
+Опубликовано:
+
+- `dart pub publish -f --directory ../duix-publish` — «Successfully uploaded https://pub.dev/packages/duix version 0.1.0»; API pub.dev отдаёт `latest: 0.1.0`, дата публикации 2026-11-27T07:59:02Z. Архив 26 МБ, внутри библиотеки трёх платформ.
+
+Дальше: следующие версии пакета; остальные платформы (macOS x64, Linux arm64, Windows arm64) и codesign/notarization для macOS.
 
 ### 2026-11-27 — репозиторий на GitHub и публикация пакета
 
