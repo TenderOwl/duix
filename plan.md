@@ -178,7 +178,8 @@ Skia canvas масштабируется через `displayScale`. Backbuffer �
 - у `TextBox` раздельные кэши раскладки для measure и render: IME composition не вытесняет раскладку, используемую для измерения, а в steady state создаётся одна native-раскладка;
 - native clipboard-тесты помечены тегом `clipboard` (объявлен в `dart_test.yaml`), поэтому их можно исключать через `dart test --exclude-tags clipboard`, когда системный clipboard занят другим процессом;
 - legacy `DrawingContext.drawText()` в native backend рисует через SkParagraph shaping: native `dui_draw_text` возвращает логическую ширину нарисованного текста и использует тот же `create_paragraph`, что и `dui_text_layout_create`; шрифт, unicode и font-collection переиспользуются между вызовами, раскладка кэшируется на окне;
-- ABI `dui_native` версии 2: `dui_draw_text` возвращает `int32_t` и добавляет out-параметр `out_width`, `dui_abi_version()` возвращает 2;
+- ABI `dui_native` версии 3: `dui_draw_rect` принимает ширину обводки, добавлена `dui_draw_line` (прямая с обводкой), `dui_abi_version()` возвращает 3;
+- графика: `Paint` получил `strokeWidth` (0 — заливка, положительное значение — обводка контура), `DrawingContext` получил `drawLine(from, to, paint)`, а `drawRect`/`drawRoundedRect` берут ширину обводки из paint; capsule focus ring рисуется обводкой, прямоугольный — четырьмя залитыми полосами;
 - исправлен paint-range в `dui_text_layout_draw`: foreground paint задаётся в UTF-16 offsets, а не в UTF-8 байтах;
 - `UIElement.dispose()` освобождает элемент и всё его поддерево: отсоединяет от родителя, размонтирует, освобождает потомков и собственные ресурсы, отменяет bindings. Повторный вызов безопасен, а disposed-элемент больше нельзя смонтировать или изменить;
 - `UIElement.onDisposed()` — хук для собственных ресурсов контрола; `Label` и `TextBox` освобождают в нём native-раскладки;
@@ -958,7 +959,9 @@ GPU backend по-прежнему не входит в ближайшие эта
    (`drawPath`, `drawLine`), прозрачность и блендинг, тени, растровое
    изображение (`drawImage` — нужна native-декодировка PNG и загрузка
    текстуры в Skia). Без этого нет ни иконок, ни картинок, ни разделителей,
-   ни рамок ползунков.
+   ни рамок ползунков. **Часть A закрыта (2026-11-27):** обводка (`Paint.strokeWidth`)
+   и прямые линии (`drawLine`), native ABI версии 3. Осталось: `drawPath`,
+   прозрачность и блендинг, тени, `drawImage` с PNG.
 2. **Popup-слой.** Всплывающие окна нужны ComboBox, меню, Tooltip и
    контекстному меню: отдельный слой поверх содержимого окна со своим
    layout, своим clip и перехватом кликов, плюс позиционирование у курсора
@@ -1086,6 +1089,28 @@ GPU backend по-прежнему не входит в ближайшие эта
 ---
 
 ## 9. Журнал работ
+
+### 2026-11-27 — слой 0, пункт 1 (часть A): обводка и линии
+
+Сделано:
+
+- `Paint` (`lib/src/geometry.dart`) получил `strokeWidth`: ноль — заливка фигуры, положительное значение — обводка контура. Добавлен `Paint.isStroke`.
+- `DrawingContext` (`lib/src/drawing.dart`) получил `drawLine(from, to, paint)`. `drawRect` и `drawRoundedRect` берут ширину обводки из paint, отдельный параметр `strokeWidth` у `drawRoundedRect` убран.
+- Capsule focus ring рисуется обводкой скруглённого прямоугольника, прямоугольный — четырьмя залитыми полосами (как раньше).
+- `RecordingDrawingContext` записывает линии (`DrawLineCommand`), а `DrawRoundedRectCommand.strokeWidth` читается из paint.
+- Native C ABI переведён на версию 3: `dui_draw_rect` принимает ширину обводки, добавлена `dui_draw_line(x1, y1, x2, y2, rgba, stroke_width)`. В Skia обводка включается через `SkPaint::kStroke_Style`, линия нулевой ширины рисуется hairline-ом.
+- Dart FFI: новые typedef'ы `_DrawLineNative`/`_DrawLineDart`, `dui_draw_rect` получил седьмой аргумент, проверка ABI поднята до 3. Поправлены `tool/verify_native.dart` и `tool/verify_published.dart`.
+- В примере `native_smoke` добавлены `_Rule` (линия) и `_Outline` (обводка скруглённого прямоугольника) — примитивы проверяются через настоящий native-путь.
+
+Проверено:
+
+- `dart analyze` — No issues found; `dart format --output=none --set-exit-if-changed lib bin example test tool` — 0 изменений.
+- `dart test --exclude-tags clipboard,native` — 252/252; `dart test --tags native --exclude-tags clipboard` — 38/38 (native-библиотека пересобрана: `cmake --build native/build --config Release`).
+- `example/native_smoke.dart --smoke` — линия и обводка рисуются в настоящем окне.
+
+Замечание: изменение ABI ломает совместимость со старой native-библиотекой: Dart отказывается открывать библиотеку с другой версией ABI, поэтому библиотеку из пакета нужно пересобрать и перевыложить вместе с новой версией пакета.
+
+Дальше: пункт 1 слоя 0 — растровое изображение (`drawImage`) с native-декодировкой PNG; после него — контуры (`drawPath`), прозрачность и тени.
 
 ### 2026-11-27 — слой 0, пункт 3: шаблоны для любого контрола
 

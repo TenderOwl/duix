@@ -28,7 +28,7 @@ void main() {
   });
 
   test('ABI version is supported', () {
-    expect(bindings.abiVersion(), 2);
+    expect(bindings.abiVersion(), 3);
   });
 
   test('host can be created and destroyed repeatedly', () {
@@ -290,7 +290,7 @@ void main() {
         expect(bindings.windowBeginFrame(window), 1,
             reason: bindings.lastError);
         bindings.pushClipRect(window, 4, 4, 40, 24);
-        bindings.drawRect(window, 0, 0, 160, 80, 0x5580CFFF);
+        bindings.drawRect(window, 0, 0, 160, 80, 0x5580CFFF, 0);
         bindings.drawRoundedRect(
           window,
           4,
@@ -302,6 +302,7 @@ void main() {
           0x880087DB,
           2,
         );
+        bindings.drawLine(window, 4, 40, 84, 40, 0xFF00FF00, 3);
         bindings.textLayoutDraw(window, layout, 4, 4, 0xFF000000);
         bindings.popClip(window);
         expect(bindings.windowPresent(window), 1, reason: bindings.lastError);

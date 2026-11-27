@@ -128,9 +128,19 @@ final class Color {
 }
 
 final class Paint {
-  const Paint(this.color);
+  const Paint(this.color, {this.strokeWidth = 0});
 
+  /// The color of the paint.
   final Color color;
+
+  /// The width of the stroke.
+  ///
+  /// Zero fills the shape. A positive value strokes its outline with that
+  /// width, so the paint decides how a shape is drawn.
+  final double strokeWidth;
+
+  /// Whether the paint strokes the outline instead of filling the shape.
+  bool get isStroke => strokeWidth > 0;
 }
 
 enum Orientation { horizontal, vertical }

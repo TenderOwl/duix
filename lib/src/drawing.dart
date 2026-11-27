@@ -1,5 +1,9 @@
 import 'geometry.dart';
 
+/// A surface that a widget draws on.
+///
+/// The paint decides how a shape is drawn: a paint without a stroke width
+/// fills the shape, a paint with one strokes its outline.
 abstract interface class DrawingContext {
   void pushClipRect(Rect rect);
   void popClip();
@@ -8,9 +12,11 @@ abstract interface class DrawingContext {
     Rect rect,
     double radiusX,
     double radiusY,
-    Paint paint, {
-    double strokeWidth = 0,
-  });
+    Paint paint,
+  );
+
+  /// Draws a straight line from [from] to [to].
+  void drawLine(Point from, Point to, Paint paint);
 
   void drawText(
     String text,

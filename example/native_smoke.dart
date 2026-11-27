@@ -26,6 +26,8 @@ Future<void> main(List<String> args) async {
         children: [
           Label(text: 'Native smoke test', fontSize: 20),
           button,
+          _Rule(),
+          _Outline(),
         ],
       ),
     );
@@ -55,5 +57,48 @@ Future<void> main(List<String> args) async {
     );
   } finally {
     host?.dispose();
+  }
+}
+
+/// A thin line that proves the line primitive of the backend.
+final class _Rule extends Control {
+  _Rule();
+
+  @override
+  bool get isFocusable => false;
+
+  @override
+  Size measureCore(Size availableSize) =>
+      Size(availableSize.width.isFinite ? availableSize.width : 0, 12);
+
+  @override
+  void renderCore(DrawingContext context) {
+    context.drawLine(
+      const Point(0, 6),
+      Point(bounds.width, 6),
+      const Paint(Color(0xFF9E9E9E), strokeWidth: 2),
+    );
+  }
+}
+
+/// A rounded rectangle that proves the stroke of the backend.
+final class _Outline extends Control {
+  _Outline();
+
+  @override
+  bool get isFocusable => false;
+
+  @override
+  Size measureCore(Size availableSize) =>
+      Size(availableSize.width.isFinite ? availableSize.width : 0, 24);
+
+  @override
+  void renderCore(DrawingContext context) {
+    context.drawRoundedRect(
+      bounds.deflate(const EdgeInsets.symmetric(vertical: 2)),
+      6,
+      6,
+      const Paint(Color(0xFF3A7BD5), strokeWidth: 1),
+    );
   }
 }

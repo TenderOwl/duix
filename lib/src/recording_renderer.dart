@@ -17,15 +17,27 @@ final class DrawRoundedRectCommand extends DrawCommand {
     this.rect,
     this.radiusX,
     this.radiusY,
-    this.paint, {
-    this.strokeWidth = 0,
-  });
+    this.paint,
+  );
 
   final Rect rect;
   final double radiusX;
   final double radiusY;
   final Paint paint;
-  final double strokeWidth;
+
+  /// The width of the stroke, zero when the shape is filled.
+  double get strokeWidth => paint.strokeWidth;
+}
+
+final class DrawLineCommand extends DrawCommand {
+  const DrawLineCommand(this.from, this.to, this.paint);
+
+  final Point from;
+  final Point to;
+  final Paint paint;
+
+  /// The width of the stroke, zero when the line is a hairline.
+  double get strokeWidth => paint.strokeWidth;
 }
 
 final class DrawTextCommand extends DrawCommand {
@@ -77,16 +89,19 @@ final class RecordingDrawingContext implements DrawingContext {
     Rect rect,
     double radiusX,
     double radiusY,
-    Paint paint, {
-    double strokeWidth = 0,
-  }) {
+    Paint paint,
+  ) {
     commands.add(DrawRoundedRectCommand(
       rect,
       radiusX,
       radiusY,
       paint,
-      strokeWidth: strokeWidth,
     ));
+  }
+
+  @override
+  void drawLine(Point from, Point to, Paint paint) {
+    commands.add(DrawLineCommand(from, to, paint));
   }
 
   @override

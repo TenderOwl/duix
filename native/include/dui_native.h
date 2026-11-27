@@ -206,7 +206,8 @@ DUI_API void dui_draw_rect(
     double y,
     double width,
     double height,
-    uint32_t rgba);
+    uint32_t rgba,
+    double stroke_width);
 DUI_API void dui_draw_rounded_rect(
     DuiWindow* window,
     double x,
@@ -215,6 +216,15 @@ DUI_API void dui_draw_rounded_rect(
     double height,
     double radius_x,
     double radius_y,
+    uint32_t rgba,
+    double stroke_width);
+/* Draws a straight line. A stroke width of zero draws a hairline. */
+DUI_API void dui_draw_line(
+    DuiWindow* window,
+    double x1,
+    double y1,
+    double x2,
+    double y2,
     uint32_t rgba,
     double stroke_width);
 /* Draws shaped text through SkParagraph. The text is never wrapped.

@@ -678,7 +678,7 @@ void destroy_window_resources(DuiWindow* window) {
 
 }  // namespace
 
-uint32_t dui_abi_version(void) { return 2; }
+uint32_t dui_abi_version(void) { return 3; }
 
 const char* dui_last_error_message(void) { return last_error.c_str(); }
 
@@ -1639,12 +1639,17 @@ void dui_draw_rect(
     double y,
     double width,
     double height,
-    uint32_t rgba) {
+    uint32_t rgba,
+    double stroke_width) {
     SdlScope lock;
   if (!window || !window->frame_active) return;
   SkPaint paint;
   paint.setColor(static_cast<SkColor>(rgba));
   paint.setAntiAlias(true);
+  if (std::isfinite(stroke_width) && stroke_width > 0) {
+    paint.setStyle(SkPaint::kStroke_Style);
+    paint.setStrokeWidth(static_cast<SkScalar>(stroke_width));
+  }
   window->surface->getCanvas()->drawRect(
       SkRect::MakeXYWH(x, y, width, height),
       paint);
@@ -1675,6 +1680,30 @@ void dui_draw_rounded_rect(
       static_cast<SkScalar>(radius_x),
       static_cast<SkScalar>(radius_y));
   window->surface->getCanvas()->drawRRect(rounded_rect, paint);
+}
+
+void dui_draw_line(
+    DuiWindow* window,
+    double x1,
+    double y1,
+    double x2,
+    double y2,
+    uint32_t rgba,
+    double stroke_width) {
+    SdlScope lock;
+  if (!window || !window->frame_active) return;
+  SkPaint paint;
+  paint.setColor(static_cast<SkColor>(rgba));
+  paint.setAntiAlias(true);
+  paint.setStyle(SkPaint::kStroke_Style);
+  const auto width = std::isfinite(stroke_width) && stroke_width > 0
+      ? static_cast<SkScalar>(stroke_width)
+      : 1.0f;
+  paint.setStrokeWidth(width);
+  window->surface->getCanvas()->drawLine(
+      SkPoint::Make(x1, y1),
+      SkPoint::Make(x2, y2),
+      paint);
 }
 
 int32_t dui_draw_text(

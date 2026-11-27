@@ -15,6 +15,8 @@ void drawFocusRing(
   var thickness = 2.0;
   if (bounds.width / 2 < thickness) thickness = bounds.width / 2;
   if (bounds.height / 2 < thickness) thickness = bounds.height / 2;
+  // The rectangle ring is drawn as four filled bars, the capsule ring as a
+  // stroked rounded rectangle.
   const paint = Paint(_focusRingColor);
   if (shape == FocusRingShape.capsule) {
     final inset = thickness / 2;
@@ -30,8 +32,7 @@ void drawFocusRing(
       ring,
       radiusX,
       radiusY,
-      paint,
-      strokeWidth: thickness,
+      Paint(_focusRingColor, strokeWidth: thickness),
     );
     return;
   }

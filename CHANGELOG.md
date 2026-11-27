@@ -13,6 +13,15 @@
   hit testing, so a subclass cannot accidentally override the template.
 - A control without a template property does not support templates: its template
   is always null and setting it throws a `StateError`.
+- The paint decides how a shape is drawn: `Paint` carries a `strokeWidth`, zero
+  fills the shape and a positive value strokes its outline. `drawRect` and
+  `drawRoundedRect` follow the paint, so the separate `strokeWidth` argument of
+  `drawRoundedRect` is gone.
+- `DrawingContext.drawLine(from, to, paint)` draws a straight line, so a widget
+  can draw separators, underlines and borders without a bitmap.
+- **Breaking:** the native ABI is now version 3: `dui_draw_rect` takes the
+  stroke width and `dui_draw_line` is new. The Dart side refuses a library with
+  another ABI version.
 - **Breaking:** the focus ring of a templated control is drawn on top of the
   content instead of under it.
 

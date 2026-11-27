@@ -321,11 +321,21 @@ typedef _DrawRectNative = Void Function(
   Double,
   Double,
   Uint32,
+  Double,
 );
 typedef _DrawRoundedRectNative = Void Function(
   Pointer<DuiWindowOpaque>,
   Double,
   Double,
+  Double,
+  Double,
+  Double,
+  Double,
+  Uint32,
+  Double,
+);
+typedef _DrawLineNative = Void Function(
+  Pointer<DuiWindowOpaque>,
   Double,
   Double,
   Double,
@@ -478,11 +488,21 @@ typedef _DrawRectDart = void Function(
   double,
   double,
   int,
+  double,
 );
 typedef _DrawRoundedRectDart = void Function(
   Pointer<DuiWindowOpaque>,
   double,
   double,
+  double,
+  double,
+  double,
+  double,
+  int,
+  double,
+);
+typedef _DrawLineDart = void Function(
+  Pointer<DuiWindowOpaque>,
   double,
   double,
   double,
@@ -673,6 +693,9 @@ final class NativeBindings {
             .lookupFunction<_DrawRoundedRectNative, _DrawRoundedRectDart>(
           'dui_draw_rounded_rect',
         ),
+        drawLine = library.lookupFunction<_DrawLineNative, _DrawLineDart>(
+          'dui_draw_line',
+        ),
         _drawText = library.lookupFunction<_DrawTextNative, _DrawTextDart>(
           'dui_draw_text',
         ),
@@ -707,7 +730,7 @@ final class NativeBindings {
         windowPresent = library.lookupFunction<_FrameNative, _FrameDart>(
           'dui_window_present',
         ) {
-    if (abiVersion() != 2) {
+    if (abiVersion() != 3) {
       throw StateError('Unsupported dui_native ABI version: ${abiVersion()}.');
     }
   }
@@ -755,6 +778,7 @@ final class NativeBindings {
   final _FrameDart _windowPopClip;
   final _DrawRectDart drawRect;
   final _DrawRoundedRectDart drawRoundedRect;
+  final _DrawLineDart drawLine;
   final _DrawTextDart _drawText;
   final _TextLayoutCreateDart _textLayoutCreate;
   final _TextLayoutDestroyDart textLayoutDestroy;

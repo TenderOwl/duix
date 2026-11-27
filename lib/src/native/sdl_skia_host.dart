@@ -573,6 +573,7 @@ final class NativeDrawingContext implements NativeTextDrawingContext {
       rect.width,
       rect.height,
       paint.color.value,
+      paint.strokeWidth,
     );
   }
 
@@ -581,9 +582,8 @@ final class NativeDrawingContext implements NativeTextDrawingContext {
     Rect rect,
     double radiusX,
     double radiusY,
-    Paint paint, {
-    double strokeWidth = 0,
-  }) {
+    Paint paint,
+  ) {
     bindings.drawRoundedRect(
       window,
       rect.left,
@@ -593,7 +593,20 @@ final class NativeDrawingContext implements NativeTextDrawingContext {
       radiusX,
       radiusY,
       paint.color.value,
-      strokeWidth,
+      paint.strokeWidth,
+    );
+  }
+
+  @override
+  void drawLine(Point from, Point to, Paint paint) {
+    bindings.drawLine(
+      window,
+      from.x,
+      from.y,
+      to.x,
+      to.y,
+      paint.color.value,
+      paint.strokeWidth,
     );
   }
 

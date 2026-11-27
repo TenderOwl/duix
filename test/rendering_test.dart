@@ -40,9 +40,9 @@ void main() {
   test('recording renderer preserves rounded rectangle geometry', () {
     final renderer = RecordingDrawingContext();
     const rect = Rect.fromLTWH(4, 6, 120, 40);
-    const paint = Paint(Color(0x88FFFFFF));
+    const paint = Paint(Color(0x88FFFFFF), strokeWidth: 2);
 
-    renderer.drawRoundedRect(rect, 20, 18, paint, strokeWidth: 2);
+    renderer.drawRoundedRect(rect, 20, 18, paint);
 
     final command = renderer.commands.single as DrawRoundedRectCommand;
     expect(command.rect, rect);
@@ -50,6 +50,19 @@ void main() {
     expect(command.radiusY, 18);
     expect(command.paint, same(paint));
     expect(command.strokeWidth, 2);
+  });
+
+  test('recording renderer preserves lines and their stroke', () {
+    final renderer = RecordingDrawingContext();
+    const paint = Paint(Color(0xFF112233), strokeWidth: 3);
+
+    renderer.drawLine(const Point(1, 2), const Point(30, 40), paint);
+
+    final command = renderer.commands.single as DrawLineCommand;
+    expect(command.from, const Point(1, 2));
+    expect(command.to, const Point(30, 40));
+    expect(command.paint, same(paint));
+    expect(command.strokeWidth, 3);
   });
 
   test('window uses an opaque white background by default', () {
