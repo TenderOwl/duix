@@ -107,13 +107,16 @@ package and puts them into the given directory (the current one by default).
 |---|---|---|
 | Windows | x64 | built and verified |
 | Windows | arm64 | not built |
-| macOS | x64, arm64 | not built |
-| Linux | x64, arm64 | not built |
+| macOS | arm64 | built and verified |
+| macOS | x64 | not built |
+| Linux | x64 | built and verified |
+| Linux | arm64 | not built |
 
-The built library depends on system DLLs only, so there are no extra
-dependencies to install. The import table is checked by the packaging script,
-and `icudtl.dat` (the ICU data behind shaping and line breaking) ships next to
-the library.
+The built library depends on system libraries only, so there are no extra
+dependencies to install. The import table is checked by the packaging script.
+`icudtl.dat` (the ICU data behind shaping and line breaking) ships next to the
+library on Windows; on Linux and macOS Skia links the ICU data into the library
+itself.
 
 ## Building the native library from source
 
@@ -152,8 +155,9 @@ dart pub publish --directory ../duix-publish
 
 - A process holds one native host: SDL has a single global event queue, and
   the host owns every window of the application.
-- Windows, macOS and Linux are supported, but the library is only built for
-  Windows x64 so far — on the other platforms it has to be built.
+- Windows, macOS and Linux are supported, but the library is built for
+  Windows x64, macOS arm64 and Linux x64 only — the other combinations have to
+  be built.
 - There is no GPU backend yet: rendering goes through CPU Skia.
 
 ## License

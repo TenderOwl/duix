@@ -13,12 +13,15 @@ on:
     - cron: '17 6 * * 1'
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
+  # The event name is part of the group, so a push does not cancel a manual
+  # run: the native job builds Skia from source and must not be interrupted
+  # halfway.
+  group: ${{ github.workflow }}-${{ github.ref }}-${{ github.event_name }}
   # A push cancels the previous run to keep the feedback fast. A manual or
   # scheduled run builds Skia from source and must not be cancelled halfway.
   cancel-in-progress: >-
-    ${{ github.event_name != 'workflow_dispatch'
-        && github.event_name != 'schedule' }}
+    ${{ github.event_name == 'push'
+        || github.event_name == 'pull_request' }}
 
 permissions:
   contents: read
