@@ -117,6 +117,61 @@ typedef struct DuiImageSize {
   double height;
 } DuiImageSize;
 
+/* The role of an accessible node. The values match the Dart SemanticsRole. */
+enum DuiAccessibleRole {
+  DUI_ACCESSIBLE_ROLE_NONE = 0,
+  DUI_ACCESSIBLE_ROLE_BUTTON = 1,
+  DUI_ACCESSIBLE_ROLE_TEXT_BOX = 2,
+  DUI_ACCESSIBLE_ROLE_LABEL = 3,
+  DUI_ACCESSIBLE_ROLE_GROUP = 4,
+  DUI_ACCESSIBLE_ROLE_LIST = 5,
+  DUI_ACCESSIBLE_ROLE_IMAGE = 6,
+  DUI_ACCESSIBLE_ROLE_WINDOW = 7
+};
+
+/* The state of an accessible node. */
+enum DuiAccessibleFlags {
+  DUI_ACCESSIBLE_FOCUSED = 1 << 0,
+  DUI_ACCESSIBLE_DISABLED = 1 << 1,
+  DUI_ACCESSIBLE_READ_ONLY = 1 << 2,
+  DUI_ACCESSIBLE_EDITABLE = 1 << 3,
+  DUI_ACCESSIBLE_MULTILINE = 1 << 4,
+  DUI_ACCESSIBLE_SELECTED = 1 << 5,
+  DUI_ACCESSIBLE_CHECKED = 1 << 6,
+  DUI_ACCESSIBLE_INDETERMINATE = 1 << 7,
+  DUI_ACCESSIBLE_EXPANDED = 1 << 8,
+  DUI_ACCESSIBLE_PRESSED = 1 << 9
+};
+
+/* One node of the semantics tree of a window. The strings are UTF-8 and do
+ * not need to be null-terminated. */
+typedef struct DuiAccessibleNode {
+  uint32_t struct_size;
+  int32_t role;
+  /* The index of the parent node, -1 for the root. */
+  int32_t parent;
+  uint32_t flags;
+  double left;
+  double top;
+  double width;
+  double height;
+  const char* name_utf8;
+  const char* value_utf8;
+} DuiAccessibleNode;
+
+typedef struct DuiAccessibleNodeInfo {
+  uint32_t struct_size;
+  int32_t role;
+  int32_t parent;
+  uint32_t flags;
+  double left;
+  double top;
+  double width;
+  double height;
+  int32_t name_length;
+  int32_t value_length;
+} DuiAccessibleNodeInfo;
+
 DUI_API uint32_t dui_abi_version(void);
 DUI_API const char* dui_last_error_message(void);
 
@@ -190,6 +245,30 @@ DUI_API void dui_window_set_background(DuiWindow* window, uint32_t rgba);
 DUI_API int32_t dui_window_start_text_input(DuiWindow* window);
 DUI_API int32_t dui_window_stop_text_input(DuiWindow* window);
 DUI_API int32_t dui_window_text_input_active(const DuiWindow* window);
+/* Publishes the semantics tree of the window. The nodes and their strings are
+ * copied, so the caller keeps no ownership of them. The nodes are stored in
+ * the order they are given, and every node points at the index of its parent.
+ * A count of zero clears the tree. */
+DUI_API int32_t dui_window_set_accessibility_tree(
+    DuiWindow* window,
+    const DuiAccessibleNode* nodes,
+    size_t count);
+/* The number of the published nodes. */
+DUI_API int32_t dui_window_get_accessibility_node_count(
+    const DuiWindow* window);
+/* Reads the information of a published node. */
+DUI_API int32_t dui_window_get_accessibility_node_info(
+    const DuiWindow* window,
+    int32_t index,
+    DuiAccessibleNodeInfo* out_info);
+/* The name and the value of a published node. The returned pointers stay
+ * valid until the next call on the same thread. */
+DUI_API const char* dui_window_get_accessibility_node_name(
+    const DuiWindow* window,
+    int32_t index);
+DUI_API const char* dui_window_get_accessibility_node_value(
+    const DuiWindow* window,
+    int32_t index);
 /* Area and cursor use logical UI units and are converted to SDL window units. */
 DUI_API int32_t dui_window_set_text_input_area(
     DuiWindow* window,

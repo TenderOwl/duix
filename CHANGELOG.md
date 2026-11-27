@@ -40,6 +40,10 @@
   tooltip can open above the content. The popup is placed below, above, left,
   right, at the pointer or at the owner area, Escape closes it, and the focus
   goes back to the control that opened it.
+- The semantics tree of a window crosses the native ABI: the Dart layer
+  publishes the roles, the names, the values, the states and the bounds of the
+  accessible elements after every frame, and the native layer keeps them. The
+  tree is the base of the platform bridges of the assistive technologies.
 - **Breaking:** while a scroll bar thumb is dragged, the pointer capture belongs
   to the scroll bar and not to the viewer. The hit test on a scroll bar returns
   the scroll bar, and clicking a scroll bar does not move the focus: the bar is

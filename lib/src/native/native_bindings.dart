@@ -157,6 +157,93 @@ final class DuiImageSizeStruct extends Struct {
   external double height;
 }
 
+final class DuiAccessibleNodeStruct extends Struct {
+  @Uint32()
+  external int structSize;
+
+  @Int32()
+  external int role;
+
+  @Int32()
+  external int parent;
+
+  @Uint32()
+  external int flags;
+
+  @Double()
+  external double left;
+
+  @Double()
+  external double top;
+
+  @Double()
+  external double width;
+
+  @Double()
+  external double height;
+
+  external Pointer<Utf8> nameUtf8;
+
+  external Pointer<Utf8> valueUtf8;
+}
+
+final class DuiAccessibleNodeInfoStruct extends Struct {
+  @Uint32()
+  external int structSize;
+
+  @Int32()
+  external int role;
+
+  @Int32()
+  external int parent;
+
+  @Uint32()
+  external int flags;
+
+  @Double()
+  external double left;
+
+  @Double()
+  external double top;
+
+  @Double()
+  external double width;
+
+  @Double()
+  external double height;
+
+  @Int32()
+  external int nameLength;
+
+  @Int32()
+  external int valueLength;
+}
+
+/// The information of a published accessible node.
+final class NativeAccessibleNodeInfo {
+  const NativeAccessibleNodeInfo({
+    required this.role,
+    required this.parent,
+    required this.flags,
+    required this.left,
+    required this.top,
+    required this.width,
+    required this.height,
+    required this.nameLength,
+    required this.valueLength,
+  });
+
+  final int role;
+  final int parent;
+  final int flags;
+  final double left;
+  final double top;
+  final double width;
+  final double height;
+  final int nameLength;
+  final int valueLength;
+}
+
 final class NativeTextMetrics {
   const NativeTextMetrics({
     required this.width,
@@ -380,6 +467,27 @@ typedef _DrawImageNative = Void Function(
   Double,
   Double,
 );
+typedef _SetAccessibilityTreeNative = Int32 Function(
+  Pointer<DuiWindowOpaque>,
+  Pointer<DuiAccessibleNodeStruct>,
+  IntPtr,
+);
+typedef _AccessibilityNodeCountNative = Int32 Function(
+  Pointer<DuiWindowOpaque>,
+);
+typedef _AccessibilityNodeInfoNative = Int32 Function(
+  Pointer<DuiWindowOpaque>,
+  Int32,
+  Pointer<DuiAccessibleNodeInfoStruct>,
+);
+typedef _AccessibilityNodeNameNative = Pointer<Utf8> Function(
+  Pointer<DuiWindowOpaque>,
+  Int32,
+);
+typedef _AccessibilityNodeValueNative = Pointer<Utf8> Function(
+  Pointer<DuiWindowOpaque>,
+  Int32,
+);
 typedef _DrawTextNative = Int32 Function(
   Pointer<DuiWindowOpaque>,
   Pointer<Utf8>,
@@ -563,6 +671,27 @@ typedef _DrawImageDart = void Function(
   double,
   double,
   double,
+);
+typedef _SetAccessibilityTreeDart = int Function(
+  Pointer<DuiWindowOpaque>,
+  Pointer<DuiAccessibleNodeStruct>,
+  int,
+);
+typedef _AccessibilityNodeCountDart = int Function(
+  Pointer<DuiWindowOpaque>,
+);
+typedef _AccessibilityNodeInfoDart = int Function(
+  Pointer<DuiWindowOpaque>,
+  int,
+  Pointer<DuiAccessibleNodeInfoStruct>,
+);
+typedef _AccessibilityNodeNameDart = Pointer<Utf8> Function(
+  Pointer<DuiWindowOpaque>,
+  int,
+);
+typedef _AccessibilityNodeValueDart = Pointer<Utf8> Function(
+  Pointer<DuiWindowOpaque>,
+  int,
 );
 typedef _DrawTextDart = int Function(
   Pointer<DuiWindowOpaque>,
@@ -765,6 +894,26 @@ final class NativeBindings {
         _drawImage = library.lookupFunction<_DrawImageNative, _DrawImageDart>(
           'dui_draw_image',
         ),
+        _setAccessibilityTree = library.lookupFunction<
+            _SetAccessibilityTreeNative, _SetAccessibilityTreeDart>(
+          'dui_window_set_accessibility_tree',
+        ),
+        _accessibilityNodeCount = library.lookupFunction<
+            _AccessibilityNodeCountNative, _AccessibilityNodeCountDart>(
+          'dui_window_get_accessibility_node_count',
+        ),
+        _accessibilityNodeInfo = library.lookupFunction<
+            _AccessibilityNodeInfoNative, _AccessibilityNodeInfoDart>(
+          'dui_window_get_accessibility_node_info',
+        ),
+        _accessibilityNodeName = library.lookupFunction<
+            _AccessibilityNodeNameNative, _AccessibilityNodeNameDart>(
+          'dui_window_get_accessibility_node_name',
+        ),
+        _accessibilityNodeValue = library.lookupFunction<
+            _AccessibilityNodeValueNative, _AccessibilityNodeValueDart>(
+          'dui_window_get_accessibility_node_value',
+        ),
         _drawText = library.lookupFunction<_DrawTextNative, _DrawTextDart>(
           'dui_draw_text',
         ),
@@ -852,6 +1001,11 @@ final class NativeBindings {
   final _ImageDestroyDart _imageDestroy;
   final _ImageGetSizeDart _imageGetSize;
   final _DrawImageDart _drawImage;
+  final _SetAccessibilityTreeDart _setAccessibilityTree;
+  final _AccessibilityNodeCountDart _accessibilityNodeCount;
+  final _AccessibilityNodeInfoDart _accessibilityNodeInfo;
+  final _AccessibilityNodeNameDart _accessibilityNodeName;
+  final _AccessibilityNodeValueDart _accessibilityNodeValue;
   final _DrawTextDart _drawText;
   final _TextLayoutCreateDart _textLayoutCreate;
   final _TextLayoutDestroyDart textLayoutDestroy;
@@ -1298,6 +1452,70 @@ final class NativeBindings {
   ) {
     _drawImage(window, image, x, y, width, height);
   }
+
+  /// Publishes the semantics tree of the window.
+  void windowSetAccessibilityTree(
+    Pointer<DuiWindowOpaque> window,
+    Pointer<DuiAccessibleNodeStruct> nodes,
+    int count,
+  ) {
+    if (_setAccessibilityTree(window, nodes, count) == 0) {
+      throw StateError('Could not publish the accessibility tree: $lastError');
+    }
+  }
+
+  /// The number of the published accessible nodes.
+  int windowGetAccessibilityNodeCount(Pointer<DuiWindowOpaque> window) {
+    final count = _accessibilityNodeCount(window);
+    if (count == 0 && lastError.isNotEmpty) {
+      throw StateError('Could not read the accessibility tree: $lastError');
+    }
+    return count;
+  }
+
+  /// The information of a published accessible node.
+  NativeAccessibleNodeInfo windowGetAccessibilityNodeInfo(
+    Pointer<DuiWindowOpaque> window,
+    int index,
+    Arena arena,
+  ) {
+    final info = arena<DuiAccessibleNodeInfoStruct>();
+    if (_accessibilityNodeInfo(window, index, info) == 0) {
+      throw StateError(
+        'Could not read the accessible node $index: $lastError',
+      );
+    }
+    final value = info.ref;
+    return NativeAccessibleNodeInfo(
+      role: value.role,
+      parent: value.parent,
+      flags: value.flags,
+      left: value.left,
+      top: value.top,
+      width: value.width,
+      height: value.height,
+      nameLength: value.nameLength,
+      valueLength: value.valueLength,
+    );
+  }
+
+  /// The name of a published accessible node.
+  ///
+  /// The returned pointer stays valid until the next call on the same thread.
+  Pointer<Utf8> windowGetAccessibilityNodeName(
+    Pointer<DuiWindowOpaque> window,
+    int index,
+  ) =>
+      _accessibilityNodeName(window, index);
+
+  /// The value of a published accessible node.
+  ///
+  /// The returned pointer stays valid until the next call on the same thread.
+  Pointer<Utf8> windowGetAccessibilityNodeValue(
+    Pointer<DuiWindowOpaque> window,
+    int index,
+  ) =>
+      _accessibilityNodeValue(window, index);
 
   static NativeBindings open({
     String? libraryPath,

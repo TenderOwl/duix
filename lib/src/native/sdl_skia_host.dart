@@ -9,6 +9,7 @@ import '../events.dart';
 import '../geometry.dart';
 import '../image.dart';
 import '../window.dart';
+import 'accessibility.dart';
 import 'native_bindings.dart';
 import 'native_image.dart';
 import 'native_text_layout.dart';
@@ -146,6 +147,18 @@ final class SdlSkiaHost
   }
 
   bool isOpen(Window window) => _sessions[window]?.open ?? false;
+
+  /// The native handle of an open window.
+  ///
+  /// The handle gives access to the native state of the window, for example
+  /// the published semantics tree.
+  Pointer<DuiWindowOpaque> nativeHandle(Window window) {
+    final session = _sessions[window];
+    if (session == null) {
+      throw StateError('The window is not open.');
+    }
+    return session.pointer;
+  }
 
   NativeWindowDiagnostics? diagnosticsFor(Window window) {
     if (!diagnosticsEnabled) return null;
@@ -367,6 +380,7 @@ final class SdlSkiaHost
     try {
       final context = NativeDrawingContext(bindings, session.pointer);
       window.renderFrame(context);
+      publishAccessibilityTree(bindings, session.pointer, window.semanticsTree);
       if (diagnosticsEnabled) {
         session.sampleFrameRate();
         _drawFrameRateOverlay(window, session, context);

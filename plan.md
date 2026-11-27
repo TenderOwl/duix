@@ -92,6 +92,7 @@ Skia canvas масштабируется через `displayScale`. Backbuffer �
 - отдельный виджет `ScrollBar`: свой контрол с полосой и бегунком, бегунок перетаскивается, клик по полосе листает на одну страницу, значение — свойство (`minimum`, `maximum`, `value`, `viewportSize`, `thickness`, `orientation`); `ScrollViewer` построен на двух таких контролах (`horizontalScrollBar`, `verticalScrollBar`) и больше не рисует полосы сам;
 - модель выделения `SelectionModel`: одиночное и множественное выделение, текущий элемент и якорь диапазона, уведомления об изменениях, переходы клавиатурой (`moveSelection`, `selectFirst`, `selectLast`);
 - popup-слой: `PopupLayer` (`lib/src/popup.dart`) и `Window.overlay` — слой окна поверх содержимого со своим layout и clip, перехватывает клики вне всплывающего окна, закрывается по Escape и возвращает фокус владельцу; размещение: снизу, сверху, слева, справа, у курсора, у области владельца;
+- мост accessibility: дерево семантики окна уходит в native через `dui_window_set_accessibility_tree` — роли, имена, значения, состояния и границы; native хранит дерево плоским списком, у каждого узла индекс родителя; `SdlSkiaHost.nativeHandle(window)` даёт доступ к native-состоянию окна;
 - шаблоны для любого контрола: `TemplatedControl` — базовый класс с механикой шаблона (создание, замена и освобождение persistent-поддерева, `templateRoot`, `hasTemplate`, хук `onTemplateReplacing`); `ContentControl extends TemplatedControl`; собственный контент виджета реализуется через `measureContentCore`/`arrangeContentCore`/`renderContentCore`/`hitTestContentCore`, чтобы шаблон нельзя было случайно перекрыть подкласом; focus ring рисует база (после контента, сверху), а не каждый виджет отдельно; типизированный шаблон живёт в конкретном классе (`Button.templateProperty` → `ControlTemplate<Button>`), база хранит `ControlTemplate<dynamic>?`;
 - `Label`, `TextBox`, `Button`, `Border`, `StackPanel`, `DockPanel`, `Grid`;
 - постоянное дерево и lifecycle mount/unmount;
@@ -1098,6 +1099,22 @@ GPU backend по-прежнему не входит в ближайшие эта
 ---
 
 ## 9. Журнал работ
+
+### 2026-11-27 — слой 0, пункт 6 (мост дерева семантики)
+
+Сделано:
+
+- Дерево семантики окна пересекает C ABI: `dui_window_set_accessibility_tree` принимает плоский список узлов (`DuiAccessibleNode`: роль, индекс родителя, флаги состояния, границы, имя, значение), строки копируются. Ответные функции: `dui_window_get_accessibility_node_count`, `..._node_info`, `..._node_name`, `..._node_value`.
+- Dart-слой публикует дерево после каждого кадра (`lib/src/native/accessibility.dart`): узлы идут в порядке обхода, у каждого — индекс родителя, состояние пакуется в битовые флаги.
+- `SdlSkiaHost.nativeHandle(window)` открывает native-состояние окна (нужно для проверки моста и для будущих мостов платформ).
+
+Проверено:
+
+- `dart analyze` — No issues found; `dart format` — 0 изменений.
+- `dart test --exclude-tags clipboard,native` — 277/277; `dart test --tags native --exclude-tags clipboard` — 44/44 (было 41, добавлено 3 теста моста).
+- `test/native_accessibility_test.dart`: кнопка публикуется одним узлом с ролью `button`, именем и границами; дерево из нескольких узлов хранит индексы родителей; флаги состояния следуют за контролами.
+
+Дальше: сам мост к assistive technology — Windows UI Automation (поставщик `IRawElementProvider` поверх хранимого дерева); macOS NSAccessibility и Linux AT-SPI требуют чужих машин для проверки.
 
 ### 2026-11-27 — слой 0, пункт 2: popup-слой
 

@@ -79,6 +79,20 @@ struct DuiImage {
   sk_sp<SkImage> image;
 };
 
+// One node of the semantics tree of a window. The strings are owned by the
+// window, so a platform bridge can read them without a copy.
+struct DuiAccessibleNodeData {
+  int32_t role = 0;
+  int32_t parent = -1;
+  uint32_t flags = 0;
+  double left = 0.0;
+  double top = 0.0;
+  double width = 0.0;
+  double height = 0.0;
+  std::string name;
+  std::string value;
+};
+
 struct DuiWindow {
   explicit DuiWindow(DuiHost* owner) : host(owner) {}
 
@@ -92,6 +106,8 @@ struct DuiWindow {
   uint32_t background_rgba = 0xFFFFFFFF;
   bool frame_active = false;
   DuiLegacyText legacy_text;
+  // The semantics tree of the window, published by the Dart layer.
+  std::vector<DuiAccessibleNodeData> accessible_nodes;
 };
 
 struct DuiHost {
@@ -1545,6 +1561,102 @@ SdlScope lock;
     return 0;
   }
   return 1;
+}
+
+int32_t dui_window_set_accessibility_tree(
+    DuiWindow* window,
+    const DuiAccessibleNode* nodes,
+    size_t count) {
+  SdlScope lock;
+  clear_error();
+  if (!window) {
+    set_error("The window handle is not valid.");
+    return 0;
+  }
+  std::vector<DuiAccessibleNodeData> tree;
+  tree.reserve(count);
+  for (size_t index = 0; index < count; index++) {
+    const DuiAccessibleNode& node = nodes[index];
+    DuiAccessibleNodeData data;
+    data.role = node.role;
+    data.parent = node.parent;
+    data.flags = node.flags;
+    data.left = node.left;
+    data.top = node.top;
+    data.width = node.width;
+    data.height = node.height;
+    if (node.name_utf8) {
+      data.name.assign(node.name_utf8);
+    }
+    if (node.value_utf8) {
+      data.value.assign(node.value_utf8);
+    }
+    tree.push_back(std::move(data));
+  }
+  window->accessible_nodes = std::move(tree);
+  return 1;
+}
+
+int32_t dui_window_get_accessibility_node_count(const DuiWindow* window) {
+  SdlScope lock;
+  clear_error();
+  if (!window) {
+    set_error("The window handle is not valid.");
+    return 0;
+  }
+  return static_cast<int32_t>(window->accessible_nodes.size());
+}
+
+int32_t dui_window_get_accessibility_node_info(
+    const DuiWindow* window,
+    int32_t index,
+    DuiAccessibleNodeInfo* out_info) {
+  SdlScope lock;
+  clear_error();
+  if (!window || !out_info) {
+    set_error("The window handle is not valid.");
+    return 0;
+  }
+  if (index < 0 ||
+      static_cast<size_t>(index) >= window->accessible_nodes.size()) {
+    set_error("The accessible node index is out of range.");
+    return 0;
+  }
+  const DuiAccessibleNodeData& node =
+      window->accessible_nodes[static_cast<size_t>(index)];
+  out_info->struct_size = sizeof(DuiAccessibleNodeInfo);
+  out_info->role = node.role;
+  out_info->parent = node.parent;
+  out_info->flags = node.flags;
+  out_info->left = node.left;
+  out_info->top = node.top;
+  out_info->width = node.width;
+  out_info->height = node.height;
+  out_info->name_length = static_cast<int32_t>(node.name.size());
+  out_info->value_length = static_cast<int32_t>(node.value.size());
+  return 1;
+}
+
+const char* dui_window_get_accessibility_node_name(
+    const DuiWindow* window,
+    int32_t index) {
+  SdlScope lock;
+  if (!window || index < 0 ||
+      static_cast<size_t>(index) >= window->accessible_nodes.size()) {
+    return nullptr;
+  }
+  return window->accessible_nodes[static_cast<size_t>(index)].name.c_str();
+}
+
+const char* dui_window_get_accessibility_node_value(
+    const DuiWindow* window,
+    int32_t index) {
+  SdlScope lock;
+  if (!window || index < 0 ||
+      static_cast<size_t>(index) >= window->accessible_nodes.size()) {
+    return nullptr;
+  }
+  return window->accessible_nodes[static_cast<size_t>(index)].value.c_str();
 }
 
 int32_t dui_window_text_input_active(const DuiWindow* window) {
