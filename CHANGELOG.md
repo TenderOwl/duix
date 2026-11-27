@@ -13,3 +13,6 @@
 - `runApp(window)` shows the window, runs its event loop until the window is
   closed and releases the native host, so an application no longer needs the
   event loop and the cleanup in its own code.
+- `WidgetState` gathers the state of a control into one value: enabled,
+  hovered, pressed and focused. The base class keeps the pressed state up to
+  date, so a control no longer has to maintain it on its own.

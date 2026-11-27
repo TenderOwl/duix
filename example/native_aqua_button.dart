@@ -22,8 +22,8 @@ Future<void> main(List<String> args) async {
       ..bind(
         _AquaSurface.colorProperty,
         _combine2(
-          control.propertyBinding(Button.isPressedProperty),
-          control.propertyBinding(Control.isPointerOverProperty),
+          control.propertyBinding<bool>(Control.isPressedProperty),
+          control.propertyBinding<bool>(Control.isPointerOverProperty),
           (bool pressed, bool hovered) => pressed
               ? _aquaPressed
               : hovered

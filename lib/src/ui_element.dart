@@ -9,6 +9,7 @@ import 'properties.dart';
 import 'semantics.dart';
 import 'styles.dart';
 import 'text_layout.dart';
+import 'widget_state.dart';
 
 abstract interface class WindowHost {
   void requestFrame();
@@ -587,12 +588,43 @@ abstract class Control extends UIElement {
     defaultValue: false,
     affectsPaint: true,
   );
+  static const isPressedProperty = DuiProperty<Control, bool>(
+    name: 'isPressed',
+    defaultValue: false,
+    affectsPaint: true,
+  );
+
+  Control() {
+    addHandler(UIElement.pointerDown, _handlePointerDown);
+    addHandler(UIElement.pointerUp, _handlePointerUp);
+  }
 
   bool _isFocused = false;
 
   bool get isFocusable => true;
   bool get isFocused => _isFocused;
   bool get isPointerOver => getValue(isPointerOverProperty);
+  bool get isPressed => getValue(isPressedProperty);
+
+  /// The state of the control as a whole.
+  ///
+  /// The state gathers the flags that the base class keeps up to date, so a
+  /// template or a style reacts to one value instead of to a set of separate
+  /// properties.
+  WidgetState get state => WidgetState(
+        enabled: isEnabled,
+        hovered: isPointerOver,
+        pressed: isPressed,
+        focused: isFocused,
+      );
+
+  /// Whether the control takes the press state of the pointer.
+  ///
+  /// A control that declares this keeps [isPressed] up to date: the state
+  /// appears with the pointer down and disappears with the pointer up or when
+  /// the pointer leaves the control. Controls that only show something, like
+  /// a label, leave it alone.
+  bool get handlesPointerPress => false;
 
   bool focus() => _window?.requestFocus(this) ?? false;
   bool capturePointer() => _window?.capturePointer(this) ?? false;
@@ -609,11 +641,35 @@ abstract class Control extends UIElement {
   void onFocusChanged(bool value) {}
   void onTextInputActivated() {}
 
-  void updatePointerOver(bool value) => setValue(isPointerOverProperty, value);
+  /// Called when the control was pressed and the pointer was released on it.
+  ///
+  /// The base class calls it after it has cleared the pressed state, so the
+  /// control can react to the release without reading [isPressed].
+  void onReleased(PointerEventArgs args) {}
+
+  void updatePointerOver(bool value) {
+    setValue(isPointerOverProperty, value);
+    // A pointer that leaves the control cancels the press, the way the widget
+    // states of GTK drop the active state.
+    if (!value && isPressed) updatePressed(false);
+  }
+
+  void updatePressed(bool value) => setValue(isPressedProperty, value);
+
+  void _handlePointerDown(Object sender, PointerEventArgs args) {
+    if (!isEnabled || !handlesPointerPress) return;
+    updatePressed(true);
+  }
+
+  void _handlePointerUp(Object sender, PointerEventArgs args) {
+    if (!isPressed) return;
+    updatePressed(false);
+    onReleased(args);
+  }
 
   @override
   SemanticsState get semanticsState => SemanticsState(
-        focused: isFocused,
-        disabled: !isEnabled,
+        focused: state.focused,
+        disabled: !state.enabled,
       );
 }

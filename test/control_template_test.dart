@@ -56,7 +56,7 @@ void main() {
       state = Label()
         ..bind(
           Label.textProperty,
-          control.propertyBinding(Button.isPressedProperty).map(
+          control.propertyBinding<bool>(Control.isPressedProperty).map(
                 (pressed) => pressed ? 'Pressed' : 'Idle',
               ),
         );

@@ -31,4 +31,5 @@ export 'src/text_box.dart';
 export 'src/text_buffer.dart';
 export 'src/text_layout.dart';
 export 'src/ui_element.dart';
+export 'src/widget_state.dart';
 export 'src/window.dart';

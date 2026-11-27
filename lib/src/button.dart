@@ -12,15 +12,9 @@ final class Button extends ContentControl {
   Button({super.content, void Function()? onClick}) {
     if (onClick != null) addClickHandler(onClick);
     addHandler(UIElement.pointerDown, _pointerDown);
-    addHandler(UIElement.pointerUp, _pointerUp);
     addHandler(UIElement.keyDown, _keyDown);
   }
 
-  static const isPressedProperty = DuiProperty<Button, bool>(
-    name: 'isPressed',
-    defaultValue: false,
-    affectsPaint: true,
-  );
   static const templateProperty = DuiProperty<Button, ControlTemplate<Button>?>(
     name: 'template',
     defaultValue: null,
@@ -31,8 +25,6 @@ final class Button extends ContentControl {
   final _clickHandlers = <void Function()>[];
   UIElement? _templateRoot;
 
-  bool get isPressed => getValue(isPressedProperty);
-
   ControlTemplate<Button>? get template => getValue(templateProperty);
   set template(ControlTemplate<Button>? value) =>
       setValue(templateProperty, value);
@@ -40,19 +32,20 @@ final class Button extends ContentControl {
   /// The persistent root created by the current template, if any.
   UIElement? get templateRoot => _templateRoot;
 
+  @override
+  bool get handlesPointerPress => true;
+
   void addClickHandler(void Function() handler) => _clickHandlers.add(handler);
   void removeClickHandler(void Function() handler) =>
       _clickHandlers.remove(handler);
 
   void _pointerDown(Object sender, PointerEventArgs args) {
     if (!isEnabled) return;
-    setValue(isPressedProperty, true);
     focus();
   }
 
-  void _pointerUp(Object sender, PointerEventArgs args) {
-    if (!isPressed) return;
-    setValue(isPressedProperty, false);
+  @override
+  void onReleased(PointerEventArgs args) {
     _activate();
     args.handled = true;
   }
@@ -82,9 +75,9 @@ final class Button extends ContentControl {
 
   @override
   SemanticsState get semanticsState => SemanticsState(
-        focused: isFocused,
-        disabled: !isEnabled,
-        pressed: isPressed,
+        focused: state.focused,
+        disabled: !state.enabled,
+        pressed: state.pressed,
       );
 
   @override

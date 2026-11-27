@@ -86,6 +86,7 @@ Skia canvas масштабируется через `displayScale`. Backbuffer �
 
 - `Application`, `Window`, `WindowHost`;
 - эргономичная точка входа: `runApp(window)` показывает окно, крутит его цикл событий до закрытия и освобождает native-хост; `Application.run` делает то же на своём хосте, а `NativeHost.runWindow` — цикл на уровне хоста;
+- единое состояние виджета: `WidgetState` (enabled, hovered, pressed, focused) собирает флаги контрола в одно значение; базовый `Control` владеет press-состоянием (события pointer down/up, отмена при уходе указателя) и сообщает о релизе через `onReleased`, виджет только объявляет `handlesPointerPress`; `SemanticsState` контрола собирается из того же состояния;
 - `UIElement`, `Control`, `ContentControl`, `Panel`;
 - `Label`, `TextBox`, `Button`, `Border`, `StackPanel`, `DockPanel`, `Grid`;
 - постоянное дерево и lifecycle mount/unmount;
@@ -1043,6 +1044,27 @@ GPU backend по-прежнему не входит в ближайшие эта
 - `example/native_frame_benchmark.dart`: idle 1015,6 мс при CPU 1,54 %, 60 асинхронных обновлений, latency avg 10,4 мс, fps 62,4.
 
 Дальше: публикация следующей версии пакета с новым API; остальные платформы (macOS x64, Linux arm64, Windows arm64) и codesign/notarization для macOS.
+
+### 2026-11-27 — единое состояние виджета `WidgetState`
+
+Сделано:
+
+- Добавлен `WidgetState` (`lib/src/widget_state.dart`): одно значение с флагами `enabled`, `hovered`, `pressed`, `focused`, с `copyWith`, сравнением и `toString`. Экспортируется из `package:duix/dui.dart`.
+- Базовый `Control` владеет press-состоянием: свойство `isPressedProperty` переехало из `Button` в `Control`, база подписалась на `pointerDown`/`pointerUp` и ведёт pressed-состояние сама. Виджет объявляет `handlesPointerPress` (по умолчанию false, у `Button` — true) и получает релиз через `onReleased(args)`.
+- Уход указателя от контрола отменяет нажатие (`updatePointerOver(false)`), как GTK снимает active-состояние при leave-notify. Релиз вне контрола больше не активирует кнопку.
+- `Control.state` собирает состояние целиком; `SemanticsState` контрола и кнопки собираются из него же — это единый источник для будущих native-мостов accessibility (UIA/NSAccessibility/AT-SPI, §7 п. 3).
+- `Button` больше не ведёт pressed-состояние сам: активация переехала в `onReleased`, `focus()` остался в обработчике pointer down.
+- Добавлен `test/widget_state_test.dart` (7 тестов): начальное состояние, hover, press/release, отмена нажатия при уходе указателя, disabled-контрол, фокус и связь с `SemanticsState`.
+
+Проверено:
+
+- `dart analyze` — No issues found; `dart format` — 0 изменений.
+- `dart test --exclude-tags clipboard,native` — 236/236; `dart test --tags native --exclude-tags clipboard` — 38/38.
+- `example/native_aqua_button.dart --smoke` проходит: шаблон по-прежнему переключает normal/hover/pressed по typed-свойствам.
+
+Ограничение шага: `WidgetState` — производное значение, а не bindable-свойство, поэтому шаблон по-прежнему подписывается на отдельные свойства (`Control.isPressedProperty`, `Control.isPointerOverProperty`). Чтобы шаблон подписывался на состояние целиком, нужны derived-свойства в системе свойств — это отдельный шаг.
+
+Дальше: `natural size` (minimum/natural/allocated) в layout — вторая недостающая часть модели GTK; затем native-мосты accessibility, которые публикуют `WidgetState`.
 
 ### 2026-11-27 — репозиторий на GitHub и публикация пакета
 
