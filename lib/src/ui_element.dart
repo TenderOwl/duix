@@ -7,6 +7,7 @@ import 'file_dialog.dart';
 import 'geometry.dart';
 import 'properties.dart';
 import 'semantics.dart';
+import 'size_request.dart';
 import 'styles.dart';
 import 'text_layout.dart';
 import 'widget_state.dart';
@@ -93,6 +94,8 @@ abstract class UIElement extends PropertyOwner {
   WindowHost? _window;
   Rect _bounds = Rect.zero;
   Size _desiredSize = Size.zero;
+  Size _naturalSize = Size.zero;
+  Size _minimumSize = Size.zero;
   Size _arrangedSize = Size.zero;
   Size? _previousAvailableSize;
   double _minWidth = 0;
@@ -122,6 +125,21 @@ abstract class UIElement extends PropertyOwner {
 
   /// Size requested during measure, including margin.
   Size get desiredSize => _desiredSize;
+
+  /// The size the element would like to have, without the margin.
+  ///
+  /// The natural size is the size of the element under the limits of the
+  /// space it was measured in. It never drops below the minimum size.
+  Size get naturalSize => _naturalSize;
+
+  /// The smallest size the element can work with, without the margin.
+  ///
+  /// A parent reserves this space for the element, as long as the space it
+  /// has is enough.
+  Size get minimumSize => _minimumSize;
+
+  /// The size the element got from its parent, without the margin.
+  Size get allocatedSize => bounds.size;
 
   /// Size of the slot supplied to arrange, including margin.
   Size get arrangedSize => _arrangedSize;
@@ -269,6 +287,8 @@ abstract class UIElement extends PropertyOwner {
     _validateAvailableSize(availableSize);
     if (!_isVisible) {
       _desiredSize = Size.zero;
+      _naturalSize = Size.zero;
+      _minimumSize = Size.zero;
       _previousAvailableSize = availableSize;
       _measureValid = true;
       return _desiredSize;
@@ -285,15 +305,34 @@ abstract class UIElement extends PropertyOwner {
       innerAvailable.width < maxWidth ? innerAvailable.width : maxWidth,
       innerAvailable.height < maxHeight ? innerAvailable.height : maxHeight,
     );
-    final measured = measureCore(coreConstraints).constrain(coreConstraints);
+    final request = measureRequest(coreConstraints);
+    // The natural size is limited by the space the element is measured in.
+    final natural = request.natural.constrain(coreConstraints);
+    // The minimum is limited by the same space: an element never asks for
+    // more than it can get, it only keeps the space it needs.
+    final minimum = request.minimum.constrain(coreConstraints);
+    _naturalSize = Size(
+      natural.width.clamp(minWidth, maxWidth),
+      natural.height.clamp(minHeight, maxHeight),
+    );
+    _minimumSize = Size(
+      minimum.width.clamp(minWidth, maxWidth),
+      minimum.height.clamp(minHeight, maxHeight),
+    );
+    // The element asks for the natural size, but it never drops below its
+    // minimum.
+    final measured = Size(
+      _naturalSize.width < _minimumSize.width
+          ? _minimumSize.width
+          : _naturalSize.width,
+      _naturalSize.height < _minimumSize.height
+          ? _minimumSize.height
+          : _naturalSize.height,
+    );
     if (!measured.width.isFinite || !measured.height.isFinite) {
       throw StateError('An element must report a finite desired size.');
     }
-    final constrained = Size(
-      measured.width.clamp(minWidth, maxWidth),
-      measured.height.clamp(minHeight, maxHeight),
-    );
-    _desiredSize = margin.inflateSize(constrained);
+    _desiredSize = margin.inflateSize(measured);
     _previousAvailableSize = availableSize;
     _measureValid = true;
     return _desiredSize;
@@ -313,16 +352,26 @@ abstract class UIElement extends PropertyOwner {
       (desiredSize.width - margin.horizontal).clamp(0, double.infinity),
       (desiredSize.height - margin.vertical).clamp(0, double.infinity),
     );
-    final width = horizontalAlignment == HorizontalAlignment.stretch
+    var width = horizontalAlignment == HorizontalAlignment.stretch
         ? contentRect.width
         : (desiredContent.width < contentRect.width
             ? desiredContent.width
             : contentRect.width);
-    final height = verticalAlignment == VerticalAlignment.stretch
+    var height = verticalAlignment == VerticalAlignment.stretch
         ? contentRect.height
         : (desiredContent.height < contentRect.height
             ? desiredContent.height
             : contentRect.height);
+    // The element keeps its minimum size as long as the slot has room for
+    // it: an element that cannot work below that size is not squeezed
+    // below it.
+    if (width < _minimumSize.width && contentRect.width >= _minimumSize.width) {
+      width = _minimumSize.width;
+    }
+    if (height < _minimumSize.height &&
+        contentRect.height >= _minimumSize.height) {
+      height = _minimumSize.height;
+    }
     final left = switch (horizontalAlignment) {
       HorizontalAlignment.center =>
         contentRect.left + (contentRect.width - width) / 2,
@@ -575,6 +624,18 @@ abstract class UIElement extends PropertyOwner {
   (int, int)? get semanticsSelection => null;
 
   Size measureCore(Size availableSize);
+
+  /// The size the element asks for.
+  ///
+  /// The default implementation reports the size of [measureCore] as the
+  /// natural size and no minimum, so the element can be squeezed to nothing.
+  /// A widget that cannot work below a certain size overrides this and
+  /// reports a minimum: the layout keeps that space for the element, as long
+  /// as it has enough.
+  SizeRequest measureRequest(Size availableSize) => SizeRequest.natural(
+        measureCore(availableSize),
+      );
+
   void arrangeCore(Rect finalRect) {}
   void renderCore(DrawingContext context) {}
   UIElement? hitTestCore(Point position) => null;

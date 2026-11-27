@@ -16,3 +16,7 @@
 - `WidgetState` gathers the state of a control into one value: enabled,
   hovered, pressed and focused. The base class keeps the pressed state up to
   date, so a control no longer has to maintain it on its own.
+- The layout knows the three sizes of a widget: the minimum size it cannot
+  work without, the natural size it would like to have and the size it was
+  allocated. An element reports them through `SizeRequest`, and a widget that
+  cannot work below a certain size keeps that space.

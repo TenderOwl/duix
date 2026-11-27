@@ -6,6 +6,7 @@ import 'geometry.dart';
 import 'headless_text_layout.dart';
 import 'properties.dart';
 import 'semantics.dart';
+import 'size_request.dart';
 import 'text_buffer.dart';
 import 'text_layout.dart';
 import 'ui_element.dart';
@@ -363,15 +364,17 @@ final class TextBox extends Control {
   @override
   Size measureCore(Size availableSize) {
     final layout = _layoutForMeasure();
-    var width = layout.width + _contentPaddingHorizontal;
-    var height = layout.height + _contentPaddingVertical;
-    if (width < _minimumWidth) width = _minimumWidth;
-    if (height < _minimumHeight) height = _minimumHeight;
-    if (availableSize.width.isFinite && width > availableSize.width) {
-      width = availableSize.width;
-    }
-    return Size(width, height);
+    return Size(
+      layout.width + _contentPaddingHorizontal,
+      layout.height + _contentPaddingVertical,
+    );
   }
+
+  @override
+  SizeRequest measureRequest(Size availableSize) => SizeRequest(
+        minimum: const Size(_minimumWidth, _minimumHeight),
+        natural: measureCore(availableSize),
+      );
 
   @override
   void renderCore(DrawingContext context) {

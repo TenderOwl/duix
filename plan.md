@@ -87,6 +87,7 @@ Skia canvas масштабируется через `displayScale`. Backbuffer �
 - `Application`, `Window`, `WindowHost`;
 - эргономичная точка входа: `runApp(window)` показывает окно, крутит его цикл событий до закрытия и освобождает native-хост; `Application.run` делает то же на своём хосте, а `NativeHost.runWindow` — цикл на уровне хоста;
 - единое состояние виджета: `WidgetState` (enabled, hovered, pressed, focused) собирает флаги контрола в одно значение; базовый `Control` владеет press-состоянием (события pointer down/up, отмена при уходе указателя) и сообщает о релизе через `onReleased`, виджет только объявляет `handlesPointerPress`; `SemanticsState` контрола собирается из того же состояния;
+- модель размеров GTK: `SizeRequest` (minimum + natural) — элемент сообщает, какого размера он хочет и какого ему нужно; `UIElement` мержит запрос, отдаёт desired = max(natural, minimum) в пределах доступного места, а `arrange` не сжимает элемент ниже минимума, если место есть; доступны `minimumSize`, `naturalSize`, `allocatedSize`; `TextBox` объявляет минимум 80×30 (вместо внутреннего пола на natural);
 - `UIElement`, `Control`, `ContentControl`, `Panel`;
 - `Label`, `TextBox`, `Button`, `Border`, `StackPanel`, `DockPanel`, `Grid`;
 - постоянное дерево и lifecycle mount/unmount;
@@ -1065,6 +1066,28 @@ GPU backend по-прежнему не входит в ближайшие эта
 Ограничение шага: `WidgetState` — производное значение, а не bindable-свойство, поэтому шаблон по-прежнему подписывается на отдельные свойства (`Control.isPressedProperty`, `Control.isPointerOverProperty`). Чтобы шаблон подписывался на состояние целиком, нужны derived-свойства в системе свойств — это отдельный шаг.
 
 Дальше: `natural size` (minimum/natural/allocated) в layout — вторая недостающая часть модели GTK; затем native-мосты accessibility, которые публикуют `WidgetState`.
+
+### 2026-11-27 — модель размеров GTK: minimum, natural, allocated
+
+Сделано:
+
+- Добавлен `SizeRequest` (`lib/src/size_request.dart`): пара `minimum` и `natural` — как `gtk_widget_get_preferred_width` в GTK. Экспортируется из `package:duix/dui.dart`.
+- `UIElement.measureRequest(availableSize)` — новый примитив: по умолчанию отдаёт natural из `measureCore` и нулевой minimum, поэтому поведение существующих виджетов не меняется; виджет, которому нужен минимум, переопределяет метод.
+- `UIElement.measure` считает natural и minimum отдельно (оба ограничены доступным местом), отдаёт desired = max(natural, minimum) и запоминает `_naturalSize`/`_minimumSize`.
+- `UIElement.arrange` не сжимает элемент ниже минимума, если слот это позволяет; если места меньше минимума, элемент сжимается и не выходит за границы — «элемент никогда не переполняет контейнер» остаётся правилом duix.
+- Новое API: `UIElement.minimumSize`, `naturalSize`, `allocatedSize` (размер, который дал родитель).
+- `TextBox` переведён на модель: `_minimumWidth`/`_minimumHeight` (80×30) стали minimum-размером запроса, а не полом на natural; поведение не изменилось — и в тесте «clamps to the available width instead of overflowing it», и в остальных.
+- Добавлен `test/size_request_test.dart` (8 тестов): элемент без минимума, минимум важнее меньшего natural, сжатие при нехватке места, резерв места родителем, allocated-размер, растянутый элемент, минимум TextBox, TextBox в узком окне.
+
+Проверено:
+
+- `dart analyze` — No issues found; `dart format` — 0 изменений.
+- `dart test --exclude-tags clipboard,native` — 244/244; `dart test --tags native --exclude-tags clipboard` — 38/38.
+- Примеры: native smoke (1 кадр, presented=1), TextBox smoke, headless counter, frame benchmark (idle 1005,6 мс при CPU 1,55 %, 60 обновлений, fps 63,0) — те же значения, что до шага.
+
+Отличие от GTK: GTK считает natural размер независимо от доступного места, duix мержит в доступном месте (модель WPF). Поэтому natural в duix — «размер при текущих ограничениях», а minimum — «размер, который элемент резервирует». Следующий шаг по теме — отдельный natural размер, не зависящий от места, и производные свойства в системе свойств, чтобы шаблон подписывался на состояние и на размер целиком.
+
+Дальше: native-мосты accessibility, которые публикуют `WidgetState` и размеры; затем отдельный natural-размер, не зависящий от места.
 
 ### 2026-11-27 — репозиторий на GitHub и публикация пакета
 
