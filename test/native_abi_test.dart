@@ -28,7 +28,7 @@ void main() {
   });
 
   test('ABI version is supported', () {
-    expect(bindings.abiVersion(), 3);
+    expect(bindings.abiVersion(), 4);
   });
 
   test('host can be created and destroyed repeatedly', () {

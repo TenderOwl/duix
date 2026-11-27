@@ -16,6 +16,8 @@ final class DuiWindowOpaque extends Opaque {}
 
 final class DuiTextLayoutOpaque extends Opaque {}
 
+final class DuiImageOpaque extends Opaque {}
+
 final class DuiEventStruct extends Struct {
   @Uint32()
   external int structSize;
@@ -144,6 +146,17 @@ final class DuiRectStruct extends Struct {
   external double height;
 }
 
+final class DuiImageSizeStruct extends Struct {
+  @Uint32()
+  external int structSize;
+
+  @Double()
+  external double width;
+
+  @Double()
+  external double height;
+}
+
 final class NativeTextMetrics {
   const NativeTextMetrics({
     required this.width,
@@ -154,6 +167,13 @@ final class NativeTextMetrics {
   final double width;
   final double height;
   final double baseline;
+}
+
+final class NativeImageSize {
+  const NativeImageSize({required this.width, required this.height});
+
+  final double width;
+  final double height;
 }
 
 final class NativeRect {
@@ -343,6 +363,23 @@ typedef _DrawLineNative = Void Function(
   Uint32,
   Double,
 );
+typedef _ImageCreateFromPngNative = Pointer<DuiImageOpaque> Function(
+  Pointer<Uint8>,
+  IntPtr,
+);
+typedef _ImageDestroyNative = Void Function(Pointer<DuiImageOpaque>);
+typedef _ImageGetSizeNative = Int32 Function(
+  Pointer<DuiImageOpaque>,
+  Pointer<DuiImageSizeStruct>,
+);
+typedef _DrawImageNative = Void Function(
+  Pointer<DuiWindowOpaque>,
+  Pointer<DuiImageOpaque>,
+  Double,
+  Double,
+  Double,
+  Double,
+);
 typedef _DrawTextNative = Int32 Function(
   Pointer<DuiWindowOpaque>,
   Pointer<Utf8>,
@@ -508,6 +545,23 @@ typedef _DrawLineDart = void Function(
   double,
   double,
   int,
+  double,
+);
+typedef _ImageCreateFromPngDart = Pointer<DuiImageOpaque> Function(
+  Pointer<Uint8>,
+  int,
+);
+typedef _ImageDestroyDart = void Function(Pointer<DuiImageOpaque>);
+typedef _ImageGetSizeDart = int Function(
+  Pointer<DuiImageOpaque>,
+  Pointer<DuiImageSizeStruct>,
+);
+typedef _DrawImageDart = void Function(
+  Pointer<DuiWindowOpaque>,
+  Pointer<DuiImageOpaque>,
+  double,
+  double,
+  double,
   double,
 );
 typedef _DrawTextDart = int Function(
@@ -696,6 +750,21 @@ final class NativeBindings {
         drawLine = library.lookupFunction<_DrawLineNative, _DrawLineDart>(
           'dui_draw_line',
         ),
+        _imageCreateFromPng = library
+            .lookupFunction<_ImageCreateFromPngNative, _ImageCreateFromPngDart>(
+          'dui_image_create_from_png',
+        ),
+        _imageDestroy =
+            library.lookupFunction<_ImageDestroyNative, _ImageDestroyDart>(
+          'dui_image_destroy',
+        ),
+        _imageGetSize =
+            library.lookupFunction<_ImageGetSizeNative, _ImageGetSizeDart>(
+          'dui_image_get_size',
+        ),
+        _drawImage = library.lookupFunction<_DrawImageNative, _DrawImageDart>(
+          'dui_draw_image',
+        ),
         _drawText = library.lookupFunction<_DrawTextNative, _DrawTextDart>(
           'dui_draw_text',
         ),
@@ -730,7 +799,7 @@ final class NativeBindings {
         windowPresent = library.lookupFunction<_FrameNative, _FrameDart>(
           'dui_window_present',
         ) {
-    if (abiVersion() != 3) {
+    if (abiVersion() != 4) {
       throw StateError('Unsupported dui_native ABI version: ${abiVersion()}.');
     }
   }
@@ -779,6 +848,10 @@ final class NativeBindings {
   final _DrawRectDart drawRect;
   final _DrawRoundedRectDart drawRoundedRect;
   final _DrawLineDart drawLine;
+  final _ImageCreateFromPngDart _imageCreateFromPng;
+  final _ImageDestroyDart _imageDestroy;
+  final _ImageGetSizeDart _imageGetSize;
+  final _DrawImageDart _drawImage;
   final _DrawTextDart _drawText;
   final _TextLayoutCreateDart _textLayoutCreate;
   final _TextLayoutDestroyDart textLayoutDestroy;
@@ -1183,6 +1256,48 @@ final class NativeBindings {
         width: value.width,
         height: value.height,
       );
+
+  /// Decodes a PNG image from the given bytes.
+  ///
+  /// Returns a null pointer when the data is not a readable PNG; the reason is
+  /// available through [lastError].
+  Pointer<DuiImageOpaque> imageCreateFromPng(Uint8List bytes) {
+    final data = calloc<Uint8>(bytes.length);
+    try {
+      data.asTypedList(bytes.length).setAll(0, bytes);
+      return _imageCreateFromPng(data, bytes.length);
+    } finally {
+      calloc.free(data);
+    }
+  }
+
+  /// Reads the pixel size of an image.
+  NativeImageSize imageGetSize(
+    Pointer<DuiImageOpaque> image,
+    Arena arena,
+  ) {
+    final size = arena<DuiImageSizeStruct>();
+    if (_imageGetSize(image, size) == 0) {
+      throw StateError('Could not read the native image size: $lastError');
+    }
+    final value = size.ref;
+    return NativeImageSize(width: value.width, height: value.height);
+  }
+
+  /// Releases an image.
+  void imageDestroy(Pointer<DuiImageOpaque> image) => _imageDestroy(image);
+
+  /// Draws an image into the destination rectangle.
+  void drawImage(
+    Pointer<DuiWindowOpaque> window,
+    Pointer<DuiImageOpaque> image,
+    double x,
+    double y,
+    double width,
+    double height,
+  ) {
+    _drawImage(window, image, x, y, width, height);
+  }
 
   static NativeBindings open({
     String? libraryPath,

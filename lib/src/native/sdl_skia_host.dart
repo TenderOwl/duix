@@ -7,8 +7,10 @@ import 'package:ffi/ffi.dart';
 import '../drawing.dart';
 import '../events.dart';
 import '../geometry.dart';
+import '../image.dart';
 import '../window.dart';
 import 'native_bindings.dart';
+import 'native_image.dart';
 import 'native_text_layout.dart';
 
 final class _NativeWindowSession {
@@ -111,6 +113,7 @@ final class SdlSkiaHost
 
   final NativeBindings bindings;
   late final textLayoutFactory = NativeTextLayoutFactory(bindings);
+  late final imageFactory = NativeImageFactory(bindings);
   final bool diagnosticsEnabled;
   final Pointer<DuiHostOpaque> _host;
   late final NativeCallable<LiveResizeCallbackNative> _liveResizeCallable;
@@ -607,6 +610,25 @@ final class NativeDrawingContext implements NativeTextDrawingContext {
       to.y,
       paint.color.value,
       paint.strokeWidth,
+    );
+  }
+
+  @override
+  void drawImage(DrawableImage image, Rect rect, Paint paint) {
+    if (image is! NativeImage) {
+      throw ArgumentError.value(
+        image,
+        'image',
+        'The native context needs an image of the native backend.',
+      );
+    }
+    bindings.drawImage(
+      window,
+      image.handle,
+      rect.left,
+      rect.top,
+      rect.width,
+      rect.height,
     );
   }
 

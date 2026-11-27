@@ -65,6 +65,20 @@ void main() {
     expect(command.strokeWidth, 3);
   });
 
+  test('recording renderer preserves images', () {
+    final renderer = RecordingDrawingContext();
+    final image = _FakeImage();
+    const rect = Rect.fromLTWH(2, 3, 40, 20);
+    const paint = Paint(Color(0xFFFFFFFF));
+
+    renderer.drawImage(image, rect, paint);
+
+    final command = renderer.commands.single as DrawImageCommand;
+    expect(command.image, same(image));
+    expect(command.rect, rect);
+    expect(command.paint, same(paint));
+  });
+
   test('window uses an opaque white background by default', () {
     final window = Window();
 
@@ -94,4 +108,19 @@ void main() {
     expect(changes, [2, 1.25]);
     expect(window.frameScheduled, isTrue);
   });
+}
+
+/// An image of a backend that is not involved in the test.
+final class _FakeImage implements DrawableImage {
+  @override
+  double get width => 8;
+
+  @override
+  double get height => 4;
+
+  @override
+  bool get isDisposed => false;
+
+  @override
+  void dispose() {}
 }

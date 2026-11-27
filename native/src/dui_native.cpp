@@ -14,7 +14,9 @@
 
 #include "include/core/SkCanvas.h"
 #include "include/core/SkColor.h"
+#include "include/core/SkData.h"
 #include "include/core/SkFont.h"
+#include "include/core/SkImage.h"
 #include "include/core/SkFontMgr.h"
 #include "include/core/SkFontStyle.h"
 #include "include/core/SkImageInfo.h"
@@ -69,6 +71,12 @@ struct DuiLegacyText {
   double font_size = 0.0;
   double scale = 0.0;
   std::unique_ptr<skia::textlayout::Paragraph> paragraph;
+};
+
+// A decoded bitmap. The pixels stay in the CPU memory of Skia, so the image
+// can be drawn on every surface of the backend.
+struct DuiImage {
+  sk_sp<SkImage> image;
 };
 
 struct DuiWindow {
@@ -678,7 +686,7 @@ void destroy_window_resources(DuiWindow* window) {
 
 }  // namespace
 
-uint32_t dui_abi_version(void) { return 3; }
+uint32_t dui_abi_version(void) { return 4; }
 
 const char* dui_last_error_message(void) { return last_error.c_str(); }
 
@@ -1704,6 +1712,85 @@ void dui_draw_line(
       SkPoint::Make(x1, y1),
       SkPoint::Make(x2, y2),
       paint);
+}
+
+DuiImage* dui_image_create_from_png(const uint8_t* data, size_t size) {
+  SdlScope lock;
+  clear_error();
+  if (!data || size == 0) {
+    set_error("The image data is empty.");
+    return nullptr;
+  }
+  // The PNG signature is checked here, so a wrong file is reported right away
+  // and not at the first draw.
+  static const uint8_t k_png_signature[8] = {
+      0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A};
+  if (size < sizeof(k_png_signature) ||
+      std::memcmp(data, k_png_signature, sizeof(k_png_signature)) != 0) {
+    set_error("The image data is not a PNG file.");
+    return nullptr;
+  }
+  sk_sp<const SkData> encoded = SkData::MakeWithCopy(data, size);
+  if (!encoded) {
+    set_error("Could not copy the image data.");
+    return nullptr;
+  }
+  sk_sp<SkImage> image = SkImages::DeferredFromEncodedData(encoded);
+  if (!image) {
+    set_error("Could not decode the PNG image.");
+    return nullptr;
+  }
+  auto* handle = new (std::nothrow) DuiImage();
+  if (!handle) {
+    set_error("Could not allocate the image.");
+    return nullptr;
+  }
+  handle->image = std::move(image);
+  return handle;
+}
+
+void dui_image_destroy(DuiImage* image) {
+  SdlScope lock;
+  delete image;
+}
+
+int32_t dui_image_get_size(const DuiImage* image, DuiImageSize* out_size) {
+  SdlScope lock;
+  clear_error();
+  if (!image || !image->image || !out_size) {
+    set_error("The image handle is not valid.");
+    return 0;
+  }
+  out_size->struct_size = sizeof(DuiImageSize);
+  out_size->width = static_cast<double>(image->image->width());
+  out_size->height = static_cast<double>(image->image->height());
+  return 1;
+}
+
+void dui_draw_image(
+    DuiWindow* window,
+    const DuiImage* image,
+    double x,
+    double y,
+    double width,
+    double height) {
+  SdlScope lock;
+  if (!window || !window->frame_active) return;
+  if (!image || !image->image) return;
+  SkPaint paint;
+  paint.setAntiAlias(true);
+  const float natural_width = static_cast<float>(image->image->width());
+  const float natural_height = static_cast<float>(image->image->height());
+  const auto destination = SkRect::MakeXYWH(
+      static_cast<float>(x),
+      static_cast<float>(y),
+      width > 0 ? static_cast<float>(width) : natural_width,
+      height > 0 ? static_cast<float>(height) : natural_height);
+  window->surface->getCanvas()->drawImageRect(
+      image->image,
+      destination,
+      SkSamplingOptions(SkFilterMode::kLinear),
+      &paint);
 }
 
 int32_t dui_draw_text(

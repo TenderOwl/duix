@@ -31,6 +31,7 @@ extern "C" {
 typedef struct DuiHost DuiHost;
 typedef struct DuiWindow DuiWindow;
 typedef struct DuiTextLayout DuiTextLayout;
+typedef struct DuiImage DuiImage;
 
 enum DuiEventType {
   DUI_EVENT_NONE = 0,
@@ -109,6 +110,12 @@ typedef struct DuiRect {
   double width;
   double height;
 } DuiRect;
+
+typedef struct DuiImageSize {
+  uint32_t struct_size;
+  double width;
+  double height;
+} DuiImageSize;
 
 DUI_API uint32_t dui_abi_version(void);
 DUI_API const char* dui_last_error_message(void);
@@ -227,6 +234,24 @@ DUI_API void dui_draw_line(
     double y2,
     uint32_t rgba,
     double stroke_width);
+/* Decodes a PNG image from memory. The bytes are copied, so the caller keeps
+ * no ownership of them. Returns NULL when the data is not a readable PNG; the
+ * reason is available through dui_last_error_message(). */
+DUI_API DuiImage* dui_image_create_from_png(const uint8_t* data, size_t size);
+DUI_API void dui_image_destroy(DuiImage* image);
+/* Writes the pixel size of the image. */
+DUI_API int32_t dui_image_get_size(
+    const DuiImage* image,
+    DuiImageSize* out_size);
+/* Draws the image into the destination rectangle. A width or height of zero
+ * uses the natural size of the image. */
+DUI_API void dui_draw_image(
+    DuiWindow* window,
+    const DuiImage* image,
+    double x,
+    double y,
+    double width,
+    double height);
 /* Draws shaped text through SkParagraph. The text is never wrapped.
  * The anchor point depends on the alignment: start uses the left edge of the
  * text, center its middle and end its right edge. The baseline is placed at

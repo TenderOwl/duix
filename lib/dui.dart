@@ -16,6 +16,7 @@ export 'src/focus_manager.dart';
 export 'src/geometry.dart';
 export 'src/grid.dart';
 export 'src/headless_text_layout.dart';
+export 'src/image.dart';
 export 'src/items_control.dart';
 export 'src/observable.dart';
 export 'src/observable_collection.dart';

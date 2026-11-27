@@ -19,9 +19,15 @@
   `drawRoundedRect` is gone.
 - `DrawingContext.drawLine(from, to, paint)` draws a straight line, so a widget
   can draw separators, underlines and borders without a bitmap.
-- **Breaking:** the native ABI is now version 3: `dui_draw_rect` takes the
-  stroke width and `dui_draw_line` is new. The Dart side refuses a library with
-  another ABI version.
+- Images: `ImageFactory` decodes a PNG into a `DrawableImage`, and
+  `DrawingContext.drawImage(image, rect, paint)` draws it. The native backend
+  decodes the pixels with Skia, so `SdlSkiaHost.imageFactory` returns a factory
+  that reads the file bytes of a PNG.
+- **Breaking:** the native ABI is now version 4: `dui_draw_rect` takes the
+  stroke width, `dui_draw_line` and `dui_draw_image` are new and the image
+  functions `dui_image_create_from_png`, `dui_image_destroy` and
+  `dui_image_get_size` were added. The Dart side refuses a library with another
+  ABI version.
 - **Breaking:** the focus ring of a templated control is drawn on top of the
   content instead of under it.
 

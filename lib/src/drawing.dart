@@ -1,4 +1,5 @@
 import 'geometry.dart';
+import 'image.dart';
 
 /// A surface that a widget draws on.
 ///
@@ -17,6 +18,9 @@ abstract interface class DrawingContext {
 
   /// Draws a straight line from [from] to [to].
   void drawLine(Point from, Point to, Paint paint);
+
+  /// Draws an image into [rect].
+  void drawImage(DrawableImage image, Rect rect, Paint paint);
 
   void drawText(
     String text,

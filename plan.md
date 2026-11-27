@@ -180,6 +180,7 @@ Skia canvas масштабируется через `displayScale`. Backbuffer �
 - legacy `DrawingContext.drawText()` в native backend рисует через SkParagraph shaping: native `dui_draw_text` возвращает логическую ширину нарисованного текста и использует тот же `create_paragraph`, что и `dui_text_layout_create`; шрифт, unicode и font-collection переиспользуются между вызовами, раскладка кэшируется на окне;
 - ABI `dui_native` версии 3: `dui_draw_rect` принимает ширину обводки, добавлена `dui_draw_line` (прямая с обводкой), `dui_abi_version()` возвращает 3;
 - графика: `Paint` получил `strokeWidth` (0 — заливка, положительное значение — обводка контура), `DrawingContext` получил `drawLine(from, to, paint)`, а `drawRect`/`drawRoundedRect` берут ширину обводки из paint; capsule focus ring рисуется обводкой, прямоугольный — четырьмя залитыми полосами;
+- растровое изображение: `ImageFactory` декодирует PNG в `DrawableImage`, `DrawingContext.drawImage(image, rect, paint)` рисует его; native backend читает пиксели через Skia (`SkImages::DeferredFromEncodedData`), `SdlSkiaHost.imageFactory` отдаёт фабрику; добавлен `Image` API в `lib/src/image.dart`;
 - исправлен paint-range в `dui_text_layout_draw`: foreground paint задаётся в UTF-16 offsets, а не в UTF-8 байтах;
 - `UIElement.dispose()` освобождает элемент и всё его поддерево: отсоединяет от родителя, размонтирует, освобождает потомков и собственные ресурсы, отменяет bindings. Повторный вызов безопасен, а disposed-элемент больше нельзя смонтировать или изменить;
 - `UIElement.onDisposed()` — хук для собственных ресурсов контрола; `Label` и `TextBox` освобождают в нём native-раскладки;
@@ -960,8 +961,9 @@ GPU backend по-прежнему не входит в ближайшие эта
    изображение (`drawImage` — нужна native-декодировка PNG и загрузка
    текстуры в Skia). Без этого нет ни иконок, ни картинок, ни разделителей,
    ни рамок ползунков. **Часть A закрыта (2026-11-27):** обводка (`Paint.strokeWidth`)
-   и прямые линии (`drawLine`), native ABI версии 3. Осталось: `drawPath`,
-   прозрачность и блендинг, тени, `drawImage` с PNG.
+   и прямые линии (`drawLine`), native ABI версии 3. **Часть B закрыта (2026-11-27):**
+   растровое изображение (`drawImage`) с native-декодировкой PNG, native ABI версии 4.
+   Осталось: `drawPath`, прозрачность и блендинг, тени.
 2. **Popup-слой.** Всплывающие окна нужны ComboBox, меню, Tooltip и
    контекстному меню: отдельный слой поверх содержимого окна со своим
    layout, своим clip и перехватом кликов, плюс позиционирование у курсора
@@ -1089,6 +1091,27 @@ GPU backend по-прежнему не входит в ближайшие эта
 ---
 
 ## 9. Журнал работ
+
+### 2026-11-27 — слой 0, пункт 1 (часть B): растровое изображение
+
+Сделано:
+
+- Добавлен backend-независимый API картинок (`lib/src/image.dart`): `DrawableImage` (размер, `isDisposed`, `dispose`) и `ImageFactory` (`decodePng`). Образец взят с текстовой раскладки: ресурсы принадлежат реализации, публичный слой не знает про native.
+- `DrawingContext` получил `drawImage(image, rect, paint)`; `RecordingDrawingContext` записывает `DrawImageCommand`, поэтому картинку видно в тестах без backend'а.
+- Native backend (`lib/src/native/native_image.dart`): `NativeImageFactory` декодирует PNG через Skia, `NativeImage` держит native handle и освобождает его в `dispose`. `SdlSkiaHost.imageFactory` отдаёт фабрику.
+- Native C ABI переведён на версию 4: `dui_image_create_from_png`, `dui_image_destroy`, `dui_image_get_size` (со структурой `DuiImageSize`) и `dui_draw_image`. PNG-сигнатура проверяется при декодировании, пиксели читаются через `SkImages::DeferredFromEncodedData`, картинка рисуется через `SkCanvas::drawImageRect` с линейной фильтрацией; нулевая ширина или высота означает натуральный размер.
+- Dart FFI: `DuiImageOpaque`, `DuiImageSizeStruct`, typedef'ы и обёртки `imageCreateFromPng`/`imageGetSize`/`imageDestroy`/`drawImage` в `NativeBindings`; проверка ABI поднята до 4.
+
+Проверено:
+
+- `dart analyze` — No issues found; `dart format` — 0 изменений.
+- `dart test --exclude-tags clipboard,native` — 253/253; `dart test --tags native --exclude-tags clipboard` — 41/41 (было 38, добавлено 3 теста картинок).
+- `test/native_image_test.dart`: PNG 4×3 декодируется с правильным размером, мусорные байты отклоняются, картинка рисуется в кадр и показывается окном.
+- `example/native_smoke.dart --smoke` проходит.
+
+Замечание: виджет `Image`/`Icon` не входил в этот шаг — он относится к слою 1 и строится на готовой подсистеме.
+
+Дальше: слой 0, пункт 4 — отдельный виджет `ScrollBar`; затем пункт 5 (`SelectionModel`).
 
 ### 2026-11-27 — слой 0, пункт 1 (часть A): обводка и линии
 

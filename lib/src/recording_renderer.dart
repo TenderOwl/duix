@@ -1,5 +1,6 @@
 import 'drawing.dart';
 import 'geometry.dart';
+import 'image.dart';
 
 sealed class DrawCommand {
   const DrawCommand();
@@ -38,6 +39,14 @@ final class DrawLineCommand extends DrawCommand {
 
   /// The width of the stroke, zero when the line is a hairline.
   double get strokeWidth => paint.strokeWidth;
+}
+
+final class DrawImageCommand extends DrawCommand {
+  const DrawImageCommand(this.image, this.rect, this.paint);
+
+  final DrawableImage image;
+  final Rect rect;
+  final Paint paint;
 }
 
 final class DrawTextCommand extends DrawCommand {
@@ -102,6 +111,11 @@ final class RecordingDrawingContext implements DrawingContext {
   @override
   void drawLine(Point from, Point to, Paint paint) {
     commands.add(DrawLineCommand(from, to, paint));
+  }
+
+  @override
+  void drawImage(DrawableImage image, Rect rect, Paint paint) {
+    commands.add(DrawImageCommand(image, rect, paint));
   }
 
   @override
