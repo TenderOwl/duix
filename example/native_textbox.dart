@@ -80,8 +80,8 @@ Future<void> main(List<String> args) async {
     );
 
     editor.focus();
-    await application.run(window);
     if (smoke) {
+      await host.showWindow(window);
       window.dispatchKeyDown('a', controlPressed: true);
       window.dispatchTextEditing(
         'Smoke か😀',
@@ -150,19 +150,11 @@ Future<void> main(List<String> args) async {
       }
       print('Native TextBox smoke passed: 3 frames rendered.');
     } else {
-      while (host.isOpen(window)) {
-        host.waitForEvent(window);
-        host.presentWindow(window);
-        await Future<void>.delayed(Duration.zero);
-      }
+      await application.run(window);
     }
     final diagnostics = host.diagnosticsFor(window);
     if (diagnostics != null) print(diagnostics);
   } finally {
-    final activeWindow = window;
-    if (application != null && activeWindow != null) {
-      await application.shutdown(activeWindow);
-    }
     host?.dispose();
   }
 }

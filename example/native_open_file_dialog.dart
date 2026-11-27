@@ -50,18 +50,9 @@ Future<void> main(List<String> args) async {
   );
 
   final application = Application(host: host);
-  await application.run(window);
-  final diagnostics = host.diagnosticsFor(window);
-  if (diagnostics != null) print(diagnostics);
-
   try {
-    while (host.isOpen(window)) {
-      host.waitForEvent(window);
-      host.presentWindow(window);
-      await Future<void>.delayed(Duration.zero);
-    }
+    await application.run(window);
   } finally {
-    await application.shutdown(window);
     host.dispose();
   }
 }

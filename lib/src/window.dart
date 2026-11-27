@@ -20,6 +20,13 @@ export 'file_dialog.dart' show FileDialogFilter, FileDialogHandler;
 abstract interface class NativeHost {
   Future<void> showWindow(Window window);
   Future<void> closeWindow(Window window);
+
+  /// Shows the window and runs its event loop until the window is closed.
+  ///
+  /// The loop delivers the input events, paints the frames that the window
+  /// has scheduled and gives the Dart event loop a chance to run, so that
+  /// timers and microtasks can invalidate the window.
+  Future<void> runWindow(Window window);
 }
 
 abstract interface class TextInputHandler {

@@ -85,6 +85,7 @@ Skia canvas масштабируется через `displayScale`. Backbuffer �
 ### 3.1. Уже реализовано
 
 - `Application`, `Window`, `WindowHost`;
+- эргономичная точка входа: `runApp(window)` показывает окно, крутит его цикл событий до закрытия и освобождает native-хост; `Application.run` делает то же на своём хосте, а `NativeHost.runWindow` — цикл на уровне хоста;
 - `UIElement`, `Control`, `ContentControl`, `Panel`;
 - `Label`, `TextBox`, `Button`, `Border`, `StackPanel`, `DockPanel`, `Grid`;
 - постоянное дерево и lifecycle mount/unmount;
@@ -1023,7 +1024,25 @@ GPU backend по-прежнему не входит в ближайшие эта
 
 - `dart pub publish -f --directory ../duix-publish` — «Successfully uploaded https://pub.dev/packages/duix version 0.1.0»; API pub.dev отдаёт `latest: 0.1.0`, дата публикации 2026-11-27T07:59:02Z. Архив 26 МБ, внутри библиотеки трёх платформ.
 
-Дальше: следующие версии пакета; остальные платформы (macOS x64, Linux arm64, Windows arm64) и codesign/notarization для macOS.
+### 2026-11-27 — эргономичная точка входа: `runApp`
+
+Сделано:
+
+- Бойлерплейт из quick start (`while (host.isOpen(window)) { waitForEvent; presentWindow; await Future.delayed(Duration.zero); }` плюс `shutdown` и `dispose`) убран из публичного API: цикл событий переехал внутрь хоста.
+- `NativeHost` получил метод `runWindow(window)`: показать окно, крутить цикл (доставка событий, отрисовка запланированных кадров, уступка Dart-событийному циклу) и вернуться, когда окно закрыто.
+- `SdlSkiaHost.runWindow` — реализация цикла; `Application.run(window)` теперь блокирует до закрытия окна, а `Application.shutdown(window)` закрывает его.
+- Добавлена функция `runApp(window)` в `package:duix/native.dart`: создаёт хост, показывает окно, крутит цикл и освобождает хост — приложение пишется в одну строку.
+- Переписаны все примеры (aqua button, open file dialog, items control, scroll viewer, text gallery, textbox, smoke, frame benchmark, counter) и quick start в README.
+- Добавлены тесты: `test/application_test.dart` (headless, три сценария `Application`) и `test/native_event_loop_test.dart` (native, цикл заканчивается с окном и рисует кадры).
+
+Проверено:
+
+- `dart analyze` — No issues found; `dart format` — 0 изменений.
+- `dart test --exclude-tags clipboard,native` — 229/229; `dart test --tags native --exclude-tags clipboard` — 38/38.
+- Все smoke-примеры проходят: native smoke (1 кадр, presented=1), aqua button, items control (16 контейнеров), scroll viewer, text gallery, textbox; headless-пример counter печатает те же значения.
+- `example/native_frame_benchmark.dart`: idle 1015,6 мс при CPU 1,54 %, 60 асинхронных обновлений, latency avg 10,4 мс, fps 62,4.
+
+Дальше: публикация следующей версии пакета с новым API; остальные платформы (macOS x64, Linux arm64, Windows arm64) и codesign/notarization для macOS.
 
 ### 2026-11-27 — репозиторий на GitHub и публикация пакета
 

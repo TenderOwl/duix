@@ -6,6 +6,9 @@ final class MemoryHost implements NativeHost {
 
   @override
   Future<void> closeWindow(Window window) async => window.close();
+
+  @override
+  Future<void> runWindow(Window window) => showWindow(window);
 }
 
 Future<void> main() async {

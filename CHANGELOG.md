@@ -10,3 +10,6 @@
   themselves.
 - `dart run duix:setup_native <dir>` copies the library next to the executable
   of a compiled application.
+- `runApp(window)` shows the window, runs its event loop until the window is
+  closed and releases the native host, so an application no longer needs the
+  event loop and the cleanup in its own code.

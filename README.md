@@ -23,7 +23,6 @@ import 'package:duix/dui.dart';
 import 'package:duix/native.dart';
 
 Future<void> main() async {
-  final host = await SdlSkiaHost.initialize();
   final counter = ObservableValue<int>(0);
   final label = Label(fontSize: 24)
     ..bind(
@@ -48,18 +47,21 @@ Future<void> main() async {
     ),
   );
 
-  final application = Application(host: host);
-  await application.run(window);
-  try {
-    while (host.isOpen(window)) {
-      host.waitForEvent(window);
-      host.presentWindow(window);
-      await Future<void>.delayed(Duration.zero);
-    }
-  } finally {
-    await application.shutdown(window);
-    host.dispose();
-  }
+  await runApp(window);
+}
+```
+
+`runApp` shows the window, runs its event loop until the user closes the
+window and releases the native host afterwards. An application that needs the
+host itself — for the diagnostics or for a second window — creates it and
+calls `runWindow` on it:
+
+```dart
+final host = await SdlSkiaHost.initialize(diagnosticsEnabled: true);
+try {
+  await host.runWindow(window);
+} finally {
+  host.dispose();
 }
 ```
 

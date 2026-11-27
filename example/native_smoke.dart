@@ -5,14 +5,12 @@ import 'package:duix/native.dart';
 
 Future<void> main(List<String> args) async {
   SdlSkiaHost? host;
-  Application? application;
   Window? window;
 
   try {
     host = await SdlSkiaHost.initialize(
       diagnosticsEnabled: args.contains('--diagnostics'),
     );
-    application = Application(host: host);
     var activations = 0;
     final button = Button(
       content: Label(text: 'Space / Enter', fontSize: 16),
@@ -33,7 +31,7 @@ Future<void> main(List<String> args) async {
     );
 
     button.focus();
-    await application.run(window);
+    await host.showWindow(window);
     window.dispatchKeyDown('enter');
     window.dispatchKeyDown('space');
     if (activations != 2) {
@@ -56,10 +54,6 @@ Future<void> main(List<String> args) async {
       '${renderedFrames == null ? '' : ', $renderedFrames frames rendered'}.',
     );
   } finally {
-    final activeWindow = window;
-    if (application != null && activeWindow != null) {
-      await application.shutdown(activeWindow);
-    }
     host?.dispose();
   }
 }

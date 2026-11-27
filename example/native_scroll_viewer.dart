@@ -95,12 +95,9 @@ Future<void> main(List<String> args) async {
   );
 
   final application = Application(host: host);
-  await application.run(window);
-  final diagnostics = host.diagnosticsFor(window);
-  if (diagnostics != null) print(diagnostics);
-
   try {
     if (args.contains('--smoke')) {
+      await host.showWindow(window);
       window.updateLayout();
       if (!scrollViewer.canScrollHorizontally ||
           !scrollViewer.canScrollVertically ||
@@ -202,14 +199,9 @@ Future<void> main(List<String> args) async {
       }
       print('Native settings smoke passed: 3 frames rendered.');
     } else {
-      while (host.isOpen(window)) {
-        host.waitForEvent(window);
-        host.presentWindow(window);
-        await Future<void>.delayed(Duration.zero);
-      }
+      await application.run(window);
     }
   } finally {
-    await application.shutdown(window);
     host.dispose();
   }
 }

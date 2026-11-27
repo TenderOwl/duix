@@ -69,8 +69,8 @@ Future<void> main(List<String> args) async {
       ),
     );
 
-    await application.run(window);
     if (smoke) {
+      await host.showWindow(window);
       for (var frame = 0; frame < 3 && host.isOpen(window); frame++) {
         host.pumpEvents();
         host.presentWindow(window);
@@ -87,19 +87,11 @@ Future<void> main(List<String> args) async {
         '${renderedFrames == null ? '' : ', $renderedFrames frames rendered'}.',
       );
     } else {
-      while (host.isOpen(window)) {
-        host.waitForEvent(window);
-        host.presentWindow(window);
-        await Future<void>.delayed(Duration.zero);
-      }
+      await application.run(window);
     }
     final diagnostics = host.diagnosticsFor(window);
     if (diagnostics != null) print(diagnostics);
   } finally {
-    final activeWindow = window;
-    if (application != null && activeWindow != null) {
-      await application.shutdown(activeWindow);
-    }
     host?.dispose();
   }
 }

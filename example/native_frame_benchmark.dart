@@ -9,7 +9,6 @@ import 'package:ffi/ffi.dart';
 Future<void> main() async {
   const updateCount = 60;
   final host = await SdlSkiaHost.initialize(diagnosticsEnabled: true);
-  final application = Application(host: host);
   final text = Label(text: 'Idle', fontSize: 24);
   final window = Window(
     title: 'DUI — frame benchmark',
@@ -22,7 +21,7 @@ Future<void> main() async {
   );
 
   try {
-    await application.run(window);
+    await host.showWindow(window);
     final watch = Stopwatch()..start();
     final cpuStart = _ProcessCpuSample.read();
     late NativeWindowDiagnostics idleDiagnostics;
@@ -108,7 +107,6 @@ Future<void> main() async {
     );
     print('  final diagnostics: $finalDiagnostics');
   } finally {
-    await application.shutdown(window);
     host.dispose();
   }
 }

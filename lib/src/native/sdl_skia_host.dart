@@ -207,6 +207,22 @@ final class SdlSkiaHost
   }
 
   @override
+  Future<void> runWindow(Window window) async {
+    await showWindow(window);
+    try {
+      while (isOpen(window)) {
+        waitForEvent(window);
+        presentWindow(window);
+        // The loop has to give the Dart event loop a chance to run, otherwise
+        // a timer that invalidates the window would never fire.
+        await Future<void>.delayed(Duration.zero);
+      }
+    } finally {
+      await closeWindow(window);
+    }
+  }
+
+  @override
   void startTextInput(Window window) {
     final session = _sessions[window];
     if (session == null || !session.open) return;
