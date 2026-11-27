@@ -542,21 +542,23 @@ void main() {
       final presentBaseline = diagnostics.presentCount;
 
       Timer(const Duration(milliseconds: 10), () => text.text = 'Async');
-      for (var iteration = 0;
-          iteration < 100 && text.text == 'Initial';
-          iteration++) {
+      // The timer needs real time to fire, so the loop waits for the clock
+      // instead of counting iterations: on a platform without a window
+      // manager the event wait returns at once, and a count of iterations
+      // would finish before the timer is due.
+      final deadline = DateTime.now().add(const Duration(seconds: 5));
+      while (text.text == 'Initial' && DateTime.now().isBefore(deadline)) {
         host.waitForEvent(
           window,
           timeout: const Duration(milliseconds: 2),
         );
         host.presentWindow(window);
-        await Future<void>.delayed(Duration.zero);
+        await Future<void>.delayed(const Duration(milliseconds: 5));
       }
-      for (var iteration = 0;
-          iteration < 100 && window.frameScheduled;
-          iteration++) {
+      final frameDeadline = DateTime.now().add(const Duration(seconds: 5));
+      while (window.frameScheduled && DateTime.now().isBefore(frameDeadline)) {
         host.presentWindow(window);
-        await Future<void>.delayed(Duration.zero);
+        await Future<void>.delayed(const Duration(milliseconds: 5));
       }
 
       expect(text.text, 'Async');

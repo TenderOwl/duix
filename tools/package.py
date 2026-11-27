@@ -183,6 +183,41 @@ def requires_icu(system: str) -> bool:
     return system == "Windows"
 
 
+def strip_library(library: Path, system: str) -> None:
+    """Removes the symbol table from a built library.
+
+    Skia is linked statically, so the library keeps the symbol table of every
+    static library it pulls in. On Linux that makes the file more than two
+    hundred megabytes, which is too much for a published package, and the
+    symbols are not needed to run it.
+    """
+    if system == "Windows":
+        # The MSVC linker already writes a library without a symbol table.
+        return
+
+    tool = shutil.which("strip")
+    if not tool:
+        print(
+            "WARNING: strip was not found, the library keeps its symbol table."
+        )
+        return
+
+    # The GNU strip and the one of macOS know different options.
+    arguments = ["-x"] if system == "Darwin" else ["--strip-unneeded"]
+    result = subprocess.run(
+        [tool, *arguments, str(library)],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if result.returncode != 0:
+        print(
+            f"WARNING: the library {library} was not stripped: "
+            f"{(result.stderr or result.stdout).strip()}",
+            file=sys.stderr,
+        )
+
+
 def install_native(prefix: Path, system: str) -> tuple[Path, Path | None]:
     """Installs the native library with the CMake install rules.
 
@@ -222,6 +257,7 @@ def install_native(prefix: Path, system: str) -> tuple[Path, Path | None]:
                 "loads it from the disk."
             )
         return library, icu
+    strip_library(library, system)
     return library, None
 
 
@@ -539,6 +575,7 @@ def main() -> int:
         shutil.rmtree(directory)
     directory.mkdir(parents=True)
     shutil.copy2(library, directory / library.name)
+    strip_library(directory / library.name, system)
     if icu is not None:
         shutil.copy2(icu, directory / icu.name)
 
