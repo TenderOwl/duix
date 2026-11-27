@@ -89,6 +89,7 @@ Skia canvas масштабируется через `displayScale`. Backbuffer �
 - единое состояние виджета: `WidgetState` (enabled, hovered, pressed, focused) собирает флаги контрола в одно значение; базовый `Control` владеет press-состоянием (события pointer down/up, отмена при уходе указателя) и сообщает о релизе через `onReleased`, виджет только объявляет `handlesPointerPress`; `SemanticsState` контрола собирается из того же состояния;
 - модель размеров GTK: `SizeRequest` (minimum + natural) — элемент сообщает, какого размера он хочет и какого ему нужно; `UIElement` мержит запрос, отдаёт desired = max(natural, minimum) в пределах доступного места, а `arrange` не сжимает элемент ниже минимума, если место есть; доступны `minimumSize`, `naturalSize`, `allocatedSize`; `TextBox` объявляет минимум 80×30 (вместо внутреннего пола на natural);
 - `UIElement`, `Control`, `ContentControl`, `Panel`;
+- шаблоны для любого контрола: `TemplatedControl` — базовый класс с механикой шаблона (создание, замена и освобождение persistent-поддерева, `templateRoot`, `hasTemplate`, хук `onTemplateReplacing`); `ContentControl extends TemplatedControl`; собственный контент виджета реализуется через `measureContentCore`/`arrangeContentCore`/`renderContentCore`/`hitTestContentCore`, чтобы шаблон нельзя было случайно перекрыть подкласом; focus ring рисует база (после контента, сверху), а не каждый виджет отдельно; типизированный шаблон живёт в конкретном классе (`Button.templateProperty` → `ControlTemplate<Button>`), база хранит `ControlTemplate<dynamic>?`;
 - `Label`, `TextBox`, `Button`, `Border`, `StackPanel`, `DockPanel`, `Grid`;
 - постоянное дерево и lifecycle mount/unmount;
 - `DuiProperty`;
@@ -825,7 +826,9 @@ One-way local маскирует binding, но не отменяет его; `cl
 
 `ControlTemplate<Button>` создаёт subtree один раз; `ContentPresenter` переносит текущий content в шаблон и следит за его заменой. `PropertyBinding` и `MappedBinding` связывают элементы шаблона с typed properties, включая `Button.isPressedProperty`, без строковых paths. Обычные property/content changes не вызывают factory повторно. При замене template старое subtree отсоединяется и его property bindings освобождаются; content сохраняет identity и возвращается под Button.
 
-Критерий готовности выполнен: custom Border заменяет default Button background, pointer/keyboard activation и focus ring сохраняются. Поддержка templates реализована пока только для Button; распространение на остальные контролы не входило в критерий этапа.
+Шаблоны распространены на любой контрол: механика живёт в `TemplatedControl`, а `ContentControl` — её подкласс. Контрол без template-свойства шаблон не поддерживает (`template` всегда null, установка бросает `StateError`). Тип шаблона остаётся типизированным на конкретном контроле (`ControlTemplate<Button>`), база хранит `ControlTemplate<dynamic>?` и делает явный downcast в конкретном классе. Собственный контент виджета вынесен в `measureContentCore`/`arrangeContentCore`/`renderContentCore`/`hitTestContentCore`: при наличии шаблона база мержит, раскладывает, рисует и hit-тестит поддерево шаблона, а иначе — собственный контент. Focus ring рисует база (после контента, сверху), поэтому виджету не нужно рисовать его самому.
+
+Критерий готовности выполнен: custom Border заменяет default Button background, pointer/keyboard activation и focus ring сохраняются. Шаблоны работают не только для Button: template задаётся любому контролу через его собственное template-свойство.
 
 ---
 
@@ -960,9 +963,10 @@ GPU backend по-прежнему не входит в ближайшие эта
    контекстному меню: отдельный слой поверх содержимого окна со своим
    layout, своим clip и перехватом кликов, плюс позиционирование у курсора
    или у элемента.
-3. **Шаблоны для любого контрола.** Сейчас `ControlTemplate` поддержан только
-   для `Button` (`ControlTemplate<Button>`). Без обобщения каждый новый виджет
-   придётся рисовать вручную, и тема начнёт разъезжаться.
+3. **Шаблоны для любого контрола.** ~~Сейчас `ControlTemplate` поддержан только
+   для `Button` (`ControlTemplate<Button>`).~~ **Готово (2026-11-27):** механика
+   шаблона живёт в `TemplatedControl`, `ContentControl` её наследует, шаблон
+   задаётся любому контролу через его собственное свойство.
 4. **Отдельный `ScrollBar`.** Полосы прокрутки встроены в `ScrollViewer`;
    как самостоятельный виджет он нужен и пользователям, и как основа для
    ComboBox и ListView.
@@ -1082,6 +1086,31 @@ GPU backend по-прежнему не входит в ближайшие эта
 ---
 
 ## 9. Журнал работ
+
+### 2026-11-27 — слой 0, пункт 3: шаблоны для любого контрола
+
+Сделано:
+
+- Добавлен `TemplatedControl` (`lib/src/templated_control.dart`): базовый класс с механикой шаблона. Он хранит template-свойство (`DuiProperty<dynamic, ControlTemplate<dynamic>?>?`), создаёт persistent-поддерево при установке шаблона, освобождает старое при замене, отдаёт `templateRoot` и `hasTemplate`, поддерживает хук `onTemplateReplacing` и рисует focus ring сам — после контента, сверху, формой из `template?.focusRingShape`.
+- `ContentControl` теперь наследует `TemplatedControl` и умеет отдавать и забирать свой контент: при замене шаблона контрол забирает контент обратно через `onTemplateReplacing`, чтобы новый шаблон показал его снова через `ContentPresenter`.
+- Собственный контент виджета вынесен из `measureCore`/`arrangeCore`/`renderCore`/`hitTestCore` в `measureContentCore`/`arrangeContentCore`/`renderContentCore`/`hitTestContentCore`. База ветвится сама: при наличии шаблона она мержит, раскладывает, рисует и hit-тестит поддерево шаблона, иначе — собственный контент. Точки расширения `UIElement` для не-шаблонных виджетов (`Label`, `TextBox`, `Grid`, `StackPanel`, `DockPanel`, `ItemsControl`) не изменились.
+- `Button` больше не держит собственную механику шаблона: она целиком в базе. `Button.templateProperty` (`ControlTemplate<Button>`) остался публичным и типизированным, getter `template` сужен до `ControlTemplate<Button>?` через явный downcast базового значения.
+- `Border`, `ScrollViewer` и `_AquaSurface` из примера переведены на `*ContentCore`-хуки; `ScrollViewer` больше не рисует focus ring сам — это делает база.
+- Экспорты: `lib/src/templated_control.dart` добавлен в `package:duix/dui.dart`.
+- Добавлен `test/templated_control_test.dart` (7 тестов): шаблон на не-Button контроле, шаблон владеет measure/arrange, контент возвращается при снятии шаблона, замена шаблона освобождает старое поддерево и сохраняет контент, поддерево освобождается вместе с контролом, база рисует focus ring сама, контрол без template-свойства не поддерживает шаблоны.
+
+Проверено:
+
+- `dart analyze` — No issues found; `dart format --output=none --set-exit-if-changed lib bin example test tool` — 0 изменений.
+- `dart test --exclude-tags clipboard,native` — 251/251 (было 244, добавлено 7).
+- `dart test --tags native --exclude-tags clipboard` — 38/38.
+- Смоуки: `example/native_aqua_button.dart --smoke` (шаблон, capsule focus ring, hover/pressed), `example/native_smoke.dart --smoke`, `example/native_textbox.dart --smoke`, `example/counter.dart` — проходят.
+
+Замечание: порядок отрисовки focus ring изменился — теперь кольцо рисуется поверх контента, а не под ним. Внешний вид не-шаблонного `Button` и `ScrollViewer` не изменился, кроме порядка слоёв.
+
+Ограничение шага: шаблон по-прежнему подписывается на отдельные typed-свойства, а не на `WidgetState` целиком — для этого нужны derived-свойства в системе свойств (отдельный шаг). Контрол без собственного template-свойства шаблон не поддерживает: `template` всегда null, установка бросает `StateError`.
+
+Дальше: пункт 1 слоя 0 — графика: контур и обводка (`drawLine`, `drawPath`), прозрачность и блендинг, тени; затем растровое изображение с native-декодировкой PNG.
 
 ### 2026-11-27 — сборка библиотек macOS и Linux через CI
 

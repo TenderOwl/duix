@@ -141,21 +141,21 @@ final class _AquaSurface extends ContentControl {
   bool get isFocusable => false;
 
   @override
-  Size measureCore(Size availableSize) {
+  Size measureContentCore(Size availableSize) {
     final inner = Size(
       (availableSize.width - _padding.horizontal).clamp(0, double.infinity),
       (availableSize.height - _padding.vertical).clamp(0, double.infinity),
     );
-    return _padding.inflateSize(super.measureCore(inner));
+    return _padding.inflateSize(super.measureContentCore(inner));
   }
 
   @override
-  void arrangeCore(Rect finalRect) {
+  void arrangeContentCore(Rect finalRect) {
     content?.arrange(finalRect.deflate(_padding));
   }
 
   @override
-  void renderCore(DrawingContext context) {
+  void renderContentCore(DrawingContext context) {
     final outerRadius = _capsuleRadius(bounds);
     context.drawRoundedRect(
         bounds, outerRadius, outerRadius, Paint(_aquaBorder));
@@ -188,7 +188,7 @@ final class _AquaSurface extends ContentControl {
       Paint(_aquaGloss),
     );
 
-    super.renderCore(context);
+    super.renderContentCore(context);
   }
 
   double _capsuleRadius(Rect rect) {

@@ -1,5 +1,7 @@
+import 'control_template.dart';
 import 'drawing.dart';
 import 'geometry.dart';
+import 'templated_control.dart';
 import 'ui_element.dart';
 
 typedef ContentChangedListener = void Function(
@@ -7,8 +9,16 @@ typedef ContentChangedListener = void Function(
   UIElement? newContent,
 );
 
-abstract class ContentControl extends Control {
-  ContentControl({UIElement? content}) : _content = content {
+/// A control that holds a single child.
+///
+/// The control can be restyled without touching the content: a template
+/// replaces the visual subtree of the control and presents the content
+/// through a [ContentPresenter].
+abstract class ContentControl extends TemplatedControl {
+  ContentControl({
+    UIElement? content,
+    super.templateProperty,
+  }) : _content = content {
     _content?.attachToParent(this);
   }
 
@@ -42,8 +52,10 @@ abstract class ContentControl extends Control {
   }
 
   @override
-  Iterable<UIElement> get logicalChildren =>
-      _content == null ? const [] : [_content!];
+  Iterable<UIElement> get logicalChildren {
+    if (hasTemplate) return super.logicalChildren;
+    return _content == null ? const [] : [_content!];
+  }
 
   /// The accessible name of a content control comes from its content.
   @override
@@ -59,20 +71,33 @@ abstract class ContentControl extends Control {
     _content?.mountTo(window);
   }
 
+  /// Takes the content back, when the old template is gone.
+  ///
+  /// The content belongs to the presenter of the old template, so the control
+  /// takes it back before the new template presents it again.
   @override
-  Size measureCore(Size availableSize) =>
+  void onTemplateReplacing() {
+    final current = _content;
+    if (current == null) return;
+    current
+      ..attachToParent(this)
+      ..mountTo(window);
+  }
+
+  @override
+  Size measureContentCore(Size availableSize) =>
       _content?.measure(availableSize) ?? Size.zero;
 
   @override
-  void arrangeCore(Rect finalRect) {
+  void arrangeContentCore(Rect finalRect) {
     _content?.arrange(finalRect);
   }
 
   @override
-  void renderCore(DrawingContext context) {
+  void renderContentCore(DrawingContext context) {
     _content?.render(context);
   }
 
   @override
-  UIElement? hitTestCore(Point position) => _content?.hitTest(position);
+  UIElement? hitTestContentCore(Point position) => _content?.hitTest(position);
 }

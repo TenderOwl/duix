@@ -1,5 +1,21 @@
 # Changelog
 
+## Unreleased
+
+- Templates work for any control, not only for a button. `TemplatedControl` holds
+  the template mechanics: it creates, replaces and releases the persistent
+  subtree of the control, exposes `templateRoot` and `hasTemplate` and draws the
+  focus ring itself. `ContentControl` inherits it, so a control declares its own
+  template property and gets the same behaviour.
+- A widget implements its own content through `measureContentCore`,
+  `arrangeContentCore`, `renderContentCore` and `hitTestContentCore`. When the
+  control has a template, the template owns the layout, the rendering and the
+  hit testing, so a subclass cannot accidentally override the template.
+- A control without a template property does not support templates: its template
+  is always null and setting it throws a `StateError`.
+- **Breaking:** the focus ring of a templated control is drawn on top of the
+  content instead of under it.
+
 ## 0.1.0
 
 - First public prototype: a retained-mode tree of controls, layout, real-time

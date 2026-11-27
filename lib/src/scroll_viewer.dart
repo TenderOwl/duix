@@ -3,7 +3,6 @@ import 'dart:math' as math;
 import 'content_control.dart';
 import 'drawing.dart';
 import 'events.dart';
-import 'focus_decoration.dart';
 import 'geometry.dart';
 import 'ui_element.dart';
 
@@ -146,7 +145,7 @@ final class ScrollViewer extends ContentControl {
       );
 
   @override
-  Size measureCore(Size availableSize) {
+  Size measureContentCore(Size availableSize) {
     var showHorizontal =
         _horizontalScrollBarVisibility == ScrollBarVisibility.visible;
     var showVertical =
@@ -230,7 +229,7 @@ final class ScrollViewer extends ContentControl {
   }
 
   @override
-  void arrangeCore(Rect finalRect) {
+  void arrangeContentCore(Rect finalRect) {
     _viewportWidth = math.max(
       0,
       finalRect.width - (_isVerticalScrollBarVisible ? scrollBarThickness : 0),
@@ -312,8 +311,7 @@ final class ScrollViewer extends ContentControl {
   }
 
   @override
-  void renderCore(DrawingContext context) {
-    if (isFocused) drawFocusRing(context, bounds);
+  void renderContentCore(DrawingContext context) {
     context.pushClipRect(_viewportRect);
     try {
       content?.render(context);
@@ -349,7 +347,7 @@ final class ScrollViewer extends ContentControl {
   }
 
   @override
-  UIElement? hitTestCore(Point position) {
+  UIElement? hitTestContentCore(Point position) {
     if (_verticalTrackRect.contains(position) ||
         _horizontalTrackRect.contains(position)) {
       return this;

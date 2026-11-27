@@ -35,22 +35,22 @@ final class Border extends ContentControl {
   bool get isFocusable => false;
 
   @override
-  Size measureCore(Size availableSize) {
+  Size measureContentCore(Size availableSize) {
     final inner = Size(
       (availableSize.width - padding.horizontal).clamp(0, double.infinity),
       (availableSize.height - padding.vertical).clamp(0, double.infinity),
     );
-    return padding.inflateSize(super.measureCore(inner));
+    return padding.inflateSize(super.measureContentCore(inner));
   }
 
   @override
-  void arrangeCore(Rect finalRect) {
+  void arrangeContentCore(Rect finalRect) {
     content?.arrange(finalRect.deflate(padding));
   }
 
   @override
-  void renderCore(DrawingContext context) {
+  void renderContentCore(DrawingContext context) {
     context.drawRect(bounds, Paint(color));
-    super.renderCore(context);
+    super.renderContentCore(context);
   }
 }

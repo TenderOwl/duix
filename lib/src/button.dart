@@ -2,14 +2,14 @@ import 'content_control.dart';
 import 'control_template.dart';
 import 'drawing.dart';
 import 'events.dart';
-import 'focus_decoration.dart';
 import 'geometry.dart';
 import 'properties.dart';
 import 'semantics.dart';
 import 'ui_element.dart';
 
 final class Button extends ContentControl {
-  Button({super.content, void Function()? onClick}) {
+  Button({super.content, void Function()? onClick})
+      : super(templateProperty: templateProperty) {
     if (onClick != null) addClickHandler(onClick);
     addHandler(UIElement.pointerDown, _pointerDown);
     addHandler(UIElement.keyDown, _keyDown);
@@ -23,14 +23,14 @@ final class Button extends ContentControl {
   );
 
   final _clickHandlers = <void Function()>[];
-  UIElement? _templateRoot;
 
-  ControlTemplate<Button>? get template => getValue(templateProperty);
-  set template(ControlTemplate<Button>? value) =>
-      setValue(templateProperty, value);
-
-  /// The persistent root created by the current template, if any.
-  UIElement? get templateRoot => _templateRoot;
+  /// The template of the button.
+  ///
+  /// The template owns the look of the button: it presents the content of
+  /// the button and reacts to the state of the control.
+  @override
+  ControlTemplate<Button>? get template =>
+      super.template as ControlTemplate<Button>?;
 
   @override
   bool get handlesPointerPress => true;
@@ -67,10 +67,6 @@ final class Button extends ContentControl {
   }
 
   @override
-  Iterable<UIElement> get logicalChildren =>
-      _templateRoot == null ? super.logicalChildren : [_templateRoot!];
-
-  @override
   SemanticsRole get semanticsRole => SemanticsRole.button;
 
   @override
@@ -81,75 +77,13 @@ final class Button extends ContentControl {
       );
 
   @override
-  void onDuiPropertyChanged<T>(
-    DuiProperty<dynamic, T> property,
-    T oldValue,
-    T newValue,
-  ) {
-    super.onDuiPropertyChanged(property, oldValue, newValue);
-    if (identical(property, templateProperty)) {
-      _replaceTemplate(newValue as ControlTemplate<Button>?);
-    }
-  }
-
-  void _replaceTemplate(ControlTemplate<Button>? template) {
-    final previous = _templateRoot;
-    if (previous != null) {
-      _detachPresenters(previous);
-      previous
-        ..attachToParent(null)
-        ..mountTo(null);
-      _disposeTemplate(previous);
-    }
-    _templateRoot = null;
-    content
-      ?..attachToParent(this)
-      ..mountTo(window);
-
-    if (template != null) {
-      final created = template.create(this);
-      if (created.logicalParent != null) {
-        throw StateError('A control template must return an unparented root.');
-      }
-      _templateRoot = created;
-      created
-        ..attachToParent(this)
-        ..mountTo(window);
-    }
-    invalidateMeasure();
-  }
-
-  void _detachPresenters(UIElement root) {
-    if (root is ContentPresenter && identical(root.host, this)) {
-      root.detachFromHost();
-    }
-    for (final child in root.logicalChildren) {
-      _detachPresenters(child);
-    }
-  }
-
-  void _disposeTemplate(UIElement root) {
-    for (final child in root.logicalChildren) {
-      _disposeTemplate(child);
-    }
-    root.dispose();
-  }
-
-  @override
-  Size measureCore(Size availableSize) {
-    final root = _templateRoot;
-    if (root != null) return root.measure(availableSize);
-    final childSize = super.measureCore(availableSize);
+  Size measureContentCore(Size availableSize) {
+    final childSize = super.measureContentCore(availableSize);
     return Size(childSize.width + 24, childSize.height + 12);
   }
 
   @override
-  void arrangeCore(Rect finalRect) {
-    final root = _templateRoot;
-    if (root != null) {
-      root.arrange(finalRect);
-      return;
-    }
+  void arrangeContentCore(Rect finalRect) {
     content?.arrange(Rect.fromLTWH(
       finalRect.left + 12,
       finalRect.top + 6,
@@ -159,30 +93,11 @@ final class Button extends ContentControl {
   }
 
   @override
-  void renderCore(DrawingContext context) {
-    final root = _templateRoot;
-    if (root != null) {
-      root.render(context);
-      if (isFocused) {
-        drawFocusRing(
-          context,
-          bounds,
-          shape: template?.focusRingShape ?? FocusRingShape.rectangle,
-        );
-      }
-      return;
-    }
+  void renderContentCore(DrawingContext context) {
     context.drawRect(
       bounds,
       Paint(isPressed ? const Color(0xFFB0B0B0) : const Color(0xFFE0E0E0)),
     );
-    if (isFocused) drawFocusRing(context, bounds);
-    super.renderCore(context);
-  }
-
-  @override
-  UIElement? hitTestCore(Point position) {
-    final root = _templateRoot;
-    return root == null ? super.hitTestCore(position) : root.hitTest(position);
+    super.renderContentCore(context);
   }
 }
