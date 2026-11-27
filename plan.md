@@ -89,6 +89,7 @@ Skia canvas масштабируется через `displayScale`. Backbuffer �
 - единое состояние виджета: `WidgetState` (enabled, hovered, pressed, focused) собирает флаги контрола в одно значение; базовый `Control` владеет press-состоянием (события pointer down/up, отмена при уходе указателя) и сообщает о релизе через `onReleased`, виджет только объявляет `handlesPointerPress`; `SemanticsState` контрола собирается из того же состояния;
 - модель размеров GTK: `SizeRequest` (minimum + natural) — элемент сообщает, какого размера он хочет и какого ему нужно; `UIElement` мержит запрос, отдаёт desired = max(natural, minimum) в пределах доступного места, а `arrange` не сжимает элемент ниже минимума, если место есть; доступны `minimumSize`, `naturalSize`, `allocatedSize`; `TextBox` объявляет минимум 80×30 (вместо внутреннего пола на natural);
 - `UIElement`, `Control`, `ContentControl`, `Panel`;
+- отдельный виджет `ScrollBar`: свой контрол с полосой и бегунком, бегунок перетаскивается, клик по полосе листает на одну страницу, значение — свойство (`minimum`, `maximum`, `value`, `viewportSize`, `thickness`, `orientation`); `ScrollViewer` построен на двух таких контролах (`horizontalScrollBar`, `verticalScrollBar`) и больше не рисует полосы сам;
 - шаблоны для любого контрола: `TemplatedControl` — базовый класс с механикой шаблона (создание, замена и освобождение persistent-поддерева, `templateRoot`, `hasTemplate`, хук `onTemplateReplacing`); `ContentControl extends TemplatedControl`; собственный контент виджета реализуется через `measureContentCore`/`arrangeContentCore`/`renderContentCore`/`hitTestContentCore`, чтобы шаблон нельзя было случайно перекрыть подкласом; focus ring рисует база (после контента, сверху), а не каждый виджет отдельно; типизированный шаблон живёт в конкретном классе (`Button.templateProperty` → `ControlTemplate<Button>`), база хранит `ControlTemplate<dynamic>?`;
 - `Label`, `TextBox`, `Button`, `Border`, `StackPanel`, `DockPanel`, `Grid`;
 - постоянное дерево и lifecycle mount/unmount;
@@ -974,7 +975,8 @@ GPU backend по-прежнему не входит в ближайшие эта
    задаётся любому контролу через его собственное свойство.
 4. **Отдельный `ScrollBar`.** Полосы прокрутки встроены в `ScrollViewer`;
    как самостоятельный виджет он нужен и пользователям, и как основа для
-   ComboBox и ListView.
+   ComboBox и ListView. **Готово (2026-11-27):** `ScrollBar` — отдельный
+   контрол, `ScrollViewer` построен на двух таких контролах.
 5. **Модель выделения** (`SelectionModel`): выделенные элементы, множественное
    выделение, клавиатурная навигация, перенос фокуса и выделения. Это
    подсистема, а не виджет: на ней стоят ListView, TreeView, ComboBox.
@@ -1091,6 +1093,24 @@ GPU backend по-прежнему не входит в ближайшие эта
 ---
 
 ## 9. Журнал работ
+
+### 2026-11-27 — слой 0, пункт 4: отдельный виджет `ScrollBar`
+
+Сделано:
+
+- Добавлен виджет `ScrollBar` (`lib/src/scroll_bar.dart`): свой контрол с полосой и бегунком. Свойства: `orientation`, `minimum`, `maximum`, `value`, `viewportSize`, `thickness`; производные: `isScrollable`, `trackLength`, `extent`, `thumbRect`. Бегунок перетаскивается указателем, клик по полосе листает на одну страницу, значение всегда внутри диапазона. Виджет наследует `TemplatedControl`, поэтому его вид можно заменить шаблоном.
+- `ScrollBarVisibility` переехал в `lib/src/scroll_bar.dart` (экспорт из `package:duix/dui.dart` не изменился).
+- `ScrollViewer` переписан на двух дочерних `ScrollBar`: полосы больше не рисуются вручную, а `horizontalScrollBar` и `verticalScrollBar` доступны как публичные свойства. Просмотрщик синхронизирует с полосами диапазон, значение и размер видимой области и слушает их значения, чтобы прокрутка следовала за перетаскиванием.
+- Поведение изменилось намеренно: захват указателя при перетаскивании бегунка принадлежит полосе, а не просмотрщику; hit-test полосы возвращает полосу; клик по полосе не забирает фокус (полоса не фокусируема, клавиатура принадлежит прокручиваемой области).
+
+Проверено:
+
+- `dart analyze` — No issues found; `dart format` — 0 изменений.
+- `dart test --exclude-tags clipboard,native` — 260/260; `dart test --tags native --exclude-tags clipboard` — 41/41.
+- Новый `test/scroll_bar_test.dart` (7 тестов): пропорции бегунка, полоса без диапазона, перетаскивание, клик по полосе, ограничение значения, отрисовка полосы и бегунка, горизонтальная ориентация.
+- `test/scroll_viewer_test.dart` и `test/native_scroll_viewer_test.dart` обновлены под новое владение указателем и hit-test; размеры бегунков и значения прокрутки не изменились.
+
+Дальше: слой 0, пункт 5 — модель выделения `SelectionModel`.
 
 ### 2026-11-27 — слой 0, пункт 1 (часть B): растровое изображение
 

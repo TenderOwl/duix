@@ -43,7 +43,7 @@ void main() {
 
       // Dragging the thumb over the whole free track length scrolls to the end.
       window.dispatchPointerDown(start);
-      expect(window.hasPointerCapture(viewer), isTrue);
+      expect(window.hasPointerCapture(viewer.verticalScrollBar), isTrue);
       window.dispatchPointerMove(Point(start.x, start.y + travel));
       expect(viewer.verticalOffset, closeTo(maximumOffset, 0.001));
 
@@ -57,7 +57,7 @@ void main() {
       expect(viewer.verticalOffset, 0);
 
       window.dispatchPointerUp(start);
-      expect(window.hasPointerCapture(viewer), isFalse);
+      expect(window.hasPointerCapture(viewer.verticalScrollBar), isFalse);
 
       // A click on the track below the thumb scrolls by one viewport.
       window.dispatchPointerDown(

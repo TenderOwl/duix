@@ -23,6 +23,16 @@
   `DrawingContext.drawImage(image, rect, paint)` draws it. The native backend
   decodes the pixels with Skia, so `SdlSkiaHost.imageFactory` returns a factory
   that reads the file bytes of a PNG.
+- `ScrollBar` is a control of its own: it draws the track and the thumb, the
+  thumb can be dragged, a click on the track scrolls by one page, and the value
+  is a property that a scrollable area binds to its offset. It is the base for
+  the scroll bars of `ScrollViewer`, and it is ready for a combo box or a list.
+- `ScrollViewer` is built on two `ScrollBar` controls now, available as
+  `horizontalScrollBar` and `verticalScrollBar`.
+- **Breaking:** while a scroll bar thumb is dragged, the pointer capture belongs
+  to the scroll bar and not to the viewer. The hit test on a scroll bar returns
+  the scroll bar, and clicking a scroll bar does not move the focus: the bar is
+  not focusable, the keyboard belongs to the area that scrolls.
 - **Breaking:** the native ABI is now version 4: `dui_draw_rect` takes the
   stroke width, `dui_draw_line` and `dui_draw_image` are new and the image
   functions `dui_image_create_from_png`, `dui_image_destroy` and

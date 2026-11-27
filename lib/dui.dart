@@ -23,6 +23,7 @@ export 'src/observable_collection.dart';
 export 'src/panel.dart';
 export 'src/properties.dart';
 export 'src/recording_renderer.dart';
+export 'src/scroll_bar.dart';
 export 'src/scroll_viewer.dart';
 export 'src/semantics.dart';
 export 'src/size_request.dart';

@@ -4,10 +4,14 @@ import 'content_control.dart';
 import 'drawing.dart';
 import 'events.dart';
 import 'geometry.dart';
+import 'observable.dart';
+import 'scroll_bar.dart';
 import 'ui_element.dart';
 
-enum ScrollBarVisibility { disabled, hidden, auto, visible }
-
+/// A scrollable area.
+///
+/// The viewer keeps the offset of the content and delegates the appearance
+/// and the dragging of the scroll bars to two [ScrollBar] controls.
 final class ScrollViewer extends ContentControl {
   ScrollViewer({
     super.content,
@@ -16,20 +20,26 @@ final class ScrollViewer extends ContentControl {
     ScrollBarVisibility verticalScrollBarVisibility = ScrollBarVisibility.auto,
   })  : _horizontalScrollBarVisibility = horizontalScrollBarVisibility,
         _verticalScrollBarVisibility = verticalScrollBarVisibility {
+    _horizontalBar = ScrollBar(orientation: Orientation.horizontal);
+    _verticalBar = ScrollBar(orientation: Orientation.vertical);
+    for (final bar in [_horizontalBar, _verticalBar]) {
+      bar.attachToParent(this);
+    }
+    _horizontalBar.addPropertyListener(_barValueChanged);
+    _verticalBar.addPropertyListener(_barValueChanged);
     addHandler(UIElement.pointerDown, _pointerDown);
-    addHandler(UIElement.pointerMove, _pointerMove);
-    addHandler(UIElement.pointerUp, _pointerUp);
     addHandler(UIElement.mouseWheel, _mouseWheel);
     addHandler(UIElement.keyDown, _keyDown);
   }
 
-  static const scrollBarThickness = 12.0;
+  static const scrollBarThickness = ScrollBar.defaultThickness;
   static const wheelScrollDistance = 48.0;
   static const lineScrollDistance = 40.0;
-  static const _minimumThumbSize = 20.0;
 
   ScrollBarVisibility _horizontalScrollBarVisibility;
   ScrollBarVisibility _verticalScrollBarVisibility;
+  late final ScrollBar _horizontalBar;
+  late final ScrollBar _verticalBar;
   double _horizontalOffset = 0;
   double _verticalOffset = 0;
   double _viewportWidth = 0;
@@ -38,14 +48,8 @@ final class ScrollViewer extends ContentControl {
   double _extentHeight = 0;
   bool _isHorizontalScrollBarVisible = false;
   bool _isVerticalScrollBarVisible = false;
+  bool _isSyncingBars = false;
   Rect _viewportRect = Rect.zero;
-  Rect _horizontalTrackRect = Rect.zero;
-  Rect _verticalTrackRect = Rect.zero;
-  Rect _horizontalThumbRect = Rect.zero;
-  Rect _verticalThumbRect = Rect.zero;
-  Orientation? _draggingScrollBar;
-  Point _dragStartPosition = const Point(0, 0);
-  double _dragStartOffset = 0;
 
   ScrollBarVisibility get horizontalScrollBarVisibility =>
       _horizontalScrollBarVisibility;
@@ -65,6 +69,12 @@ final class ScrollViewer extends ContentControl {
     invalidateMeasure();
   }
 
+  /// The horizontal scroll bar of the viewer.
+  ScrollBar get horizontalScrollBar => _horizontalBar;
+
+  /// The vertical scroll bar of the viewer.
+  ScrollBar get verticalScrollBar => _verticalBar;
+
   double get horizontalOffset => _horizontalOffset;
   set horizontalOffset(double value) => scrollTo(horizontal: value);
 
@@ -78,10 +88,10 @@ final class ScrollViewer extends ContentControl {
   Size get viewportSize => Size(_viewportWidth, _viewportHeight);
   Size get extentSize => Size(_extentWidth, _extentHeight);
   Rect get viewportRect => _viewportRect;
-  Rect get horizontalTrackRect => _horizontalTrackRect;
-  Rect get verticalTrackRect => _verticalTrackRect;
-  Rect get horizontalThumbRect => _horizontalThumbRect;
-  Rect get verticalThumbRect => _verticalThumbRect;
+  Rect get horizontalTrackRect => _horizontalBar.bounds;
+  Rect get verticalTrackRect => _verticalBar.bounds;
+  Rect get horizontalThumbRect => _horizontalBar.thumbRect;
+  Rect get verticalThumbRect => _verticalBar.thumbRect;
 
   bool get isHorizontalScrollBarVisible => _isHorizontalScrollBarVisible;
   bool get isVerticalScrollBarVisible => _isVerticalScrollBarVisible;
@@ -119,6 +129,7 @@ final class ScrollViewer extends ContentControl {
     _horizontalOffset = nextHorizontal;
     _verticalOffset = nextVertical;
     invalidateArrange();
+    _syncScrollBars();
     if (oldHorizontal != nextHorizontal) {
       notifyPropertyChanged('horizontalOffset', oldHorizontal, nextHorizontal);
     }
@@ -143,6 +154,13 @@ final class ScrollViewer extends ContentControl {
         horizontal: _maxHorizontalOffset,
         vertical: _maxVerticalOffset,
       );
+
+  @override
+  Iterable<UIElement> get logicalChildren => [
+        ...super.logicalChildren,
+        _horizontalBar,
+        _verticalBar,
+      ];
 
   @override
   Size measureContentCore(Size availableSize) {
@@ -259,55 +277,28 @@ final class ScrollViewer extends ContentControl {
       math.max(contentSize.height, _viewportHeight),
     ));
 
-    _verticalTrackRect = _isVerticalScrollBarVisible
-        ? Rect.fromLTWH(
-            finalRect.right - scrollBarThickness,
-            finalRect.top,
-            scrollBarThickness,
-            _viewportHeight,
-          )
-        : Rect.zero;
-    _horizontalTrackRect = _isHorizontalScrollBarVisible
-        ? Rect.fromLTWH(
-            finalRect.left,
-            finalRect.bottom - scrollBarThickness,
-            _viewportWidth,
-            scrollBarThickness,
-          )
-        : Rect.zero;
-    _verticalThumbRect = _thumbRect(_verticalTrackRect, Orientation.vertical);
-    _horizontalThumbRect =
-        _thumbRect(_horizontalTrackRect, Orientation.horizontal);
-  }
+    _verticalBar.arrange(
+      _isVerticalScrollBarVisible
+          ? Rect.fromLTWH(
+              finalRect.right - scrollBarThickness,
+              finalRect.top,
+              scrollBarThickness,
+              _viewportHeight,
+            )
+          : Rect.zero,
+    );
+    _horizontalBar.arrange(
+      _isHorizontalScrollBarVisible
+          ? Rect.fromLTWH(
+              finalRect.left,
+              finalRect.bottom - scrollBarThickness,
+              _viewportWidth,
+              scrollBarThickness,
+            )
+          : Rect.zero,
+    );
 
-  Rect _thumbRect(Rect track, Orientation orientation) {
-    final vertical = orientation == Orientation.vertical;
-    final trackLength = vertical ? track.height : track.width;
-    if (trackLength <= 0) return Rect.zero;
-    final viewport = vertical ? _viewportHeight : _viewportWidth;
-    final extent = vertical ? _extentHeight : _extentWidth;
-    final offset = vertical ? _verticalOffset : _horizontalOffset;
-    final maximum = math.max(0, extent - viewport);
-    final thumbLength = extent <= 0
-        ? trackLength
-        : (trackLength * viewport / extent)
-            .clamp(math.min(_minimumThumbSize, trackLength), trackLength)
-            .toDouble();
-    final thumbOffset =
-        maximum <= 0 ? 0.0 : (trackLength - thumbLength) * offset / maximum;
-    return vertical
-        ? Rect.fromLTWH(
-            track.left + 2,
-            track.top + thumbOffset,
-            math.max(0, track.width - 4),
-            thumbLength,
-          )
-        : Rect.fromLTWH(
-            track.left + thumbOffset,
-            track.top + 2,
-            thumbLength,
-            math.max(0, track.height - 4),
-          );
+    _syncScrollBars();
   }
 
   @override
@@ -319,8 +310,8 @@ final class ScrollViewer extends ContentControl {
       context.popClip();
     }
 
-    _drawScrollBar(context, _verticalTrackRect, _verticalThumbRect);
-    _drawScrollBar(context, _horizontalTrackRect, _horizontalThumbRect);
+    _verticalBar.render(context);
+    _horizontalBar.render(context);
     if (_isHorizontalScrollBarVisible && _isVerticalScrollBarVisible) {
       context.drawRect(
         Rect.fromLTWH(
@@ -334,58 +325,49 @@ final class ScrollViewer extends ContentControl {
     }
   }
 
-  static void _drawScrollBar(
-    DrawingContext context,
-    Rect track,
-    Rect thumb,
-  ) {
-    if (track.width <= 0 || track.height <= 0) return;
-    context.drawRect(track, const Paint(Color(0xFFF0F0F0)));
-    if (thumb.width > 0 && thumb.height > 0) {
-      context.drawRect(thumb, const Paint(Color(0xFFA0A0A0)));
-    }
-  }
-
   @override
   UIElement? hitTestContentCore(Point position) {
-    if (_verticalTrackRect.contains(position) ||
-        _horizontalTrackRect.contains(position)) {
-      return this;
-    }
+    final bar =
+        _verticalBar.hitTest(position) ?? _horizontalBar.hitTest(position);
+    if (bar != null) return bar;
     if (!_viewportRect.contains(position)) return null;
     return content?.hitTest(position);
   }
 
+  void _syncScrollBars() {
+    _isSyncingBars = true;
+    try {
+      _horizontalBar
+        ..minimum = 0
+        ..maximum = _maxHorizontalOffset
+        ..value = _horizontalOffset
+        ..viewportSize = _viewportWidth
+        ..thickness = scrollBarThickness;
+      _verticalBar
+        ..minimum = 0
+        ..maximum = _maxVerticalOffset
+        ..value = _verticalOffset
+        ..viewportSize = _viewportHeight
+        ..thickness = scrollBarThickness;
+    } finally {
+      _isSyncingBars = false;
+    }
+  }
+
+  void _barValueChanged(PropertyChangedEvent event) {
+    if (!identical(event.property, ScrollBar.valueProperty)) return;
+    if (_isSyncingBars) return;
+    final value = event.newValue as double;
+    final source = event.source;
+    if (identical(source, _horizontalBar)) {
+      scrollTo(horizontal: value);
+    } else if (identical(source, _verticalBar)) {
+      scrollTo(vertical: value);
+    }
+  }
+
   void _pointerDown(Object sender, PointerEventArgs args) {
-    if (!isEnabled || args.button != PointerButton.primary) return;
-    if (_verticalTrackRect.contains(args.position)) {
-      focus();
-      if (_verticalThumbRect.contains(args.position)) {
-        _startThumbDrag(Orientation.vertical, args.position);
-      } else {
-        scrollBy(
-          vertical: args.position.y < _verticalThumbRect.top
-              ? -_viewportHeight
-              : _viewportHeight,
-        );
-      }
-      args.handled = true;
-      return;
-    }
-    if (_horizontalTrackRect.contains(args.position)) {
-      focus();
-      if (_horizontalThumbRect.contains(args.position)) {
-        _startThumbDrag(Orientation.horizontal, args.position);
-      } else {
-        scrollBy(
-          horizontal: args.position.x < _horizontalThumbRect.left
-              ? -_viewportWidth
-              : _viewportWidth,
-        );
-      }
-      args.handled = true;
-      return;
-    }
+    if (!isEnabled) return;
     if (!_hasFocusedDescendant()) focus();
   }
 
@@ -396,51 +378,6 @@ final class ScrollViewer extends ContentControl {
       focused = focused.logicalParent;
     }
     return false;
-  }
-
-  void _startThumbDrag(Orientation orientation, Point position) {
-    _draggingScrollBar = orientation;
-    _dragStartPosition = position;
-    _dragStartOffset = orientation == Orientation.vertical
-        ? _verticalOffset
-        : _horizontalOffset;
-    capturePointer();
-  }
-
-  void _pointerMove(Object sender, PointerEventArgs args) {
-    final orientation = _draggingScrollBar;
-    if (orientation == null) return;
-    final vertical = orientation == Orientation.vertical;
-    final track = vertical ? _verticalTrackRect : _horizontalTrackRect;
-    final thumb = vertical ? _verticalThumbRect : _horizontalThumbRect;
-    final trackLength = vertical ? track.height : track.width;
-    final thumbLength = vertical ? thumb.height : thumb.width;
-    final scrollableTrack = math.max(0, trackLength - thumbLength);
-    if (scrollableTrack > 0) {
-      final pointerDelta = vertical
-          ? args.position.y - _dragStartPosition.y
-          : args.position.x - _dragStartPosition.x;
-      final maximum = vertical ? _maxVerticalOffset : _maxHorizontalOffset;
-      final next = math.max(
-        0.0,
-        _dragStartOffset + pointerDelta * maximum / scrollableTrack,
-      );
-      if (vertical) {
-        scrollTo(vertical: next);
-      } else {
-        scrollTo(horizontal: next);
-      }
-    }
-    args.handled = true;
-  }
-
-  void _pointerUp(Object sender, PointerEventArgs args) {
-    if (_draggingScrollBar == null || args.button != PointerButton.primary) {
-      return;
-    }
-    _draggingScrollBar = null;
-    releasePointer();
-    args.handled = true;
   }
 
   void _mouseWheel(Object sender, MouseWheelEventArgs args) {
@@ -474,10 +411,5 @@ final class ScrollViewer extends ContentControl {
       _ => false,
     };
     args.handled = handled;
-  }
-
-  @override
-  void onUnmounted() {
-    _draggingScrollBar = null;
   }
 }

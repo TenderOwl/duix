@@ -187,8 +187,10 @@ void main() {
     Window(width: 200, height: 100, content: viewer).updateLayout();
 
     expect(viewer.hitTest(const Point(10, 10)), same(content));
-    expect(viewer.hitTest(const Point(194, 10)), same(viewer));
-    expect(viewer.hitTest(const Point(10, 94)), same(viewer));
+    expect(
+        viewer.hitTest(const Point(194, 10)), same(viewer.verticalScrollBar));
+    expect(
+        viewer.hitTest(const Point(10, 94)), same(viewer.horizontalScrollBar));
     expect(viewer.hitTest(const Point(201, 10)), isNull);
   });
 
@@ -200,7 +202,8 @@ void main() {
     final start = Point(thumb.left + 2, thumb.top + 5);
 
     window.dispatchPointerDown(start);
-    expect(window.hasPointerCapture(viewer), isTrue);
+    expect(window.hasPointerCapture(viewer.verticalScrollBar), isTrue);
+    expect(window.hasPointerCapture(viewer), isFalse);
     window.dispatchPointerMove(Point(start.x, start.y + 31));
     expect(viewer.verticalOffset, closeTo(105.6818, 0.001));
     window.dispatchPointerMove(Point(start.x, start.y - 1000));
@@ -210,7 +213,7 @@ void main() {
     window.dispatchPointerMove(Point(start.x, start.y - 1000));
     expect(viewer.verticalOffset, 0);
     window.dispatchPointerUp(const Point(300, 200));
-    expect(window.hasPointerCapture(viewer), isFalse);
+    expect(window.hasPointerCapture(viewer.verticalScrollBar), isFalse);
 
     final horizontalThumb = viewer.horizontalThumbRect;
     final horizontalStart =
@@ -223,7 +226,7 @@ void main() {
         Point(horizontalStart.x + 1000, horizontalStart.y));
     expect(viewer.horizontalOffset, 212);
     window.dispatchPointerUp(const Point(-300, 200));
-    expect(window.hasPointerCapture(viewer), isFalse);
+    expect(window.hasPointerCapture(viewer.horizontalScrollBar), isFalse);
 
     window.dispatchPointerMove(const Point(194, 80));
     expect(viewer.verticalOffset, 0);
@@ -240,7 +243,9 @@ void main() {
     );
 
     expect(viewer.verticalOffset, viewer.viewportHeight);
-    expect(window.focusedElement, same(viewer));
+    // The scroll bar is not focusable, so the focus of the area stays where
+    // it was.
+    expect(window.focusedElement, isNull);
   });
 
   test('layout clamps offsets and hides automatic bars after content shrinks',
