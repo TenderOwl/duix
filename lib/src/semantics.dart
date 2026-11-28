@@ -20,6 +20,10 @@ enum SemanticsRole {
   /// crosses the native ABI: the numbers of the roles that are already in the
   /// tree must not change.
   checkBox,
+
+  /// The element is a button of a group, where one button is checked at a
+  /// time.
+  radioButton,
 }
 
 /// The state of an element for assistive technologies.

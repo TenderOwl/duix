@@ -114,7 +114,7 @@ void main() {
       // The box and the gap take 26 points, the text of three characters of
       // 6 points takes 18 more.
       expect(size.width, 26 + 18);
-      expect(size.height, greaterThanOrEqualTo(CheckBox.boxSize));
+      expect(size.height, greaterThanOrEqualTo(CheckableControl.markSize));
     });
 
     test('the box stands at the left edge and the text next to it', () {
@@ -122,10 +122,12 @@ void main() {
       final window = Window(width: 200, height: 100, content: checkBox);
       window.updateLayout();
 
-      expect(checkBox.boxRect.left, checkBox.bounds.left);
+      expect(checkBox.markRect.left, checkBox.bounds.left);
       expect(
-        checkBox.textRect.left,
-        checkBox.bounds.left + CheckBox.boxSize + CheckBox.gapSize,
+        checkBox.labelRect.left,
+        checkBox.bounds.left +
+            CheckableControl.markSize +
+            CheckableControl.gapSize,
       );
     });
 
@@ -135,10 +137,12 @@ void main() {
         ..flowDirection = FlowDirection.rightToLeft;
       window.updateLayout();
 
-      expect(checkBox.boxRect.right, checkBox.bounds.right);
+      expect(checkBox.markRect.right, checkBox.bounds.right);
       expect(
-        checkBox.textRect.right,
-        checkBox.bounds.right - CheckBox.boxSize - CheckBox.gapSize,
+        checkBox.labelRect.right,
+        checkBox.bounds.right -
+            CheckableControl.markSize -
+            CheckableControl.gapSize,
       );
     });
 
@@ -173,7 +177,9 @@ void main() {
       expect(
         texts.first.position.x,
         greaterThanOrEqualTo(
-          checkBox.bounds.left + CheckBox.boxSize + CheckBox.gapSize,
+          checkBox.bounds.left +
+              CheckableControl.markSize +
+              CheckableControl.gapSize,
         ),
       );
     });
@@ -189,8 +195,8 @@ void main() {
 
       final mark = renderer.commands.whereType<DrawPathCommand>().single;
       final text = renderer.commands.whereType<DrawTextCommand>().single;
-      expect(mark.paint.color.value, CheckBox.disabledColor.value);
-      expect(text.color.value, CheckBox.disabledColor.value);
+      expect(mark.paint.color.value, CheckableControl.disabledColor.value);
+      expect(text.color.value, CheckableControl.disabledColor.value);
     });
 
     test('the semantics of the control carry the state and the name', () {

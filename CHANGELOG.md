@@ -2,6 +2,27 @@
 
 ## Unreleased
 
+- A radio button is a control now: `RadioButton` belongs to a `RadioGroup`, and
+  the group owns the selection. The value of the checked button lives in the
+  property `selectedValue` of the group, so it can be bound to a model: a
+  two-way binding keeps the group and the model equal. Only one button of a
+  group is checked at a time, and a click on a checked button keeps it
+  checked.
+- A group of radio buttons is a focus scope, so the keyboard stays inside it.
+  The arrows walk over the buttons of the group and move the focus with the
+  selection: the vertical arrows in a vertical group, the horizontal arrows in
+  a horizontal one, and the sides swap in a right-to-left tree. The buttons of
+  a nested group belong to that group.
+- The check box and the radio button share one core now: `CheckableControl`
+  owns the state, the text of the label, the keyboard, the drawing of the mark
+  and the semantics, and the two controls draw only their own mark.
+- **Breaking:** the names of the `CheckBox` follow the shared core: `boxSize`
+  is `markSize`, `boxRect` is `markRect` and `textRect` is `labelRect`. The
+  control is not published yet, so nothing published breaks.
+- The semantics tree knows a radio button now: the new role `radioButton`
+  carries the state of the button and the name of the label, and the group
+  carries the role `group`. The roles stand at the end of the roles, because
+  the index of a role crosses the native ABI.
 - A check box is a control now: `CheckBox` has two states, draws a box with a
   check mark and the text of the label next to it. The state is a property, so
   it can be bound: a two-way binding keeps the value of the control and the
