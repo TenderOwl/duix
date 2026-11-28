@@ -21,6 +21,7 @@ export 'src/items_control.dart';
 export 'src/observable.dart';
 export 'src/observable_collection.dart';
 export 'src/panel.dart';
+export 'src/path.dart';
 export 'src/popup.dart';
 export 'src/properties.dart';
 export 'src/recording_renderer.dart';

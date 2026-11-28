@@ -8,6 +8,7 @@ import '../drawing.dart';
 import '../events.dart';
 import '../geometry.dart';
 import '../image.dart';
+import '../path.dart';
 import '../window.dart';
 import 'accessibility.dart';
 import 'native_bindings.dart';
@@ -583,15 +584,20 @@ final class NativeDrawingContext implements NativeTextDrawingContext {
 
   @override
   void drawRect(Rect rect, Paint paint) {
-    bindings.drawRect(
-      window,
-      rect.left,
-      rect.top,
-      rect.width,
-      rect.height,
-      paint.color.value,
-      paint.strokeWidth,
-    );
+    final nativePaint = calloc<DuiPaintStruct>();
+    try {
+      _fillPaint(nativePaint.ref, paint);
+      bindings.drawRect(
+        window,
+        rect.left,
+        rect.top,
+        rect.width,
+        rect.height,
+        nativePaint,
+      );
+    } finally {
+      calloc.free(nativePaint);
+    }
   }
 
   @override
@@ -601,30 +607,82 @@ final class NativeDrawingContext implements NativeTextDrawingContext {
     double radiusY,
     Paint paint,
   ) {
-    bindings.drawRoundedRect(
-      window,
-      rect.left,
-      rect.top,
-      rect.width,
-      rect.height,
-      radiusX,
-      radiusY,
-      paint.color.value,
-      paint.strokeWidth,
-    );
+    final nativePaint = calloc<DuiPaintStruct>();
+    try {
+      _fillPaint(nativePaint.ref, paint);
+      bindings.drawRoundedRect(
+        window,
+        rect.left,
+        rect.top,
+        rect.width,
+        rect.height,
+        radiusX,
+        radiusY,
+        nativePaint,
+      );
+    } finally {
+      calloc.free(nativePaint);
+    }
   }
 
   @override
   void drawLine(Point from, Point to, Paint paint) {
-    bindings.drawLine(
-      window,
-      from.x,
-      from.y,
-      to.x,
-      to.y,
-      paint.color.value,
-      paint.strokeWidth,
-    );
+    final nativePaint = calloc<DuiPaintStruct>();
+    try {
+      _fillPaint(nativePaint.ref, paint);
+      bindings.drawLine(
+        window,
+        from.x,
+        from.y,
+        to.x,
+        to.y,
+        nativePaint,
+      );
+    } finally {
+      calloc.free(nativePaint);
+    }
+  }
+
+  @override
+  void drawPath(Path path, Paint paint) {
+    final commands = path.commands;
+    if (commands.isEmpty) return;
+    final nativeCommands = calloc<DuiPathCommandStruct>(commands.length);
+    final nativePaint = calloc<DuiPaintStruct>();
+    try {
+      for (var index = 0; index < commands.length; index++) {
+        final command = commands[index];
+        final target = nativeCommands[index];
+        target
+          ..operation = command.type.index
+          ..x1 = command.x1
+          ..y1 = command.y1
+          ..x2 = command.x2
+          ..y2 = command.y2
+          ..x3 = command.x3
+          ..y3 = command.y3;
+      }
+      _fillPaint(nativePaint.ref, paint);
+      bindings.drawPath(window, nativeCommands, commands.length, nativePaint);
+    } finally {
+      calloc.free(nativeCommands);
+      calloc.free(nativePaint);
+    }
+  }
+
+  /// Fills the native paint with the properties of the paint.
+  void _fillPaint(DuiPaintStruct target, Paint paint) {
+    final shadow = paint.shadow;
+    target
+      ..structSize = sizeOf<DuiPaintStruct>()
+      ..rgba = paint.color.value
+      ..strokeWidth = paint.strokeWidth
+      ..opacity = paint.opacity
+      ..blendMode = paint.blendMode.index
+      ..shadowRgba = shadow?.color.value ?? 0
+      ..shadowBlur = shadow?.blurRadius ?? 0
+      ..shadowDx = shadow?.offsetX ?? 0
+      ..shadowDy = shadow?.offsetY ?? 0;
   }
 
   @override
@@ -636,14 +694,21 @@ final class NativeDrawingContext implements NativeTextDrawingContext {
         'The native context needs an image of the native backend.',
       );
     }
-    bindings.drawImage(
-      window,
-      image.handle,
-      rect.left,
-      rect.top,
-      rect.width,
-      rect.height,
-    );
+    final nativePaint = calloc<DuiPaintStruct>();
+    try {
+      _fillPaint(nativePaint.ref, paint);
+      bindings.drawImage(
+        window,
+        image.handle,
+        rect.left,
+        rect.top,
+        rect.width,
+        rect.height,
+        nativePaint,
+      );
+    } finally {
+      calloc.free(nativePaint);
+    }
   }
 
   @override

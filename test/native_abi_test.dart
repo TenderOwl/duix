@@ -22,13 +22,38 @@ const _nativeClipboardTag = 'clipboard';
 /// The event type of a resized window in the native ABI.
 const _windowResizedEvent = 3;
 
+/// Allocates a native paint for the drawing calls of the ABI.
+Pointer<DuiPaintStruct> _paint(
+  int rgba, {
+  double strokeWidth = 0,
+  double opacity = 1,
+  int blendMode = 0,
+  int shadowRgba = 0,
+  double shadowBlur = 0,
+  double shadowDx = 0,
+  double shadowDy = 0,
+}) {
+  final paint = calloc<DuiPaintStruct>();
+  paint.ref
+    ..structSize = sizeOf<DuiPaintStruct>()
+    ..rgba = rgba
+    ..strokeWidth = strokeWidth
+    ..opacity = opacity
+    ..blendMode = blendMode
+    ..shadowRgba = shadowRgba
+    ..shadowBlur = shadowBlur
+    ..shadowDx = shadowDx
+    ..shadowDy = shadowDy;
+  return paint;
+}
+
 void main() {
   setUpAll(() {
     bindings = NativeBindings.open();
   });
 
   test('ABI version is supported', () {
-    expect(bindings.abiVersion(), 4);
+    expect(bindings.abiVersion(), 5);
   });
 
   test('host can be created and destroyed repeatedly', () {
@@ -290,19 +315,27 @@ void main() {
         expect(bindings.windowBeginFrame(window), 1,
             reason: bindings.lastError);
         bindings.pushClipRect(window, 4, 4, 40, 24);
-        bindings.drawRect(window, 0, 0, 160, 80, 0x5580CFFF, 0);
-        bindings.drawRoundedRect(
-          window,
-          4,
-          4,
-          80,
-          32,
-          16,
-          16,
-          0x880087DB,
-          2,
-        );
-        bindings.drawLine(window, 4, 40, 84, 40, 0xFF00FF00, 3);
+        final fill = _paint(0x5580CFFF);
+        final stroke = _paint(0x880087DB, strokeWidth: 2);
+        final line = _paint(0xFF00FF00, strokeWidth: 3);
+        try {
+          bindings.drawRect(window, 0, 0, 160, 80, fill);
+          bindings.drawRoundedRect(
+            window,
+            4,
+            4,
+            80,
+            32,
+            16,
+            16,
+            stroke,
+          );
+          bindings.drawLine(window, 4, 40, 84, 40, line);
+        } finally {
+          calloc.free(fill);
+          calloc.free(stroke);
+          calloc.free(line);
+        }
         bindings.textLayoutDraw(window, layout, 4, 4, 0xFF000000);
         bindings.popClip(window);
         expect(bindings.windowPresent(window), 1, reason: bindings.lastError);

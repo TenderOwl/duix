@@ -157,6 +157,61 @@ final class DuiImageSizeStruct extends Struct {
   external double height;
 }
 
+/// The paint of a shape: the color, the stroke, the transparency, the blend
+/// mode and the shadow.
+final class DuiPaintStruct extends Struct {
+  @Uint32()
+  external int structSize;
+
+  @Uint32()
+  external int rgba;
+
+  @Double()
+  external double strokeWidth;
+
+  @Double()
+  external double opacity;
+
+  @Int32()
+  external int blendMode;
+
+  @Uint32()
+  external int shadowRgba;
+
+  @Double()
+  external double shadowBlur;
+
+  @Double()
+  external double shadowDx;
+
+  @Double()
+  external double shadowDy;
+}
+
+/// One command of a path.
+final class DuiPathCommandStruct extends Struct {
+  @Int32()
+  external int operation;
+
+  @Double()
+  external double x1;
+
+  @Double()
+  external double y1;
+
+  @Double()
+  external double x2;
+
+  @Double()
+  external double y2;
+
+  @Double()
+  external double x3;
+
+  @Double()
+  external double y3;
+}
+
 final class DuiAccessibleNodeStruct extends Struct {
   @Uint32()
   external int structSize;
@@ -427,8 +482,7 @@ typedef _DrawRectNative = Void Function(
   Double,
   Double,
   Double,
-  Uint32,
-  Double,
+  Pointer<DuiPaintStruct>,
 );
 typedef _DrawRoundedRectNative = Void Function(
   Pointer<DuiWindowOpaque>,
@@ -438,8 +492,7 @@ typedef _DrawRoundedRectNative = Void Function(
   Double,
   Double,
   Double,
-  Uint32,
-  Double,
+  Pointer<DuiPaintStruct>,
 );
 typedef _DrawLineNative = Void Function(
   Pointer<DuiWindowOpaque>,
@@ -447,8 +500,7 @@ typedef _DrawLineNative = Void Function(
   Double,
   Double,
   Double,
-  Uint32,
-  Double,
+  Pointer<DuiPaintStruct>,
 );
 typedef _ImageCreateFromPngNative = Pointer<DuiImageOpaque> Function(
   Pointer<Uint8>,
@@ -466,6 +518,13 @@ typedef _DrawImageNative = Void Function(
   Double,
   Double,
   Double,
+  Pointer<DuiPaintStruct>,
+);
+typedef _DrawPathNative = Void Function(
+  Pointer<DuiWindowOpaque>,
+  Pointer<DuiPathCommandStruct>,
+  Int32,
+  Pointer<DuiPaintStruct>,
 );
 typedef _SetAccessibilityTreeNative = Int32 Function(
   Pointer<DuiWindowOpaque>,
@@ -632,8 +691,7 @@ typedef _DrawRectDart = void Function(
   double,
   double,
   double,
-  int,
-  double,
+  Pointer<DuiPaintStruct>,
 );
 typedef _DrawRoundedRectDart = void Function(
   Pointer<DuiWindowOpaque>,
@@ -643,8 +701,7 @@ typedef _DrawRoundedRectDart = void Function(
   double,
   double,
   double,
-  int,
-  double,
+  Pointer<DuiPaintStruct>,
 );
 typedef _DrawLineDart = void Function(
   Pointer<DuiWindowOpaque>,
@@ -652,8 +709,7 @@ typedef _DrawLineDart = void Function(
   double,
   double,
   double,
-  int,
-  double,
+  Pointer<DuiPaintStruct>,
 );
 typedef _ImageCreateFromPngDart = Pointer<DuiImageOpaque> Function(
   Pointer<Uint8>,
@@ -671,6 +727,13 @@ typedef _DrawImageDart = void Function(
   double,
   double,
   double,
+  Pointer<DuiPaintStruct>,
+);
+typedef _DrawPathDart = void Function(
+  Pointer<DuiWindowOpaque>,
+  Pointer<DuiPathCommandStruct>,
+  int,
+  Pointer<DuiPaintStruct>,
 );
 typedef _SetAccessibilityTreeDart = int Function(
   Pointer<DuiWindowOpaque>,
@@ -879,6 +942,9 @@ final class NativeBindings {
         drawLine = library.lookupFunction<_DrawLineNative, _DrawLineDart>(
           'dui_draw_line',
         ),
+        _drawPath = library.lookupFunction<_DrawPathNative, _DrawPathDart>(
+          'dui_draw_path',
+        ),
         _imageCreateFromPng = library
             .lookupFunction<_ImageCreateFromPngNative, _ImageCreateFromPngDart>(
           'dui_image_create_from_png',
@@ -948,7 +1014,7 @@ final class NativeBindings {
         windowPresent = library.lookupFunction<_FrameNative, _FrameDart>(
           'dui_window_present',
         ) {
-    if (abiVersion() != 4) {
+    if (abiVersion() != 5) {
       throw StateError('Unsupported dui_native ABI version: ${abiVersion()}.');
     }
   }
@@ -997,6 +1063,7 @@ final class NativeBindings {
   final _DrawRectDart drawRect;
   final _DrawRoundedRectDart drawRoundedRect;
   final _DrawLineDart drawLine;
+  final _DrawPathDart _drawPath;
   final _ImageCreateFromPngDart _imageCreateFromPng;
   final _ImageDestroyDart _imageDestroy;
   final _ImageGetSizeDart _imageGetSize;
@@ -1449,8 +1516,21 @@ final class NativeBindings {
     double y,
     double width,
     double height,
+    Pointer<DuiPaintStruct> paint,
   ) {
-    _drawImage(window, image, x, y, width, height);
+    _drawImage(window, image, x, y, width, height, paint);
+  }
+
+  /// Draws a path.
+  ///
+  /// The commands are read in the order they are given.
+  void drawPath(
+    Pointer<DuiWindowOpaque> window,
+    Pointer<DuiPathCommandStruct> commands,
+    int count,
+    Pointer<DuiPaintStruct> paint,
+  ) {
+    _drawPath(window, commands, count, paint);
   }
 
   /// Publishes the semantics tree of the window.

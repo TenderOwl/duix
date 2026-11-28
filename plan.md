@@ -105,6 +105,7 @@ Skia canvas масштабируется через `displayScale`. Backbuffer �
 - hit testing;
 - focus на уровне одиночного контрола;
 - `RecordingDrawingContext` для тестов;
+- графика слоя: `Path` (`moveTo`, `lineTo`, `quadTo`, `cubicTo`, `close`, `addRect`, `addRoundedRect`), `DrawingContext.drawPath`, прозрачность `Paint.opacity`, режимы наложения `Paint.blendMode` и тень `Paint.shadow`; native ABI версии 5: paint передаётся структурой `DuiPaint`, путь — списком команд `DuiPathCommand`;
 - C ABI с opaque handles;
 - Dart FFI loader и typed bindings;
 - `SdlSkiaHost`;
@@ -239,6 +240,7 @@ Skia canvas масштабируется через `displayScale`. Backbuffer �
 - Quick start проверен end-to-end на «чужом» приложении с зависимостью на собранную папку дистрибуции: `dart run` находит библиотеку внутри пакета (`Library loaded from: …\publish\native\bin\windows-x64\dui_native.dll`) и рисует окно; `dart compile exe` + `dart run duix:setup_native .` дают собранное приложение, которое грузит библиотеку рядом с exe. Установлено ограничение: в AOT package-конфигурация недоступна (`Isolate.resolvePackageUri` возвращает null), поэтому рядом с exe библиотеку копирует `setup_native`.
 - Дерево семантики подтверждено тестами: роли и имена зеркалят дерево UI, элементы без роли сворачиваются, фокус и выделение отражаются в снимке, состояние disabled и границы совпадают с контролом, контрол забирает имя label-контента, `ItemsControl` даёт list с элементами, а disposed-контрол в дерево не попадает.
 - Мост Windows UI Automation подтверждён на живой системе: UIA-клиент читает дерево окна (`Window "DUI accessibility"` → `Custom` → `Text`, `Button`, `Edit`), у элементов верные имя, тип управления, границы на экране и состояния (`IsEnabled`, `IsControlElement`, `IsContentElement` — TRUE), фокус отмечен у кнопки, `FrameworkId` — `Dui`.
+- Графика слоя подтверждена и тестами, и снимком экрана: окно примера `example/native_graphics.dart` рисует кубическую кривую (`drawPath`), белую карточку с мягкой тенью и два прямоугольника, где жёлтый и бирюзовый накладываются в оливковый (`BlendMode.multiply`) с прозрачностью 0.8.
 - Recursive dispose подтверждён тестами: поддерево освобождает native-раскладки, disposed-элемент отсоединяется от родителя (список детей пустеет), все потомки получают `isDisposed`, повторный dispose не освобождает ресурсы дважды, фокус снимается, disposed-элемент нельзя вернуть в дерево, `Window.dispose()` освобождает контент, а `close()` оставляет его жить.
 - CI-команды проверены локально: `dart format --output=none --set-exit-if-changed lib example test` возвращает 0, `dart analyze` чист, `dart test --exclude-tags clipboard,native` проходит 226 тестов, `dart test --tags native --exclude-tags clipboard` проходит 36 native-тестов. YAML workflow разобран и проверен по структуре; с 2026-11-27 он ещё и отработал на GitHub — job `Dart` зелёный на всех трёх ОС.
 - Legacy text drawing подтверждён native-тестом: ширина, возвращённая `dui_draw_text`, совпадает с шириной раскладки `dui_text_layout_create` для того же текста, шрифта и scale; ASCII, кириллица, emoji и RTL-строка рисуются во всех трёх выравниваниях.
@@ -322,6 +324,7 @@ lib/src/observable_collection.dart   — ObservableCollection и события 
 lib/src/items_control.dart           — ItemsControl и VirtualizingStackPanel
 lib/src/events.dart                  — routed events
 lib/src/drawing.dart                 — DrawingContext
+lib/src/path.dart                    — Path и команды контура
 lib/src/text_buffer.dart              — UTF-16 text/selection model и команды
 lib/src/text_layout.dart             — текстовый контракт и cache key
 lib/src/headless_text_layout.dart    — deterministic headless text layout
@@ -354,10 +357,13 @@ example/native_frame_benchmark.dart  — idle CPU и async invalidate latency
 example/native_items_control.dart    — список 100 000 элементов и virtualization smoke
 example/native_scroll_viewer.dart   — ScrollViewer, прокрутка и smoke
 example/native_accessibility.dart   — окно с семантикой для проверки моста UI Automation
+example/native_graphics.dart         — пути, тени и режимы наложения
 test/                                — автоматические тесты
 test/text_box_measurement_test.dart — измерение TextBox по метрикам раскладки
 test/dispose_test.dart              — recursive dispose элементов и поддеревьев
 test/semantics_test.dart            — дерево семантики, фокус и выделение
+test/path_test.dart                 — контуры пути и paint
+test/native_graphics_test.dart      — путь, тень и наложение на native backend
 test/native_packaging_test.dart     — порядок поиска библиотеки и раскладка install-дерева
 test/native_scroll_viewer_test.dart — drag полосы прокрутки и клавиатура на native backend
 test/native_thread_safety_test.dart — несколько изолят одновременно используют native-слой
@@ -384,6 +390,7 @@ dart run example/native_items_control.dart
 dart run example/native_items_control.dart --smoke --diagnostics
 dart run example/native_scroll_viewer.dart --smoke --diagnostics
 dart run example/native_accessibility.dart --seconds=90
+dart run example/native_graphics.dart --smoke --diagnostics
 powershell -ExecutionPolicy Bypass -File tool/verify_uia.ps1 -ProcessId <pid>
 ```
 
@@ -978,7 +985,7 @@ GPU backend по-прежнему не входит в ближайшие эта
    ни рамок ползунков. **Часть A закрыта (2026-11-27):** обводка (`Paint.strokeWidth`)
    и прямые линии (`drawLine`), native ABI версии 3. **Часть B закрыта (2026-11-27):**
    растровое изображение (`drawImage`) с native-декодировкой PNG, native ABI версии 4.
-   Осталось: `drawPath`, прозрачность и блендинг, тени.
+   **Часть C закрыта (2026-11-28):** контур (`Path` и `drawPath`), прозрачность (`Paint.opacity`), режимы наложения (`Paint.blendMode`) и тень (`Paint.shadow`), native ABI версии 5.
 2. **Popup-слой.** Всплывающие окна нужны ComboBox, меню, Tooltip и
    контекстному меню: отдельный слой поверх содержимого окна со своим
    layout, своим clip и перехватом кликов, плюс позиционирование у курсора
@@ -1110,6 +1117,45 @@ GPU backend по-прежнему не входит в ближайшие эта
 ---
 
 ## 9. Журнал работ
+
+### 2026-11-28 — слой 0, пункт 1c: контуры, прозрачность, наложение и тени
+
+Сделано:
+
+- Добавлен `Path` (`lib/src/path.dart`): список команд контура — `moveTo`, `lineTo`,
+  `quadTo`, `cubicTo`, `close`, плюс `addRect` и `addRoundedRect`; у пути есть
+  границы, которые учитывают и control-точки кривых.
+- `DrawingContext` получил `drawPath(path, paint)`, `RecordingDrawingContext`
+  записывает `DrawPathCommand`.
+- `Paint` (`lib/src/geometry.dart`) получил прозрачность (`opacity`), режим
+  наложения (`blendMode`: srcOver, screen, multiply, plus, difference, lighten,
+  darken, overlay) и тень (`shadow`: цвет, размытие, смещение).
+- Native C ABI переведён на версию 5: paint передаётся структурой `DuiPaint`
+  (цвет, обводка, прозрачность, режим наложения, тень), путь — списком команд
+  `DuiPathCommand`; добавлена `dui_draw_path`, а `dui_draw_rect`,
+  `dui_draw_rounded_rect`, `dui_draw_line` и `dui_draw_image` принимают paint.
+- В Skia paint собирается из структуры: прозрачность умножается на альфу цвета,
+  режим наложения — `SkBlendMode`, тень — силуэт фигуры с `SkMaskFilter`
+  (размытие) и смещением; тень всегда заливается, даже если фигура обведена.
+- Dart FFI: `DuiPaintStruct`, `DuiPathCommandStruct`, новые typedef'ы и
+  `NativeBindings.drawPath`; проверка ABI поднята до 5.
+
+Проверено:
+
+- `dart analyze` — No issues found; `dart format` — 0 изменений.
+- `dart test --exclude-tags clipboard,native` — 285/285; `dart test --tags native
+  --exclude-tags clipboard` — 46/46 (добавлено 2 теста графики).
+- Новый `test/path_test.dart` (8 тестов): команды пути, пустые пути, прямоугольник,
+  скруглённый прямоугольник с обрезкой радиусов, границы с control-точками,
+  свойства paint и запись пути в headless-рендерере.
+- Новый `test/native_graphics_test.dart` (2 теста): путь с тенью и наложением
+  рисуется в кадр, пустой путь не ломает кадр.
+- `example/native_graphics.dart` — окно с кривой, карточкой с тенью и двумя
+  прямоугольниками; снимок экрана подтвердил кривую, мягкую тень и оливковую
+  зону наложения (multiply) с прозрачностью 0.8.
+
+Дальше: слой 0 закрыт. Следующий этап по плану — публикация 0.2.0 с новым native
+ABI (5) и пересборка бинарников для pub.dev.
 
 ### 2026-11-28 — слой 0, пункт 6b: мост Windows UI Automation
 

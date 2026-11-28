@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+- A path is a list of commands: `Path` moves the pen, draws straight lines,
+  quadratic and cubic curves and closes the contours, and it can add a
+  rectangle or a rounded rectangle. `DrawingContext.drawPath(path, paint)`
+  draws it, so a widget can draw an icon, a chart or a separator of its own.
+- A paint carries more than a color now. `Paint.opacity` is the transparency
+  of the shape, `Paint.blendMode` says how the shape is mixed with the pixels
+  under it (`srcOver`, `screen`, `multiply`, `plus`, `difference`, `lighten`,
+  `darken`, `overlay`) and `Paint.shadow` draws a soft shadow under the shape.
+- The native ABI is version 5 now. The paint of a shape crosses the boundary
+  as a struct and the path as a list of commands, so a widget can draw a
+  contour with a transparency, a blend mode and a shadow.
 - Windows UI Automation reads the widgets of a window. The native layer answers
   `WM_GETOBJECT` with a provider of the semantics tree, so the assistive
   technologies of the system see the same tree as the framework: the type of the

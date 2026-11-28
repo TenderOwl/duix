@@ -14,6 +14,7 @@
 #include <gtk/gtk.h>
 #endif
 
+#include "include/core/SkBlurTypes.h"
 #include "include/core/SkCanvas.h"
 #include "include/core/SkColor.h"
 #include "include/core/SkData.h"
@@ -22,7 +23,9 @@
 #include "include/core/SkFontMgr.h"
 #include "include/core/SkFontStyle.h"
 #include "include/core/SkImageInfo.h"
+#include "include/core/SkMaskFilter.h"
 #include "include/core/SkPaint.h"
+#include "include/core/SkPathBuilder.h"
 #include "include/core/SkPixmap.h"
 #include "include/core/SkRRect.h"
 #include "include/core/SkSurface.h"
@@ -759,7 +762,7 @@ void destroy_window_resources(DuiWindow* window) {
 
 }  // namespace
 
-uint32_t dui_abi_version(void) { return 4; }
+uint32_t dui_abi_version(void) { return 5; }
 
 const char* dui_last_error_message(void) { return last_error.c_str(); }
 
@@ -1821,26 +1824,115 @@ int32_t dui_window_pop_clip(DuiWindow* window) {
   return 1;
 }
 
+// The blend mode of the paint.
+SkBlendMode blend_mode_for(int32_t mode) {
+  switch (mode) {
+    case 1:
+      return SkBlendMode::kScreen;
+    case 2:
+      return SkBlendMode::kMultiply;
+    case 3:
+      return SkBlendMode::kPlus;
+    case 4:
+      return SkBlendMode::kDifference;
+    case 5:
+      return SkBlendMode::kLighten;
+    case 6:
+      return SkBlendMode::kDarken;
+    case 7:
+      return SkBlendMode::kOverlay;
+    default:
+      return SkBlendMode::kSrcOver;
+  }
+}
+
+// The paint of a shape: the color with its transparency, the stroke and the
+// blend mode.
+SkPaint make_paint(const DuiPaint* paint) {
+  SkPaint result;
+  result.setAntiAlias(true);
+  if (paint == nullptr) return result;
+  uint8_t alpha = SkColorGetA(paint->rgba);
+  double opacity = paint->opacity;
+  if (!std::isfinite(opacity)) opacity = 1.0;
+  opacity = std::clamp(opacity, 0.0, 1.0);
+  if (opacity < 1.0) {
+    alpha = static_cast<uint8_t>(std::lround(alpha * opacity));
+  }
+  result.setColor(SkColorSetARGB(
+      alpha,
+      SkColorGetR(paint->rgba),
+      SkColorGetG(paint->rgba),
+      SkColorGetB(paint->rgba)));
+  result.setBlendMode(blend_mode_for(paint->blend_mode));
+  if (std::isfinite(paint->stroke_width) && paint->stroke_width > 0) {
+    result.setStyle(SkPaint::kStroke_Style);
+    result.setStrokeWidth(static_cast<SkScalar>(paint->stroke_width));
+    result.setStrokeJoin(SkPaint::kRound_Join);
+    result.setStrokeCap(SkPaint::kRound_Cap);
+  }
+  return result;
+}
+
+// Whether the paint carries a shadow.
+bool has_shadow(const DuiPaint* paint) {
+  if (paint == nullptr || paint->shadow_rgba == 0) return false;
+  return paint->shadow_blur > 0 || paint->shadow_dx != 0 ||
+      paint->shadow_dy != 0;
+}
+
+// The paint of the shadow: the silhouette of the shape, blurred and shifted.
+SkPaint make_shadow_paint(const DuiPaint* paint) {
+  SkPaint result = make_paint(paint);
+  result.setStyle(SkPaint::kFill_Style);
+  result.setColor(SkColorSetARGB(
+      SkColorGetA(paint->shadow_rgba),
+      SkColorGetR(paint->shadow_rgba),
+      SkColorGetG(paint->shadow_rgba),
+      SkColorGetB(paint->shadow_rgba)));
+  if (paint->shadow_blur > 0) {
+    // The blur of Skia is the standard deviation, the radius of the shadow is
+    // twice it.
+    const auto sigma = static_cast<SkScalar>(paint->shadow_blur / 2);
+    result.setMaskFilter(SkMaskFilter::MakeBlur(
+        kNormal_SkBlurStyle, sigma, false));
+  }
+  return result;
+}
+
+// Draws the shape twice: the shadow under it and the shape itself.
+template <typename Draw>
+void draw_with_shadow(
+    SkCanvas* canvas,
+    const DuiPaint* paint,
+    const Draw& draw) {
+  if (has_shadow(paint)) {
+    canvas->save();
+    canvas->translate(
+        static_cast<SkScalar>(paint->shadow_dx),
+        static_cast<SkScalar>(paint->shadow_dy));
+    draw(canvas, make_shadow_paint(paint));
+    canvas->restore();
+  }
+  draw(canvas, make_paint(paint));
+}
+
 void dui_draw_rect(
     DuiWindow* window,
     double x,
     double y,
     double width,
     double height,
-    uint32_t rgba,
-    double stroke_width) {
-    SdlScope lock;
+    const DuiPaint* paint) {
+  SdlScope lock;
   if (!window || !window->frame_active) return;
-  SkPaint paint;
-  paint.setColor(static_cast<SkColor>(rgba));
-  paint.setAntiAlias(true);
-  if (std::isfinite(stroke_width) && stroke_width > 0) {
-    paint.setStyle(SkPaint::kStroke_Style);
-    paint.setStrokeWidth(static_cast<SkScalar>(stroke_width));
-  }
-  window->surface->getCanvas()->drawRect(
-      SkRect::MakeXYWH(x, y, width, height),
-      paint);
+  const auto rect = SkRect::MakeXYWH(x, y, width, height);
+  draw_with_shadow(
+      window->surface->getCanvas(),
+      paint,
+      [rect](SkCanvas* canvas, const SkPaint& value) {
+        canvas->drawRect(rect, value);
+      });
 }
 
 void dui_draw_rounded_rect(
@@ -1851,23 +1943,20 @@ void dui_draw_rounded_rect(
     double height,
     double radius_x,
     double radius_y,
-    uint32_t rgba,
-    double stroke_width) {
-    SdlScope lock;
+    const DuiPaint* paint) {
+  SdlScope lock;
   if (!window || !window->frame_active) return;
-  SkPaint paint;
-  paint.setColor(static_cast<SkColor>(rgba));
-  paint.setAntiAlias(true);
-  if (std::isfinite(stroke_width) && stroke_width > 0) {
-    paint.setStyle(SkPaint::kStroke_Style);
-    paint.setStrokeWidth(static_cast<SkScalar>(stroke_width));
-  }
   const auto rect = SkRect::MakeXYWH(x, y, width, height);
   const auto rounded_rect = SkRRect::MakeRectXY(
       rect,
       static_cast<SkScalar>(radius_x),
       static_cast<SkScalar>(radius_y));
-  window->surface->getCanvas()->drawRRect(rounded_rect, paint);
+  draw_with_shadow(
+      window->surface->getCanvas(),
+      paint,
+      [rounded_rect](SkCanvas* canvas, const SkPaint& value) {
+        canvas->drawRRect(rounded_rect, value);
+      });
 }
 
 void dui_draw_line(
@@ -1876,22 +1965,23 @@ void dui_draw_line(
     double y1,
     double x2,
     double y2,
-    uint32_t rgba,
-    double stroke_width) {
-    SdlScope lock;
+    const DuiPaint* paint) {
+  SdlScope lock;
   if (!window || !window->frame_active) return;
-  SkPaint paint;
-  paint.setColor(static_cast<SkColor>(rgba));
-  paint.setAntiAlias(true);
-  paint.setStyle(SkPaint::kStroke_Style);
-  const auto width = std::isfinite(stroke_width) && stroke_width > 0
-      ? static_cast<SkScalar>(stroke_width)
-      : 1.0f;
-  paint.setStrokeWidth(width);
-  window->surface->getCanvas()->drawLine(
-      SkPoint::Make(x1, y1),
-      SkPoint::Make(x2, y2),
-      paint);
+  const auto from = SkPoint::Make(x1, y1);
+  const auto to = SkPoint::Make(x2, y2);
+  draw_with_shadow(
+      window->surface->getCanvas(),
+      paint,
+      [from, to](SkCanvas* canvas, const SkPaint& value) {
+        SkPaint stroke = value;
+        stroke.setStyle(SkPaint::kStroke_Style);
+        const auto width = stroke.getStrokeWidth() > 0
+            ? stroke.getStrokeWidth()
+            : static_cast<SkScalar>(1.0);
+        stroke.setStrokeWidth(width);
+        canvas->drawLine(from, to, stroke);
+      });
 }
 
 DuiImage* dui_image_create_from_png(const uint8_t* data, size_t size) {
@@ -1953,12 +2043,11 @@ void dui_draw_image(
     double x,
     double y,
     double width,
-    double height) {
+    double height,
+    const DuiPaint* paint) {
   SdlScope lock;
   if (!window || !window->frame_active) return;
   if (!image || !image->image) return;
-  SkPaint paint;
-  paint.setAntiAlias(true);
   const float natural_width = static_cast<float>(image->image->width());
   const float natural_height = static_cast<float>(image->image->height());
   const auto destination = SkRect::MakeXYWH(
@@ -1966,11 +2055,63 @@ void dui_draw_image(
       static_cast<float>(y),
       width > 0 ? static_cast<float>(width) : natural_width,
       height > 0 ? static_cast<float>(height) : natural_height);
-  window->surface->getCanvas()->drawImageRect(
-      image->image,
-      destination,
-      SkSamplingOptions(SkFilterMode::kLinear),
-      &paint);
+  draw_with_shadow(
+      window->surface->getCanvas(),
+      paint,
+      [image, destination](SkCanvas* canvas, const SkPaint& value) {
+        canvas->drawImageRect(
+            image->image,
+            destination,
+            SkSamplingOptions(SkFilterMode::kLinear),
+            &value);
+      });
+}
+
+void dui_draw_path(
+    DuiWindow* window,
+    const DuiPathCommand* commands,
+    int32_t count,
+    const DuiPaint* paint) {
+  SdlScope lock;
+  if (!window || !window->frame_active) return;
+  if (!commands || count <= 0) return;
+  SkPathBuilder builder;
+  for (int32_t index = 0; index < count; index++) {
+    const DuiPathCommand& command = commands[index];
+    switch (command.operation) {
+      case 0:
+        builder.moveTo(command.x1, command.y1);
+        break;
+      case 1:
+        builder.lineTo(command.x1, command.y1);
+        break;
+      case 2:
+        builder.quadTo(command.x1, command.y1, command.x2, command.y2);
+        break;
+      case 3:
+        builder.cubicTo(
+            command.x1,
+            command.y1,
+            command.x2,
+            command.y2,
+            command.x3,
+            command.y3);
+        break;
+      case 4:
+        builder.close();
+        break;
+      default:
+        break;
+    }
+  }
+  const SkPath path = builder.snapshot();
+  if (path.isEmpty()) return;
+  draw_with_shadow(
+      window->surface->getCanvas(),
+      paint,
+      [&path](SkCanvas* canvas, const SkPaint& value) {
+        canvas->drawPath(path, value);
+      });
 }
 
 int32_t dui_draw_text(

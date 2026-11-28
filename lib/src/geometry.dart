@@ -127,8 +127,65 @@ final class Color {
   final int value;
 }
 
+/// The way a shape is mixed with the pixels under it.
+enum BlendMode {
+  /// The shape covers the pixels under it.
+  srcOver,
+
+  /// The shape keeps the light of the pixels under it.
+  screen,
+
+  /// The shape keeps the dark of the pixels under it.
+  multiply,
+
+  /// The shape adds its color to the pixels under it.
+  plus,
+
+  /// The shape inverts the pixels under it.
+  difference,
+
+  /// The lighter of the shape and the pixels under it wins.
+  lighten,
+
+  /// The darker of the shape and the pixels under it wins.
+  darken,
+
+  /// The shape multiplies or screens the pixels under it.
+  overlay,
+}
+
+/// A soft shadow under a shape.
+final class Shadow {
+  const Shadow(
+    this.color, {
+    this.blurRadius = 0,
+    this.offsetX = 0,
+    this.offsetY = 0,
+  });
+
+  /// The color of the shadow.
+  final Color color;
+
+  /// The softness of the shadow.
+  ///
+  /// Zero draws a hard shadow, a bigger value spreads it.
+  final double blurRadius;
+
+  /// The horizontal shift of the shadow.
+  final double offsetX;
+
+  /// The vertical shift of the shadow.
+  final double offsetY;
+}
+
 final class Paint {
-  const Paint(this.color, {this.strokeWidth = 0});
+  const Paint(
+    this.color, {
+    this.strokeWidth = 0,
+    this.opacity = 1,
+    this.blendMode = BlendMode.srcOver,
+    this.shadow,
+  });
 
   /// The color of the paint.
   final Color color;
@@ -138,6 +195,20 @@ final class Paint {
   /// Zero fills the shape. A positive value strokes its outline with that
   /// width, so the paint decides how a shape is drawn.
   final double strokeWidth;
+
+  /// The transparency of the paint.
+  ///
+  /// One is opaque, zero is invisible. The value multiplies the alpha of the
+  /// color of the paint.
+  final double opacity;
+
+  /// The way the paint is mixed with the pixels under it.
+  final BlendMode blendMode;
+
+  /// The shadow under the shape.
+  ///
+  /// The shadow is the silhouette of the shape, blurred and shifted.
+  final Shadow? shadow;
 
   /// Whether the paint strokes the outline instead of filling the shape.
   bool get isStroke => strokeWidth > 0;

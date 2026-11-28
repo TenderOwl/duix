@@ -1,5 +1,6 @@
 import 'geometry.dart';
 import 'image.dart';
+import 'path.dart';
 
 /// A surface that a widget draws on.
 ///
@@ -18,6 +19,12 @@ abstract interface class DrawingContext {
 
   /// Draws a straight line from [from] to [to].
   void drawLine(Point from, Point to, Paint paint);
+
+  /// Draws a path.
+  ///
+  /// The paint fills the path or strokes its outline, and it may carry a
+  /// transparency, a blend mode and a shadow.
+  void drawPath(Path path, Paint paint);
 
   /// Draws an image into [rect].
   void drawImage(DrawableImage image, Rect rect, Paint paint);

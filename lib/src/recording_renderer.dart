@@ -1,6 +1,7 @@
 import 'drawing.dart';
 import 'geometry.dart';
 import 'image.dart';
+import 'path.dart';
 
 sealed class DrawCommand {
   const DrawCommand();
@@ -47,6 +48,16 @@ final class DrawImageCommand extends DrawCommand {
   final DrawableImage image;
   final Rect rect;
   final Paint paint;
+}
+
+final class DrawPathCommand extends DrawCommand {
+  const DrawPathCommand(this.path, this.paint);
+
+  final Path path;
+  final Paint paint;
+
+  /// The width of the stroke, zero when the path is filled.
+  double get strokeWidth => paint.strokeWidth;
 }
 
 final class DrawTextCommand extends DrawCommand {
@@ -111,6 +122,11 @@ final class RecordingDrawingContext implements DrawingContext {
   @override
   void drawLine(Point from, Point to, Paint paint) {
     commands.add(DrawLineCommand(from, to, paint));
+  }
+
+  @override
+  void drawPath(Path path, Paint paint) {
+    commands.add(DrawPathCommand(path, paint));
   }
 
   @override

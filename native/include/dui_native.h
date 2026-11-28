@@ -172,6 +172,40 @@ typedef struct DuiAccessibleNodeInfo {
   int32_t value_length;
 } DuiAccessibleNodeInfo;
 
+/* The paint of a shape.
+ *
+ * The color is 0xAARRGGBB. The stroke width of zero fills the shape, a
+ * positive value strokes its outline. The opacity multiplies the alpha of the
+ * color: one is opaque and zero is invisible. The blend mode is the index of
+ * the list of the blend modes: zero is the ordinary blend over the pixels
+ * under the shape, one is screen, two is multiply, three is plus, four is
+ * difference, five is lighten, six is darken and seven is overlay. The shadow
+ * is drawn as the silhouette of the shape, blurred and shifted; a shadow color
+ * of zero means no shadow. */
+typedef struct DuiPaint {
+  uint32_t struct_size;
+  uint32_t rgba;
+  double stroke_width;
+  double opacity;
+  int32_t blend_mode;
+  uint32_t shadow_rgba;
+  double shadow_blur;
+  double shadow_dx;
+  double shadow_dy;
+} DuiPaint;
+
+/* One command of a path. The operation is zero for a move, one for a line, two
+ * for a quadratic curve, three for a cubic curve and four for a close. */
+typedef struct DuiPathCommand {
+  int32_t operation;
+  double x1;
+  double y1;
+  double x2;
+  double y2;
+  double x3;
+  double y3;
+} DuiPathCommand;
+
 DUI_API uint32_t dui_abi_version(void);
 DUI_API const char* dui_last_error_message(void);
 
@@ -292,8 +326,7 @@ DUI_API void dui_draw_rect(
     double y,
     double width,
     double height,
-    uint32_t rgba,
-    double stroke_width);
+    const DuiPaint* paint);
 DUI_API void dui_draw_rounded_rect(
     DuiWindow* window,
     double x,
@@ -302,8 +335,7 @@ DUI_API void dui_draw_rounded_rect(
     double height,
     double radius_x,
     double radius_y,
-    uint32_t rgba,
-    double stroke_width);
+    const DuiPaint* paint);
 /* Draws a straight line. A stroke width of zero draws a hairline. */
 DUI_API void dui_draw_line(
     DuiWindow* window,
@@ -311,8 +343,7 @@ DUI_API void dui_draw_line(
     double y1,
     double x2,
     double y2,
-    uint32_t rgba,
-    double stroke_width);
+    const DuiPaint* paint);
 /* Decodes a PNG image from memory. The bytes are copied, so the caller keeps
  * no ownership of them. Returns NULL when the data is not a readable PNG; the
  * reason is available through dui_last_error_message(). */
@@ -330,7 +361,14 @@ DUI_API void dui_draw_image(
     double x,
     double y,
     double width,
-    double height);
+    double height,
+    const DuiPaint* paint);
+/* Draws a path. The commands are read in the order they are given. */
+DUI_API void dui_draw_path(
+    DuiWindow* window,
+    const DuiPathCommand* commands,
+    int32_t count,
+    const DuiPaint* paint);
 /* Draws shaped text through SkParagraph. The text is never wrapped.
  * The anchor point depends on the alignment: start uses the left edge of the
  * text, center its middle and end its right edge. The baseline is placed at

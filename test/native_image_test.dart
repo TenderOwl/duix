@@ -53,13 +53,19 @@ void main() {
       window = bindings.windowCreate(host, 'Image ABI'.toNativeUtf8(), 160, 80);
       expect(window, isNot(nullptr), reason: bindings.lastError);
       final image = NativeImageFactory(bindings).decodePng(_png) as NativeImage;
+      final paint = calloc<DuiPaintStruct>();
+      paint.ref
+        ..structSize = sizeOf<DuiPaintStruct>()
+        ..rgba = 0xFFFFFFFF
+        ..opacity = 1;
       try {
         expect(bindings.windowBeginFrame(window), 1,
             reason: bindings.lastError);
-        bindings.drawImage(window, image.handle, 4, 4, 0, 0);
-        bindings.drawImage(window, image.handle, 8, 8, 32, 24);
+        bindings.drawImage(window, image.handle, 4, 4, 0, 0, paint);
+        bindings.drawImage(window, image.handle, 8, 8, 32, 24, paint);
         expect(bindings.windowPresent(window), 1, reason: bindings.lastError);
       } finally {
+        calloc.free(paint);
         image.dispose();
       }
     } finally {
