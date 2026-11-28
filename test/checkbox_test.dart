@@ -111,10 +111,21 @@ void main() {
 
       final size = checkBox.measure(const Size(200, 100));
 
-      // The box and the gap take 26 points, the text of three characters of
-      // 6 points takes 18 more.
-      expect(size.width, 26 + 18);
-      expect(size.height, greaterThanOrEqualTo(CheckableControl.markSize));
+      // The room of the focus ring, the box and the gap take 29 points, the
+      // text of three characters of 6 points takes 18 more.
+      expect(
+        size.width,
+        CheckableControl.focusRingPadding +
+            CheckableControl.markSize +
+            CheckableControl.gapSize +
+            18,
+      );
+      expect(
+        size.height,
+        greaterThanOrEqualTo(
+          CheckableControl.markSize + 2 * CheckableControl.focusRingPadding,
+        ),
+      );
     });
 
     test('the box stands at the left edge and the text next to it', () {
@@ -122,10 +133,14 @@ void main() {
       final window = Window(width: 200, height: 100, content: checkBox);
       window.updateLayout();
 
-      expect(checkBox.markRect.left, checkBox.bounds.left);
+      expect(
+        checkBox.markRect.left,
+        checkBox.bounds.left + CheckableControl.focusRingPadding,
+      );
       expect(
         checkBox.labelRect.left,
         checkBox.bounds.left +
+            CheckableControl.focusRingPadding +
             CheckableControl.markSize +
             CheckableControl.gapSize,
       );
@@ -137,12 +152,43 @@ void main() {
         ..flowDirection = FlowDirection.rightToLeft;
       window.updateLayout();
 
-      expect(checkBox.markRect.right, checkBox.bounds.right);
+      expect(
+        checkBox.markRect.right,
+        checkBox.bounds.right - CheckableControl.focusRingPadding,
+      );
       expect(
         checkBox.labelRect.right,
         checkBox.bounds.right -
+            CheckableControl.focusRingPadding -
             CheckableControl.markSize -
             CheckableControl.gapSize,
+      );
+    });
+
+    test('the focus ring stands around the box and leaves it visible', () {
+      final checkBox = CheckBox(text: 'one', fontSize: 10);
+      final window = Window(
+        width: 200,
+        height: 100,
+        content: StackPanel(children: [checkBox]),
+      );
+      window.updateLayout();
+
+      final ring = checkBox.focusRingBounds;
+      final mark = checkBox.markRect;
+
+      expect(
+        ring.left,
+        lessThan(mark.left),
+        reason: 'the ring stands around the box',
+      );
+      expect(ring.right, greaterThan(mark.right));
+      expect(ring.top, checkBox.bounds.top);
+      expect(ring.bottom, checkBox.bounds.bottom);
+      expect(
+        ring.right,
+        lessThan(checkBox.labelRect.left),
+        reason: 'the ring does not reach the text of the label',
       );
     });
 

@@ -49,6 +49,13 @@ abstract class CheckableControl extends TemplatedControl {
   /// The distance between the mark and the text of the label.
   static const double gapSize = 8;
 
+  /// The room the focus ring takes around the mark.
+  ///
+  /// The ring stands around the mark of the control and not around the whole
+  /// control, so the control keeps room for the ring and the ring never
+  /// covers the mark itself.
+  static const double focusRingPadding = 3;
+
   /// The color of a control that cannot be used.
   static const Color disabledColor = Color(0xFF9A9A9A);
 
@@ -102,14 +109,26 @@ abstract class CheckableControl extends TemplatedControl {
   /// The rectangle of the mark that shows the state of the control.
   ///
   /// The mark stands at the start of the control: at the left edge from left
-  /// to right and at the right edge from right to left.
+  /// to right and at the right edge from right to left. The room of the focus
+  /// ring keeps it away from the edge of the control.
   Rect get markRect {
-    final size = math.min(markSize, math.min(bounds.width, bounds.height));
+    final size = math.min(
+      markSize,
+      math.max(
+        0.0,
+        math.min(bounds.width, bounds.height) - 2 * focusRingPadding,
+      ),
+    );
     final top = bounds.top + (bounds.height - size) / 2;
     if (isRightToLeft) {
-      return Rect.fromLTWH(bounds.right - size, top, size, size);
+      return Rect.fromLTWH(
+        bounds.right - focusRingPadding - size,
+        top,
+        size,
+        size,
+      );
     }
-    return Rect.fromLTWH(bounds.left, top, size, size);
+    return Rect.fromLTWH(bounds.left + focusRingPadding, top, size, size);
   }
 
   /// The rectangle of the text of the label.
@@ -117,9 +136,29 @@ abstract class CheckableControl extends TemplatedControl {
   /// The text stands next to the mark, on the side of the mark that is not
   /// the start of the control.
   Rect get labelRect {
-    final width = math.max(0.0, bounds.width - markSize - gapSize);
-    final left = isRightToLeft ? bounds.left : bounds.left + markSize + gapSize;
+    final width = math.max(
+      0.0,
+      bounds.width - focusRingPadding - markSize - gapSize,
+    );
+    final left = isRightToLeft
+        ? bounds.left
+        : bounds.left + focusRingPadding + markSize + gapSize;
     return Rect.fromLTWH(left, bounds.top, width, bounds.height);
+  }
+
+  /// The ring of the focus stands around the mark of the control.
+  ///
+  /// The ring leaves a gap between itself and the mark, so the mark stays
+  /// readable under the ring.
+  @override
+  Rect get focusRingBounds {
+    final mark = markRect;
+    return Rect.fromLTWH(
+      mark.left - focusRingPadding,
+      mark.top - focusRingPadding,
+      mark.width + 2 * focusRingPadding,
+      mark.height + 2 * focusRingPadding,
+    );
   }
 
   /// Draws the mark that shows the state of the control.
@@ -179,8 +218,8 @@ abstract class CheckableControl extends TemplatedControl {
   Size measureContentCore(Size availableSize) {
     final layout = _layoutFor(_labelWidthFor(availableSize));
     return Size(
-      markSize + gapSize + layout.width,
-      math.max(markSize, layout.height),
+      focusRingPadding + markSize + gapSize + layout.width,
+      math.max(markSize + 2 * focusRingPadding, layout.height),
     );
   }
 
@@ -214,10 +253,11 @@ abstract class CheckableControl extends TemplatedControl {
 
   /// The width the text of the label is laid out in.
   ///
-  /// The text stands next to the mark, so the mark and the gap take their
-  /// part of the width of the control.
+  /// The text stands next to the mark, so the mark, the room of the focus
+  /// ring and the gap take their part of the width of the control.
   double _labelWidthFor(Size availableSize) {
-    final available = availableSize.width - markSize - gapSize;
+    final available =
+        availableSize.width - focusRingPadding - markSize - gapSize;
     if (!available.isFinite) return double.infinity;
     return math.max(0.0, available);
   }

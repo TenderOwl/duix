@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+- The focus ring of a check box and of a radio button no longer covers the
+  control: the ring is drawn around the mark itself, the box with the check
+  mark or the circle with the dot. A gap of one pixel stays between the ring
+  and the mark, and the text of the label stays outside of the ring.
+- The ring of a radio button is round, the ring of a check box is a
+  rectangle. The shape that a template asks for still wins.
+- A control can tell where its focus ring belongs now: the new hooks
+  `Control.focusRingBounds` and `Control.defaultFocusRingShape` let any
+  control choose the place and the shape of its own ring.
 - A radio button is a control now: `RadioButton` belongs to a `RadioGroup`, and
   the group owns the selection. The value of the checked button lives in the
   property `selectedValue` of the group, so it can be bound to a model: a

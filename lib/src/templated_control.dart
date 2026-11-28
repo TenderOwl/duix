@@ -272,8 +272,8 @@ abstract class TemplatedControl extends Control {
     if (isFocused && isFocusable) {
       drawFocusRing(
         context,
-        bounds,
-        shape: template?.focusRingShape ?? FocusRingShape.rectangle,
+        focusRingBounds,
+        shape: template?.focusRingShape ?? defaultFocusRingShape,
       );
     }
   }

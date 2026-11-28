@@ -274,12 +274,40 @@ void main() {
         ..flowDirection = FlowDirection.rightToLeft;
       window.updateLayout();
 
-      expect(button.markRect.right, button.bounds.right);
+      expect(
+        button.markRect.right,
+        button.bounds.right - CheckableControl.focusRingPadding,
+      );
       expect(
         button.labelRect.right,
         button.bounds.right -
+            CheckableControl.focusRingPadding -
             CheckableControl.markSize -
             CheckableControl.gapSize,
+      );
+    });
+
+    test('the focus ring of the button is round and stands around it', () {
+      final button = RadioButton<String>(value: 'one', text: 'First');
+      final window = Window(
+        width: 200,
+        height: 100,
+        content: StackPanel(children: [button]),
+      );
+      window.updateLayout();
+
+      final ring = button.focusRingBounds;
+      final mark = button.markRect;
+
+      expect(button.defaultFocusRingShape, FocusRingShape.capsule);
+      expect(ring.left, lessThan(mark.left));
+      expect(ring.right, greaterThan(mark.right));
+      expect(ring.top, button.bounds.top);
+      expect(ring.bottom, button.bounds.bottom);
+      expect(
+        ring.right,
+        lessThan(button.labelRect.left),
+        reason: 'the ring does not reach the text of the label',
       );
     });
   });

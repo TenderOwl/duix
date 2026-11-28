@@ -5,6 +5,7 @@ import 'colors.dart';
 import 'control_template.dart';
 import 'drawing.dart';
 import 'events.dart';
+import 'focus_decoration.dart';
 import 'geometry.dart';
 import 'path.dart';
 import 'properties.dart';
@@ -159,6 +160,10 @@ final class RadioButton<T> extends CheckableControl {
 
   @override
   SemanticsRole get semanticsRole => SemanticsRole.radioButton;
+
+  /// The ring of the focus of a radio button is round, like its mark.
+  @override
+  FocusRingShape get defaultFocusRingShape => FocusRingShape.capsule;
 
   @override
   void renderMark(DrawingContext context, Rect rect) {

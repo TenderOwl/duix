@@ -4,6 +4,7 @@ import 'dart:typed_data';
 import 'drawing.dart';
 import 'events.dart';
 import 'file_dialog.dart';
+import 'focus_decoration.dart';
 import 'geometry.dart';
 import 'properties.dart';
 import 'semantics.dart';
@@ -705,6 +706,19 @@ abstract class Control extends UIElement {
   bool get isFocused => _isFocused;
   bool get isPointerOver => getValue(isPointerOverProperty);
   bool get isPressed => getValue(isPressedProperty);
+
+  /// The area the focus ring of the control is drawn in.
+  ///
+  /// The ring stands around the whole control by default. A control that
+  /// draws its ring around a part of itself answers with the area of that
+  /// part, so the ring never covers the drawing of the control.
+  Rect get focusRingBounds => bounds;
+
+  /// The shape of the focus ring of the control.
+  ///
+  /// A template can choose another shape; the control decides the shape of
+  /// its own ring.
+  FocusRingShape get defaultFocusRingShape => FocusRingShape.rectangle;
 
   /// The state of the control as a whole.
   ///

@@ -98,6 +98,12 @@ Skia canvas масштабируется через `displayScale`. Backbuffer �
 - `Label`, `TextBox`, `TextArea`, `CheckBox`, `RadioButton`, `RadioGroup`, `Button`, `Border`, `StackPanel`, `DockPanel`, `Grid`;
 - переключатели: общее ядро `CheckableControl` (`lib/src/checkable.dart`) держит состояние, текст метки, клавиатуру и семантику, а `CheckBox` и `RadioButton` рисуют только свою метку; группа radio (`RadioGroup`) владеет выбором: значение отмеченной кнопки живёт в свойстве группы (его можно связать с моделью), группа — focus scope, стрелки ходят по кнопкам и ведут за собой фокус; кнопки вложенной группы belongят этой группе;
 - флажок: `CheckBox` (`lib/src/checkbox.dart`) — два состояния, галочка и текст метки рядом. Состояние `isChecked` живёт в системе свойств, поэтому двусторонняя связь держит контрол и модель равными; клик и пробел переключают состояние; квадрат с галочкой стоит у начала контрола (левый край в left-to-right, правый в right-to-left), а текст метки — рядом с ним; выключенный контрол рисуется серым;
+- focus ring флажков и кнопок radio рисуется вокруг самой метки (квадрата с
+  галочкой или кружка с точкой), а не вокруг всего контрола: между кольцом и
+  меткой остаётся зазор в один пиксель, текст метки в кольцо не входит, а у
+  radio-кнопки кольцо круглое. Базовый `Control` дал для этого хуки
+  `focusRingBounds` (где рисуется кольцо) и `defaultFocusRingShape` (какой
+  формой); форма из шаблона по-прежнему имеет приоритет;
 - раскладка текста кэшируется в одном месте: `CachedTextLayout` (`lib/src/text_layout.dart`) переиспользует раскладку, пока не изменились текст, кегль, масштаб, направление и backend; её используют `Label`, `TextBox`, `TextArea` и `CheckBox`;
 - многострочный ввод: общий каркас редактирования вынесен в `TextEditor` (`lib/src/text_editor.dart`) — буфер, команды, composition, мышь, IME, кэш раскладки и отрисовка; `TextBox` и `TextArea` делят его, а не копируют логику. `TextArea` (`lib/src/text_area.dart`) переносит текст по словам в ширину поля, владеет вертикальной полосой прокрутки (часть `verticalScrollBar`), вставляет перевод строки по Shift+Enter, ходит кареткой между строками стрелками вверх и вниз, а Home и End работают по логической строке; прокрутка следует за кареткой, пока пользователь не прокрутил текст сам;
 - постоянное дерево и lifecycle mount/unmount;
@@ -227,7 +233,8 @@ Skia canvas масштабируется через `displayScale`. Backbuffer �
   `direction` (0 — left-to-right, 1 — right-to-left), native ставит
   `SkParagraph::setTextDirection`, поэтому порядок прогонов внутри строки
   задаёт направление абзаца, а сами прогоны сохраняют свой порядок;
-- 373 Dart-теста, включая file-dialog contract, formatted clipboard snapshots, styles/templates, DataContext inheritance/accessors/reparenting, value precedence/transitions, binding lifecycle/diagnostics, ObservableCollection/ItemsControl/virtualization, ScrollViewer measure/scroll/input/clip, Grid tracks/span/gap/invalidate/HiDPI, DockPanel measure/arrange/invalidate, diagnostics FPS/render-on-demand, synchronous live-resize frame с увеличением physical backbuffer, layout constraints/alignment, infinite text width, clipping/rendering, horizontal scrolling, mouse caret/selection, pointer capture, surrogate pairs, composition, clipboard, recursive dispose, semantics tree, packaging, native ScrollViewer automation, render-on-demand, scheduler counters и направление раскладки (21 тест), многострочный ввод: перенос по словам, вертикальная прокрутка, Shift+Enter и навигация по строкам (15 тестов), флажок: два состояния, связь с моделью, клавиатура, рисование галочки и семантика (16 тестов), группа radio: взаимное исключение кнопок, выбор в свойстве группы, связь с моделью, стрелки, focus scope, вложенные группы и семантика (18 тестов).
+- 375 Dart-теста, включая file-dialog contract, formatted clipboard snapshots, styles/templates, DataContext inheritance/accessors/reparenting, value precedence/transitions, binding lifecycle/diagnostics, ObservableCollection/ItemsControl/virtualization, ScrollViewer measure/scroll/input/clip, Grid tracks/span/gap/invalidate/HiDPI, DockPanel measure/arrange/invalidate, diagnostics FPS/render-on-demand, synchronous live-resize frame с увеличением physical backbuffer, layout constraints/alignment, infinite text width, clipping/rendering, horizontal scrolling, mouse caret/selection, pointer capture, surrogate pairs, composition, clipboard, recursive dispose, semantics tree, packaging, native ScrollViewer automation, render-on-demand, scheduler counters и направление раскладки (21 тест), многострочный ввод: перенос по словам, вертикальная прокрутка, Shift+Enter и навигация по строкам (15 тестов), флажок: два состояния, связь с моделью, клавиатура, рисование галочки и семантика (16 тестов), группа radio: взаимное исключение кнопок, выбор в свойстве группы, связь с моделью, стрелки, focus scope, вложенные группы и семантика (18 тестов), focus ring вокруг метки флажка и
+radio-кнопки: зазор, форма кольца и видимость самого знака (2 теста).
 
 ### 3.2. Проверенное поведение
 
@@ -322,7 +329,7 @@ lib/src/clipboard.dart               — ClipboardHandler и стандартн�
 lib/src/file_dialog.dart             — standalone FileDialog и backend contract
 lib/src/frame_scheduler.dart         — invalidate coalescing, layout/paint passes и counters
 lib/src/focus_manager.dart           — FocusManager
-lib/src/focus_decoration.dart        — общий focus ring для контролов
+lib/src/focus_decoration.dart        — общий focus ring: прямоугольное и капсульное кольцо
 lib/src/ui_element.dart              — UIElement, Control и WindowHost lifecycle
 lib/src/controls.dart                — compatibility barrel для контролов
 lib/src/content_control.dart         — ContentControl и content notifications
@@ -1024,6 +1031,8 @@ One-way local маскирует binding, но не отменяет его; `cl
 с группой radio (п. 13) закрыт 2026-11-28: кнопки группы, выбор в свойстве
 группы, стрелки и focus scope. Дальше — `Switch` с анимацией (п. 14) и остальные
 элементы слоя 1. Полный список виджетов и подсистем — в §7.1.
+Focus ring флажков и radio-кнопок теперь рисуется вокруг самой метки, а не
+вокруг всего контрола (2026-11-28).
 Пункт 7 «Направление раскладки» закрыт полностью: часть A (направление в
 дереве, зеркалирование раскладки, логическое выравнивание, right-to-left
 текст в поле и прокрутка) и часть B (направление абзаца в native backend,
@@ -1106,13 +1115,15 @@ UI-кита этого мало, но порядок работ определя
 
 **Слой 1 — простые элементы ввода** (по одной сессии, native-работ нет):
 
-12. `CheckBox` — два состояния, галочка. **Готово (2026-11-28):** состояние `isChecked` в системе свойств (двусторонняя связь с моделью), переключение кликом и пробелом, галочка и текст метки рядом, квадрат у начала контрола, выключенное состояние серым, своя роль в дереве семантики.
+12. `CheckBox` — два состояния, галочка. **Готово (2026-11-28):** состояние `isChecked` в системе свойств (двусторонняя связь с моделью), переключение кликом и пробелом, галочка и текст метки рядом, квадрат у начала контрола, выключенное состояние серым, своя роль в дереве семантики, focus ring
+    вокруг квадрата с зазором в один пиксель.
 13. `RadioButton` + группа radio — нужен контейнер с focus scope и общей
     группой. **Готово (2026-11-28):** `RadioGroup` — контейнер с focus
     scope, который владеет выбором группы: значение отмеченной кнопки
     живёт в свойстве группы и связывается с моделью; кнопки группы не
     отмечаются вместе, стрелки ходят по кнопкам и ведут за собой фокус,
-    вложенная группа владеет своими кнопками.
+    вложенная группа владеет своими кнопками, круглое focus ring вокруг
+    кружка с зазором в один пиксель.
 14. `Switch` / `ToggleButton` — переключатель с анимацией.
 15. `Slider` — drag ползунка плюс клавиатура, тот же жест, что у полосы
     прокрутки.
@@ -1240,6 +1251,39 @@ UI-кита этого мало, но порядок работ определя
 ---
 
 ## 9. Журнал работ
+
+### 2026-11-28 — слой 1: focus ring флажка и radio-кнопки
+
+Сделано:
+
+- Focus ring у `CheckBox` и `RadioButton` больше не перекрывает сам виджет:
+  кольцо рисуется вокруг метки (квадрата с галочкой или кружка с точкой),
+  между кольцом и меткой остаётся зазор в один пиксель, а текст метки в
+  кольцо не входит.
+- У `RadioButton` кольцо круглое (`FocusRingShape.capsule`), у `CheckBox` —
+  прямоугольное. Форма, заданная шаблоном, по-прежнему имеет приоритет.
+- В каркас добавлены общие хуки `Control.focusRingBounds` (где рисуется
+  кольцо) и `Control.defaultFocusRingShape` (какой формой), поэтому любой
+  контрол может указать своё кольцо; база рисует кольцо по этим хукам.
+- Метка переключателей отодвинута от края контрола на 3 пикселя
+  (`CheckableControl.focusRingPadding`), а высота контрола резервирует
+  место под кольцо, поэтому галочка и точка видны целиком.
+
+Проверено:
+
+- `dart analyze` — без замечаний; `dart format` применён.
+- `dart test --exclude-tags clipboard,native` — 375/375;
+  `dart test --tags native --exclude-tags clipboard` — 55/55.
+- Новые тесты в `test/checkbox_test.dart` и `test/radio_button_test.dart`:
+  кольцо стоит вокруг метки и не закрывает её, у radio-кнопки кольцо
+  круглое.
+- Смоуки `example/native_checkbox.dart --smoke` и
+  `example/native_radio_button.dart --smoke` проходят.
+- Снимки экрана показывают флажок и radio-кнопку в фокусе: кольцо обводит
+  знак, зазор виден, текст метки вне кольца.
+
+Дальше: слой 1 — `Switch` с анимацией (п. 14) и остальные простые элементы
+ввода. Публикация пакета 0.2.0 должна нести native ABI версии 6.
 
 ### 2026-11-28 — слой 1, пункт 13: переключатель и группа radio
 
