@@ -1,5 +1,6 @@
 import 'dart:math' as math;
 
+import 'control_template.dart';
 import 'drawing.dart';
 import 'events.dart';
 import 'geometry.dart';
@@ -25,7 +26,8 @@ final class ScrollBar extends TemplatedControl {
     double value = 0,
     double viewportSize = 0,
     double thickness = defaultThickness,
-  }) : _orientation = orientation {
+  })  : _orientation = orientation,
+        super(templateProperty: templateProperty) {
     setValue(minimumProperty, minimum);
     setValue(maximumProperty, maximum);
     setValue(valueProperty, value);
@@ -35,6 +37,22 @@ final class ScrollBar extends TemplatedControl {
     addHandler(UIElement.pointerMove, _pointerMove);
     addHandler(UIElement.pointerUp, _pointerUp);
   }
+
+  static const templateProperty =
+      DuiProperty<ScrollBar, ControlTemplate<ScrollBar>?>(
+    name: 'template',
+    defaultValue: null,
+    affectsMeasure: true,
+    affectsPaint: true,
+  );
+
+  /// The template of the scroll bar.
+  ///
+  /// The template owns the look of the bar: it draws the track and the thumb
+  /// and reacts to the value and the orientation of the bar.
+  @override
+  ControlTemplate<ScrollBar>? get template =>
+      super.template as ControlTemplate<ScrollBar>?;
 
   /// The thickness of a scroll bar.
   static const defaultThickness = 12.0;

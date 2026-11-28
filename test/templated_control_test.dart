@@ -20,6 +20,10 @@ final class _Panel extends ContentControl {
       super.template as ControlTemplate<_Panel>?;
 }
 
+/// A control that inherits the template mechanics but declares no template
+/// property of its own.
+final class _Plain extends TemplatedControl {}
+
 void main() {
   group('templated control', () {
     test('a template works for any control, not only for a button', () {
@@ -139,16 +143,112 @@ void main() {
 
     test('a control without a template property does not support templates',
         () {
-      final border = Border(content: Label(text: 'Hello'));
+      final plain = _Plain();
 
-      expect(border.template, isNull);
+      expect(plain.template, isNull);
       expect(
-        () => border.template = ControlTemplate<Border>((control) => Label()),
+        () => plain.template = ControlTemplate<_Plain>((control) => Label()),
         throwsStateError,
       );
     });
+
+    test('a label can be templated', () {
+      final label = Label(text: 'Outer');
+      late Border root;
+      label.template = ControlTemplate<Label>((control) {
+        root = Border(
+          color: const Color(0xFF224466),
+          content: Label(text: 'Inner'),
+        );
+        return root;
+      });
+
+      expect(label.hasTemplate, isTrue);
+      expect(label.templateRoot, same(root));
+      expect(root.logicalParent, same(label));
+    });
+
+    test('the template of a label replaces its own text', () async {
+      final label = Label(text: 'Outer');
+      final window = Window(width: 200, height: 100, content: label);
+      await window.show();
+
+      var renderer = RecordingDrawingContext();
+      window.renderFrame(renderer);
+      expect(_texts(renderer), ['Outer']);
+
+      label.template = ControlTemplate<Label>((control) {
+        return Border(content: Label(text: 'Inner'));
+      });
+
+      renderer = RecordingDrawingContext();
+      window.renderFrame(renderer);
+      expect(_texts(renderer), ['Inner']);
+    });
+
+    test('the text of a label comes back when the template is removed',
+        () async {
+      final label = Label(text: 'Outer');
+      final window = Window(width: 200, height: 100, content: label);
+      await window.show();
+
+      label.template = ControlTemplate<Label>((control) {
+        return Border(content: Label(text: 'Inner'));
+      });
+      label.template = null;
+
+      final renderer = RecordingDrawingContext();
+      window.renderFrame(renderer);
+      expect(_texts(renderer), ['Outer']);
+      expect(label.hasTemplate, isFalse);
+    });
+
+    test('a border can be templated and presents its content', () {
+      final content = Label(text: 'Hello');
+      final border = Border(content: content);
+      late Border root;
+      late ContentPresenter presenter;
+      border.template = ControlTemplate<Border>((control) {
+        presenter = ContentPresenter(control);
+        root = Border(color: const Color(0xFF224466), content: presenter);
+        return root;
+      });
+
+      expect(border.hasTemplate, isTrue);
+      expect(border.templateRoot, same(root));
+      expect(presenter.content, same(content));
+      expect(content.logicalParent, same(presenter));
+    });
+
+    test('a scroll bar can be templated', () async {
+      final bar = ScrollBar(maximum: 100, value: 20, viewportSize: 50);
+      final window = Window(width: 100, height: 200, content: bar);
+      await window.show();
+
+      var renderer = RecordingDrawingContext();
+      window.renderFrame(renderer);
+      expect(renderer.commands.whereType<DrawRectCommand>(), hasLength(2));
+
+      late Border root;
+      bar.template = ControlTemplate<ScrollBar>((control) {
+        root = Border(color: const Color(0xFF224466));
+        return root;
+      });
+
+      expect(bar.hasTemplate, isTrue);
+      expect(bar.templateRoot, same(root));
+
+      renderer = RecordingDrawingContext();
+      window.renderFrame(renderer);
+      expect(renderer.commands.whereType<DrawRectCommand>(), hasLength(1));
+    });
   });
 }
+
+List<String> _texts(RecordingDrawingContext renderer) => renderer.commands
+    .whereType<DrawTextCommand>()
+    .map((command) => command.text)
+    .toList();
 
 List<DrawRectCommand> _focusRing(RecordingDrawingContext renderer) =>
     renderer.commands

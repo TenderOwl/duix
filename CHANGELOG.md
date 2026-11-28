@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- A template is not a thing of the button only. `Label`, `Border` and `ScrollBar` have
+  their own template property now, so the look of any widget that draws itself can be
+  replaced: a template of a label takes over its text, a template of a border presents
+  its content through a `ContentPresenter` and a template of a scroll bar draws the
+  track and the thumb.
+- A text that is exactly as wide as its box does not push its last word onto the next
+  line any more.
 - A path is a list of commands: `Path` moves the pen, draws straight lines,
   quadratic and cubic curves and closes the contours, and it can add a
   rectangle or a rounded rectangle. `DrawingContext.drawPath(path, paint)`

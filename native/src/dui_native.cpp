@@ -573,7 +573,10 @@ std::unique_ptr<skia::textlayout::Paragraph> create_paragraph(
   builder->addText(text, text_length);
   auto paragraph = builder->Build();
   if (!paragraph) return nullptr;
-  paragraph->layout(max_width);
+  // The paragraph is laid out with a hair more room than it gets. The width
+  // of a line and the width of the box are the same number, so a text that is
+  // exactly as wide as its box would push its last word onto the next line.
+  paragraph->layout(max_width + 1.0f);
   return paragraph;
 }
 

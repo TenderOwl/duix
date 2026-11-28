@@ -53,6 +53,41 @@ Future<void> main(List<String> args) async {
       Label.textProperty,
       clicks.map((value) => 'Нажатий: $value').asBinding(),
     );
+  // A template is not a thing of the button only: the label and the border
+  // take a template as well.
+  final badgeTemplate = ControlTemplate<Label>((control) {
+    final inner = Label(fontSize: 14);
+    inner
+      ..bind(Label.textProperty, control.propertyBinding(Label.textProperty))
+      ..bind(Label.colorProperty, control.propertyBinding(Label.colorProperty));
+    return Border(
+      color: _aquaNormal,
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+      content: inner,
+    );
+  });
+  final badge = Label(text: 'Badge', color: const Color(0xFFFFFFFF))
+    ..style = Style<Label>(
+      name: 'Aqua badge',
+      setters: [DuiSetter(Label.templateProperty, badgeTemplate)],
+    )
+    ..horizontalAlignment = HorizontalAlignment.left;
+
+  final cardTemplate = ControlTemplate<Border>((control) {
+    return Border(
+      color: const Color(0xFFFFFFFF),
+      padding: const EdgeInsets.all(14),
+      content: ContentPresenter(control),
+    );
+  });
+  final card = Border(
+    color: const Color(0xFFDDDDDD),
+    content: Label(text: 'Карточка с шаблоном'),
+  )..style = Style<Border>(
+      name: 'Aqua card',
+      setters: [DuiSetter(Border.templateProperty, cardTemplate)],
+    );
+
   final window = Window(
     title: 'DUI — Aqua Button',
     width: 520,
@@ -68,6 +103,8 @@ Future<void> main(List<String> args) async {
               'Persistent ControlTemplate с hover, pressed и focus-состояниями.',
         ),
         button,
+        badge,
+        card,
         status,
         Label(
           text: 'Tab — фокус, Space/Enter — активация.',

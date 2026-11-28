@@ -1,5 +1,6 @@
 import 'colors.dart';
 import 'content_control.dart';
+import 'control_template.dart';
 import 'drawing.dart';
 import 'geometry.dart';
 import 'properties.dart';
@@ -9,10 +10,17 @@ final class Border extends ContentControl {
     super.content,
     Color color = Colors.black,
     EdgeInsets padding = EdgeInsets.zero,
-  }) {
+  }) : super(templateProperty: templateProperty) {
     setValue(colorProperty, color);
     setValue(paddingProperty, padding);
   }
+
+  static const templateProperty = DuiProperty<Border, ControlTemplate<Border>?>(
+    name: 'template',
+    defaultValue: null,
+    affectsMeasure: true,
+    affectsPaint: true,
+  );
 
   static const colorProperty = DuiProperty<Border, Color>(
     name: 'color',
@@ -33,6 +41,14 @@ final class Border extends ContentControl {
 
   @override
   bool get isFocusable => false;
+
+  /// The template of the border.
+  ///
+  /// The template owns the look of the border: it draws the frame and presents
+  /// the content of the border through a [ContentPresenter].
+  @override
+  ControlTemplate<Border>? get template =>
+      super.template as ControlTemplate<Border>?;
 
   @override
   Size measureContentCore(Size availableSize) {

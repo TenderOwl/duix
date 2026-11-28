@@ -37,6 +37,31 @@ void main() {
     });
   });
 
+  test('a text that is exactly as wide as its box stays on one line', () {
+    const text = 'Badge';
+    final wide = factory.create(const TextLayoutOptions(
+      text: text,
+      fontSize: 14,
+      maxWidth: 1000,
+      scale: 2,
+    ));
+    final tight = factory.create(TextLayoutOptions(
+      text: text,
+      fontSize: 14,
+      maxWidth: wide.width,
+      scale: 2,
+    ));
+    try {
+      // The width of a line and the width of the box are the same number, so
+      // the text must not push its last word onto the next line.
+      expect(tight.height, wide.height);
+      expect(tight.width, closeTo(wide.width, 0.01));
+    } finally {
+      wide.dispose();
+      tight.dispose();
+    }
+  });
+
   test('multiline text increases height and selection stays in bounds', () {
     const text = 'First line\nВторая строка\n第三行';
     final single = factory.create(const TextLayoutOptions(

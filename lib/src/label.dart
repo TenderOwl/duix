@@ -1,23 +1,32 @@
 import 'colors.dart';
+import 'control_template.dart';
 import 'drawing.dart';
 import 'geometry.dart';
 import 'headless_text_layout.dart';
 import 'properties.dart';
 import 'semantics.dart';
+import 'templated_control.dart';
 import 'text_layout.dart';
-import 'ui_element.dart';
 
-final class Label extends Control {
+final class Label extends TemplatedControl {
   Label({
     String text = '',
     double fontSize = 14,
     Color color = Colors.black,
     TextAlignment alignment = TextAlignment.start,
-  }) : _alignment = alignment {
+  })  : _alignment = alignment,
+        super(templateProperty: templateProperty) {
     setValue(textProperty, text);
     setValue(fontSizeProperty, fontSize);
     setValue(colorProperty, color);
   }
+
+  static const templateProperty = DuiProperty<Label, ControlTemplate<Label>?>(
+    name: 'template',
+    defaultValue: null,
+    affectsMeasure: true,
+    affectsPaint: true,
+  );
 
   static const textProperty = DuiProperty<Label, String>(
     name: 'text',
@@ -63,6 +72,14 @@ final class Label extends Control {
   @override
   bool get isFocusable => false;
 
+  /// The template of the label.
+  ///
+  /// The template owns the look of the label: it draws the text in its own
+  /// way and reacts to the text, the size and the color of the label.
+  @override
+  ControlTemplate<Label>? get template =>
+      super.template as ControlTemplate<Label>?;
+
   @override
   SemanticsRole get semanticsRole => SemanticsRole.label;
 
@@ -70,13 +87,13 @@ final class Label extends Control {
   String get semanticsName => text;
 
   @override
-  Size measureCore(Size availableSize) {
+  Size measureContentCore(Size availableSize) {
     final layout = _layoutFor(availableSize.width);
     return Size(layout.width, layout.height);
   }
 
   @override
-  void renderCore(DrawingContext context) {
+  void renderContentCore(DrawingContext context) {
     final layout = _layoutFor(bounds.width);
     layout.draw(
       context,
