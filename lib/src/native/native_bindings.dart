@@ -105,6 +105,9 @@ final class DuiTextLayoutOptionsStruct extends Struct {
 
   @Int32()
   external int alignment;
+
+  @Int32()
+  external int direction;
 }
 
 final class DuiTextMetricsStruct extends Struct {
@@ -1014,7 +1017,7 @@ final class NativeBindings {
         windowPresent = library.lookupFunction<_FrameNative, _FrameDart>(
           'dui_window_present',
         ) {
-    if (abiVersion() != 5) {
+    if (abiVersion() != 6) {
       throw StateError('Unsupported dui_native ABI version: ${abiVersion()}.');
     }
   }
@@ -1355,6 +1358,7 @@ final class NativeBindings {
     required Arena arena,
     String? fontFamily,
     int alignment = 0,
+    int direction = 0,
   }) {
     final textUtf8 = text.toNativeUtf8(allocator: arena);
     final familyUtf8 = fontFamily?.toNativeUtf8(allocator: arena);
@@ -1370,6 +1374,7 @@ final class NativeBindings {
     value.maxWidth = maxWidth;
     value.scale = scale;
     value.alignment = alignment;
+    value.direction = direction;
     final layout = _textLayoutCreate(options);
     if (layout == nullptr) {
       throw StateError('Could not create native text layout: $lastError');

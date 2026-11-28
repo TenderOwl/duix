@@ -16,12 +16,14 @@
   `ScrollBar` starts at the right edge, the vertical bar of a `ScrollViewer` stands
   on the left and the content of the viewer starts at the right edge.
 - `TextLayoutOptions` carries the direction of the text, and `resolveTextAlignment`
-  turns the logical alignment of a layout into the absolute one of the backend, so
-  the native ABI stays at version 5.
-- The order of the characters inside a line is still left-to-right: the paragraph of
-  the native backend has no direction yet. That is the next step of the item and it
-  needs `SkParagraph::setTextDirection`, the native ABI version 6 and a rebuild of
-  the library.
+  turns the logical alignment of a layout into the absolute one of the backend.
+- The native ABI is version 6 now. The options of a text layout carry the direction of
+  the paragraph, so the native backend shapes the text with
+  `SkParagraph::setTextDirection`. The direction of the paragraph is the base direction
+  of the text: it decides where the runs of a line stand, while the runs themselves
+  keep their own order, so a Hebrew run is read from right to left in every paragraph.
+  The caret, the selection and the mouse hit testing are counted in the coordinates of
+  the paragraph, so the field, the caret and the text agree with each other.
 - A template does not have to replace the content of a control. A control can offer named
   parts now: `TemplatedControl.registerPart(name, element)` puts a part into the control,
   the template finds it with `control.part(name)` and places it where it belongs, and the
@@ -52,9 +54,9 @@
   of the shape, `Paint.blendMode` says how the shape is mixed with the pixels
   under it (`srcOver`, `screen`, `multiply`, `plus`, `difference`, `lighten`,
   `darken`, `overlay`) and `Paint.shadow` draws a soft shadow under the shape.
-- The native ABI is version 5 now. The paint of a shape crosses the boundary
-  as a struct and the path as a list of commands, so a widget can draw a
-  contour with a transparency, a blend mode and a shadow.
+- The paint of a shape crosses the boundary as a struct and the path as a list of
+  commands, so a widget can draw a contour with a transparency, a blend mode and a
+  shadow.
 - Windows UI Automation reads the widgets of a window. The native layer answers
   `WM_GETOBJECT` with a provider of the semantics tree, so the assistive
   technologies of the system see the same tree as the framework: the type of the

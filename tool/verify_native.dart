@@ -10,7 +10,7 @@ import 'package:ffi/ffi.dart';
 void main() {
   final bindings = NativeBindings.open();
   final abi = bindings.abiVersion();
-  if (abi != 3) {
+  if (abi != 6) {
     throw StateError('Unexpected ABI version $abi.');
   }
 

@@ -12,7 +12,7 @@ void main(List<String> arguments) {
   }
   final library = NativeBindings.open(libraryPath: arguments.first);
   final abi = library.abiVersion();
-  if (abi != 3) {
+  if (abi != 6) {
     throw StateError('Unexpected ABI version $abi.');
   }
 

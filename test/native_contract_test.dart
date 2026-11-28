@@ -13,6 +13,10 @@ void main() {
     expect(sizeOf<DuiWindowMetricsStruct>(), 32);
   });
 
+  test('Dart text layout options layout matches the 64-bit C ABI', () {
+    expect(sizeOf<DuiTextLayoutOptionsStruct>(), 72);
+  });
+
   test('native library candidates exist for the current desktop', () {
     expect(NativeBindings.defaultLibraryCandidates, isNotEmpty);
   });

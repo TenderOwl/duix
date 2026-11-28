@@ -31,6 +31,7 @@ final class NativeTextLayoutFactory implements TextLayoutFactory {
         scale: options.scale,
         fontFamily: options.fontFamily,
         alignment: alignment,
+        direction: options.direction == FlowDirection.rightToLeft ? 1 : 0,
         arena: arena,
       );
       final metrics = bindings.textLayoutMeasure(handle, arena);

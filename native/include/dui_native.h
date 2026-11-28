@@ -89,6 +89,10 @@ typedef struct DuiTextLayoutOptions {
   double max_width;
   double scale;
   int32_t alignment;
+  /* The direction of the paragraph: 0 is left to right, 1 is right to left.
+   * The direction decides the order of the runs inside a line and the side the
+   * text starts from. */
+  int32_t direction;
 } DuiTextLayoutOptions;
 
 typedef struct DuiTextMetrics {

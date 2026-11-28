@@ -20,6 +20,11 @@ Future<void> main(List<String> args) async {
   final field = TextBox(text: 'Поле ввода', fontSize: 16)
     ..horizontalAlignment = HorizontalAlignment.stretch;
 
+  // A text of a right to left paragraph keeps the order of its runs: the
+  // native backend shapes it with the direction of the paragraph.
+  final hebrew = TextBox(text: 'שלום עולם', fontSize: 18)
+    ..horizontalAlignment = HorizontalAlignment.stretch;
+
   final buttons = StackPanel(
     orientation: Orientation.horizontal,
     spacing: 12,
@@ -59,7 +64,7 @@ Future<void> main(List<String> args) async {
     content: StackPanel(
       spacing: 18,
       padding: const EdgeInsets.all(28),
-      children: [title, field, buttons, viewer],
+      children: [title, field, hebrew, buttons, viewer],
     ),
   )..flowDirection = FlowDirection.rightToLeft;
 

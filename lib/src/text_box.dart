@@ -196,9 +196,14 @@ final class TextBox extends TemplatedControl {
         _isLowSurrogate(text.codeUnitAt(offset))) {
       final before = offset - 1;
       final after = offset + 1;
-      final midpoint =
-          (layout.caretRect(before).left + layout.caretRect(after).left) / 2;
-      return local.x < midpoint ? before : after;
+      // The caret of the closer grapheme wins. The direction of the text
+      // decides on which side of the pair the caret of a grapheme stands.
+      final beforeX = layout.caretRect(before).left;
+      final afterX = layout.caretRect(after).left;
+      final midpoint = (beforeX + afterX) / 2;
+      final isBefore =
+          beforeX <= afterX ? local.x < midpoint : local.x > midpoint;
+      return isBefore ? before : after;
     }
     return offset;
   }

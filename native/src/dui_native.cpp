@@ -532,7 +532,9 @@ sk_sp<skia::textlayout::FontCollection> shared_font_collection() {
 }
 
 // Builds a shaped SkParagraph. The paragraph is laid out with [max_width] in
-// physical pixels; [font_size] is expected in physical pixels as well.
+// physical pixels; [font_size] is expected in physical pixels as well. The
+// direction is 0 for left to right and 1 for right to left: it decides the
+// order of the runs inside a line and the side the text starts from.
 std::unique_ptr<skia::textlayout::Paragraph> create_paragraph(
     const char* text,
     size_t text_length,
@@ -540,6 +542,7 @@ std::unique_ptr<skia::textlayout::Paragraph> create_paragraph(
     size_t font_family_length,
     SkScalar font_size,
     int32_t alignment,
+    int32_t direction,
     SkScalar max_width) {
   auto unicode = shared_unicode();
   auto fonts = shared_font_collection();
@@ -564,6 +567,9 @@ std::unique_ptr<skia::textlayout::Paragraph> create_paragraph(
       paragraph_style.setTextAlign(skia::textlayout::TextAlign::kLeft);
       break;
   }
+  paragraph_style.setTextDirection(
+      direction == 1 ? skia::textlayout::TextDirection::kRtl
+                     : skia::textlayout::TextDirection::kLtr);
 
   auto builder = skia::textlayout::ParagraphBuilder::make(
       paragraph_style,
@@ -765,7 +771,7 @@ void destroy_window_resources(DuiWindow* window) {
 
 }  // namespace
 
-uint32_t dui_abi_version(void) { return 5; }
+uint32_t dui_abi_version(void) { return 6; }
 
 const char* dui_last_error_message(void) { return last_error.c_str(); }
 
@@ -2153,6 +2159,7 @@ int32_t dui_draw_text(
           0,
           static_cast<SkScalar>(font_size * scale),
           0,
+          0,
           kUnlimitedWidth * scale);
       if (!cache.paragraph) {
         set_error("SkParagraph creation failed.");
@@ -2216,6 +2223,7 @@ SdlScope lock;
       std::isnan(options->max_width) || options->max_width <= 0 ||
       !std::isfinite(options->scale) || options->scale <= 0 ||
       options->alignment < 0 || options->alignment > 2 ||
+      options->direction < 0 || options->direction > 1 ||
       !std::isfinite(options->font_size * options->scale) ||
       std::isnan(options->max_width * options->scale) ||
       options->max_width * options->scale <= 0) {
@@ -2255,6 +2263,7 @@ SdlScope lock;
         options->font_family_length,
         static_cast<SkScalar>(options->font_size * options->scale),
         options->alignment,
+        options->direction,
         static_cast<SkScalar>(options->max_width * options->scale));
     if (!layout->paragraph) {
       set_error("SkParagraph creation failed.");
