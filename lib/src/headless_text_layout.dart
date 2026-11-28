@@ -50,11 +50,29 @@ final class HeadlessTextLayout implements TextLayout {
   @override
   double get width {
     _checkNotDisposed();
-    final unconstrained = _lines.fold<double>(
-      0,
-      (maximum, line) => math.max(maximum, line.length * _characterWidth),
-    );
-    return math.min(unconstrained, options.maxWidth);
+    return math.min(_textWidth, options.maxWidth);
+  }
+
+  /// The width of the longest line, without the limit of the layout.
+  double get _textWidth => _lines.fold<double>(
+        0,
+        (maximum, line) => math.max(maximum, line.length * _characterWidth),
+      );
+
+  /// The distance between the left edge of the layout and the text.
+  ///
+  /// The text is aligned inside the layout the way the backend does it: the
+  /// logical alignment is resolved for the direction of the layout, so the
+  /// text of a right to left layout starts at the right edge.
+  double get _alignmentOffset {
+    final textWidth = _textWidth;
+    final available = options.maxWidth.isFinite ? options.maxWidth : textWidth;
+    final free = math.max(0.0, available - textWidth);
+    return switch (resolveTextAlignment(options.alignment, options.direction)) {
+      1 => free / 2,
+      2 => free,
+      _ => 0.0,
+    };
   }
 
   @override
@@ -81,7 +99,7 @@ final class HeadlessTextLayout implements TextLayout {
     _checkNotDisposed();
     context.drawText(
       options.text,
-      position,
+      Point(position.x + _alignmentOffset, position.y),
       fontSize: options.fontSize,
       color: paint.color,
       alignment: options.alignment,
@@ -95,7 +113,7 @@ final class HeadlessTextLayout implements TextLayout {
         (position.y / _lineHeight).floor().clamp(0, _lines.length - 1);
     final column = _characterWidth == 0
         ? 0
-        : (position.x / _characterWidth)
+        : ((position.x - _alignmentOffset) / _characterWidth)
             .round()
             .clamp(0, _lines[lineIndex].length);
     return TextPosition(_lineStarts[lineIndex] + column);
@@ -109,7 +127,7 @@ final class HeadlessTextLayout implements TextLayout {
       final lineEnd = _lineStarts[index] + _lines[index].length;
       if (offset <= lineEnd) {
         return Rect.fromLTWH(
-          (offset - _lineStarts[index]) * _characterWidth,
+          (offset - _lineStarts[index]) * _characterWidth + _alignmentOffset,
           index * _lineHeight,
           0,
           _lineHeight,
@@ -118,7 +136,7 @@ final class HeadlessTextLayout implements TextLayout {
     }
     final last = _lines.length - 1;
     return Rect.fromLTWH(
-      _lines[last].length * _characterWidth,
+      _lines[last].length * _characterWidth + _alignmentOffset,
       last * _lineHeight,
       0,
       _lineHeight,
@@ -143,7 +161,7 @@ final class HeadlessTextLayout implements TextLayout {
       final selectionEnd = math.min(end, lineEnd);
       if (selectionStart >= selectionEnd) continue;
       rects.add(Rect.fromLTWH(
-        (selectionStart - lineStart) * _characterWidth,
+        (selectionStart - lineStart) * _characterWidth + _alignmentOffset,
         index * _lineHeight,
         (selectionEnd - selectionStart) * _characterWidth,
         _lineHeight,

@@ -233,6 +233,24 @@ abstract class PropertyOwner extends ObservableObject {
   void setInheritedValue<T>(DuiProperty<dynamic, T> property, T value) =>
       _setLayerValue(_inheritedValues, property, value);
 
+  /// Writes an explicit local value, even when it equals the default.
+  ///
+  /// [setValue] drops a local value that equals the default of the property,
+  /// because a control that was never set must not look like one that was
+  /// set to the default. An inheritable property needs the difference: a child
+  /// of a right to left tree keeps the left to right direction of its own
+  /// this way.
+  void setLocalValue<T>(DuiProperty<dynamic, T> property, T value) {
+    _checkNotDisposed();
+    final active = _bindingSubscriptions[property];
+    if (active != null && active.mode == BindingMode.twoWay) {
+      if (active.lastValue == value) return;
+      active.write(value);
+      return;
+    }
+    _setLayerValue(_localValues, property, value);
+  }
+
   void setStyleValue<T>(DuiProperty<dynamic, T> property, T value) =>
       _setLayerValue(_styleValues, property, value);
 

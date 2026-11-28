@@ -365,11 +365,19 @@ final class ScrollViewer extends ContentControl {
     _extentHeight = math.max(contentSize.height, _viewportHeight);
     _clampOffsets();
 
+    final contentWidth = math.max(contentSize.width, _viewportWidth);
+    final contentHeight = math.max(contentSize.height, _viewportHeight);
+    // The content starts at the start of the direction: at the left edge of
+    // the viewport from left to right and at its right edge from right to
+    // left. The offset is counted from that start.
+    final contentLeft = isRightToLeft
+        ? finalRect.right - contentWidth + _horizontalOffset
+        : finalRect.left - _horizontalOffset;
     content?.arrange(Rect.fromLTWH(
-      finalRect.left - _horizontalOffset,
+      contentLeft,
       finalRect.top - _verticalOffset,
-      math.max(contentSize.width, _viewportWidth),
-      math.max(contentSize.height, _viewportHeight),
+      contentWidth,
+      contentHeight,
     ));
   }
 
@@ -389,7 +397,9 @@ final class ScrollViewer extends ContentControl {
     if (identical(part, _verticalBar)) {
       return _isVerticalScrollBarVisible
           ? Rect.fromLTWH(
-              contentRect.right - scrollBarThickness,
+              isRightToLeft
+                  ? contentRect.left
+                  : contentRect.right - scrollBarThickness,
               contentRect.top,
               scrollBarThickness,
               _viewportHeight,
@@ -404,7 +414,7 @@ final class ScrollViewer extends ContentControl {
     if (_isHorizontalScrollBarVisible && _isVerticalScrollBarVisible) {
       context.drawRect(
         Rect.fromLTWH(
-          bounds.right - scrollBarThickness,
+          isRightToLeft ? bounds.left : bounds.right - scrollBarThickness,
           bounds.bottom - scrollBarThickness,
           scrollBarThickness,
           scrollBarThickness,
@@ -492,27 +502,36 @@ final class ScrollViewer extends ContentControl {
   }
 
   void _mouseWheel(Object sender, MouseWheelEventArgs args) {
+    // The wheel is a physical device, so it moves the content the way it
+    // moves in a tree from left to right.
+    final horizontal = isRightToLeft ? -args.deltaX : args.deltaX;
     var handled = scrollBy(
-      horizontal: args.deltaX * wheelScrollDistance,
+      horizontal: horizontal * wheelScrollDistance,
       vertical: -args.deltaY * wheelScrollDistance,
     );
     if (!handled && args.deltaY != 0 && canScrollHorizontally) {
-      handled = scrollBy(horizontal: -args.deltaY * wheelScrollDistance);
+      handled = scrollBy(
+        horizontal:
+            (isRightToLeft ? args.deltaY : -args.deltaY) * wheelScrollDistance,
+      );
     }
     args.handled = handled;
   }
 
   void _keyDown(Object sender, KeyEventArgs args) {
     if (!isEnabled) return;
+    // The keys move the content the way they move it in a tree from left to
+    // right.
+    final horizontal = isRightToLeft ? -1.0 : 1.0;
     final handled = switch (args.key) {
       'up' when !args.primaryShortcutPressed =>
         scrollBy(vertical: -lineScrollDistance),
       'down' when !args.primaryShortcutPressed =>
         scrollBy(vertical: lineScrollDistance),
       'left' when !args.primaryShortcutPressed =>
-        scrollBy(horizontal: -lineScrollDistance),
+        scrollBy(horizontal: -horizontal * lineScrollDistance),
       'right' when !args.primaryShortcutPressed =>
-        scrollBy(horizontal: lineScrollDistance),
+        scrollBy(horizontal: horizontal * lineScrollDistance),
       'pageup' when !args.primaryShortcutPressed =>
         scrollBy(vertical: -_viewportHeight),
       'pagedown' when !args.primaryShortcutPressed =>

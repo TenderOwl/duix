@@ -97,7 +97,7 @@ final class DockPanel extends Panel {
       }
 
       final size = child.desiredSize;
-      switch (getDock(child)) {
+      switch (_resolveDock(getDock(child))) {
         case Dock.left:
           final width = _min(size.width, remaining.width);
           child.arrange(
@@ -164,6 +164,19 @@ final class DockPanel extends Panel {
           );
       }
     }
+  }
+
+  /// The side the child is docked to.
+  ///
+  /// The left and the right side swap in a tree with the right to left
+  /// direction, so the side of a dock always means the side of the layout.
+  Dock _resolveDock(Dock dock) {
+    if (!isRightToLeft) return dock;
+    return switch (dock) {
+      Dock.left => Dock.right,
+      Dock.right => Dock.left,
+      _ => dock,
+    };
   }
 
   @override

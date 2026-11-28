@@ -54,6 +54,12 @@ abstract class UIElement extends PropertyOwner {
     name: 'style',
     defaultValue: null,
   );
+  static const flowDirectionProperty = DuiProperty<UIElement, FlowDirection>(
+    name: 'flowDirection',
+    defaultValue: FlowDirection.leftToRight,
+    affectsMeasure: true,
+    affectsArrange: true,
+  );
 
   static const previewPointerDown = RoutedEvent<PointerEventArgs>(
     'previewPointerDown',
@@ -260,6 +266,21 @@ abstract class UIElement extends PropertyOwner {
   Style<dynamic>? get style => getValue(styleProperty);
   set style(Style<dynamic>? value) => setValue(styleProperty, value);
 
+  /// The direction the layout of this element follows.
+  ///
+  /// The direction is inherited: a child without its own direction follows
+  /// the direction of its parent, and the root of a window follows the
+  /// direction of the window. The logical alignment (`start` and `end`), the
+  /// order of the children of a panel and the side of a dock follow it.
+  FlowDirection get flowDirection => getValue(flowDirectionProperty);
+
+  set flowDirection(FlowDirection value) {
+    setLocalValue(flowDirectionProperty, value);
+  }
+
+  /// Whether the layout of this element runs from right to left.
+  bool get isRightToLeft => flowDirection == FlowDirection.rightToLeft;
+
   Object? get dataContext => getValue(dataContextProperty);
   set dataContext(Object? value) => setValue(dataContextProperty, value);
 
@@ -376,6 +397,10 @@ abstract class UIElement extends PropertyOwner {
       HorizontalAlignment.center =>
         contentRect.left + (contentRect.width - width) / 2,
       HorizontalAlignment.right => contentRect.right - width,
+      HorizontalAlignment.start =>
+        isRightToLeft ? contentRect.right - width : contentRect.left,
+      HorizontalAlignment.end =>
+        isRightToLeft ? contentRect.left : contentRect.right - width,
       _ => contentRect.left,
     };
     final top = switch (verticalAlignment) {
@@ -513,6 +538,11 @@ abstract class UIElement extends PropertyOwner {
         child._inheritDataContext(dataContext);
       }
     }
+    if (identical(property, flowDirectionProperty)) {
+      for (final child in logicalChildren) {
+        child._inheritFlowDirection(flowDirection);
+      }
+    }
   }
 
   void _updateStyle(Style<dynamic>? oldStyle, Style<dynamic>? newStyle) {
@@ -534,6 +564,7 @@ abstract class UIElement extends PropertyOwner {
     if (identical(_logicalParent, parent)) return;
     _logicalParent = parent;
     _inheritDataContext(parent?.dataContext);
+    _inheritFlowDirection(parent?.flowDirection);
   }
 
   void _inheritDataContext(Object? value) {
@@ -541,6 +572,14 @@ abstract class UIElement extends PropertyOwner {
       clearInheritedValue(dataContextProperty);
     } else {
       setInheritedValue(dataContextProperty, value);
+    }
+  }
+
+  void _inheritFlowDirection(FlowDirection? value) {
+    if (value == null) {
+      clearInheritedValue(flowDirectionProperty);
+    } else {
+      setInheritedValue(flowDirectionProperty, value);
     }
   }
 

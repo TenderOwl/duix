@@ -155,7 +155,11 @@ final class ScrollBar extends TemplatedControl {
             thumbLength,
           )
         : Rect.fromLTWH(
-            bounds.left + offset,
+            // A horizontal bar of a right to left tree starts at its right
+            // edge, so the thumb moves to the left with the growing value.
+            isRightToLeft
+                ? bounds.right - thumbLength - offset
+                : bounds.left + offset,
             bounds.top + 2,
             thumbLength,
             math.max(0, bounds.height - 4),
@@ -216,7 +220,9 @@ final class ScrollBar extends TemplatedControl {
     final page = viewportSize > 0 ? viewportSize : 1;
     final isBefore = orientation == Orientation.vertical
         ? args.position.y < thumb.top
-        : args.position.x < thumb.left;
+        : isRightToLeft
+            ? args.position.x > thumb.right
+            : args.position.x < thumb.left;
     _setValue(isBefore ? value - page : value + page);
     args.handled = true;
   }
@@ -230,7 +236,12 @@ final class ScrollBar extends TemplatedControl {
       final delta = orientation == Orientation.vertical
           ? args.position.y - _dragStartPosition.y
           : args.position.x - _dragStartPosition.x;
-      _setValue(_dragStartValue + delta * range / scrollable);
+      // The thumb of a horizontal bar of a right to left tree starts at the
+      // right edge, so a drag to the right lowers the value.
+      final signed = orientation == Orientation.horizontal && isRightToLeft
+          ? -delta
+          : delta;
+      _setValue(_dragStartValue + signed * range / scrollable);
     }
     args.handled = true;
   }

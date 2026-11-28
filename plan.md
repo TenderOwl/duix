@@ -218,7 +218,8 @@ Skia canvas масштабируется через `displayScale`. Backbuffer �
 - README с quick start: `dart create myapp && cd myapp`, `dart pub add duix`, минимальное приложение, порядок поиска библиотеки, сборка из исходников, публикация и ограничения;
 - в процессе разрешён только один native host: SDL имеет одну глобальную очередь событий, поэтому второй host забрал бы события первого; второй host получает явную ошибку вместо тихой поломки;
 - видеоподсистема SDL живёт до конца процесса: `SDL_Quit()` при разрушении host рвал подсистему под окном другого изолята, а повторная инициализация SDL после `SDL_Quit` ненадёжна;
-- 266 Dart-тестов, включая file-dialog contract, formatted clipboard snapshots, styles/templates, DataContext inheritance/accessors/reparenting, value precedence/transitions, binding lifecycle/diagnostics, ObservableCollection/ItemsControl/virtualization, ScrollViewer measure/scroll/input/clip, Grid tracks/span/gap/invalidate/HiDPI, DockPanel measure/arrange/invalidate, diagnostics FPS/render-on-demand, synchronous live-resize frame с увеличением physical backbuffer, layout constraints/alignment, infinite text width, clipping/rendering, horizontal scrolling, mouse caret/selection, pointer capture, surrogate pairs, composition, clipboard, recursive dispose, semantics tree, packaging, native ScrollViewer automation, render-on-demand и scheduler counters.
+- направление раскладки (`FlowDirection`): наследуемое свойство дерева (`UIElement.flowDirection`), логическое выравнивание (`start`/`end`) и зеркалирование раскладки — горизонтальная панель, док, текст в поле, полосы прокрутки и содержимое вьюпорта; направление окна достаётся его содержимому, а собственное значение элемента важнее наследованного;
+- 323 Dart-теста, включая file-dialog contract, formatted clipboard snapshots, styles/templates, DataContext inheritance/accessors/reparenting, value precedence/transitions, binding lifecycle/diagnostics, ObservableCollection/ItemsControl/virtualization, ScrollViewer measure/scroll/input/clip, Grid tracks/span/gap/invalidate/HiDPI, DockPanel measure/arrange/invalidate, diagnostics FPS/render-on-demand, synchronous live-resize frame с увеличением physical backbuffer, layout constraints/alignment, infinite text width, clipping/rendering, horizontal scrolling, mouse caret/selection, pointer capture, surrogate pairs, composition, clipboard, recursive dispose, semantics tree, packaging, native ScrollViewer automation, render-on-demand, scheduler counters и направление раскладки (21 тест).
 
 ### 3.2. Проверенное поведение
 
@@ -243,6 +244,8 @@ Skia canvas масштабируется через `displayScale`. Backbuffer �
 - Мост Windows UI Automation подтверждён на живой системе: UIA-клиент читает дерево окна (`Window "DUI accessibility"` → `Custom` → `Text`, `Button`, `Edit`), у элементов верные имя, тип управления, границы на экране и состояния (`IsEnabled`, `IsControlElement`, `IsContentElement` — TRUE), фокус отмечен у кнопки, `FrameworkId` — `Dui`.
 - Шаблоны есть у всего набора виджетов, который рисует свой вид: `Label`, `Border`, `ScrollBar` и `Button`. Шаблон `Label` заменяет её текст, шаблон `Border` показывает содержимое через `ContentPresenter`, шаблон `ScrollBar` рисует полосу и бегунок. Снимок экрана примера `native_aqua_button` подтвердил бейдж с шаблоном и карточку с шаблоном.
 - Части шаблона проверены тестами и снимком экрана: шаблон `TextBox` размещает часть с текстом и текст остаётся на месте, текст не пропадает и когда шаблон часть не разместил, часть переживает замену шаблона и освобождается вместе с контролом; шаблон `ScrollViewer` размещает содержимое и обе полосы, содержимое обрезается по месту части, полосы следуют за смещением вьюпорта.
+- Направление раскладки подтверждено и снимком экрана примера `example/native_flow_direction.dart`: заголовок и текст поля стоят у правого края, первый ребёнок горизонтальной панели — справа, вертикальная полоса вьюпорта — слева, горизонтальная полоса начинается у правого края.
+- Направление раскладки проверено тестами: направление наследуется по дереву, собственное значение элемента важнее наследованного, направление окна достаётся содержимому, логическое выравнивание `start`/`end` разрешается по направлению, горизонтальная панель и док зеркалятся, текст поля в right-to-left начинается у правого края поля и клик попадает в текст, горизонтальная полоса прокрутки начинается у правого края, вертикальная полоса вьюпорта стоит слева, а содержимое вьюпорта начинается у правого края.
 - Исправлен перенос строки на самой границе бокса: текст, ширина которого совпадает с шириной бокса, больше не переносит последнее слово на следующую строку (допуск в один физический пиксель в раскладке Skia). Раньше кнопка показывала «Продолжит», а бейдж — «Badg».
 - Графика слоя подтверждена и тестами, и снимком экрана: окно примера `example/native_graphics.dart` рисует кубическую кривую (`drawPath`), белую карточку с мягкой тенью и два прямоугольника, где жёлтый и бирюзовый накладываются в оливковый (`BlendMode.multiply`) с прозрачностью 0.8.
 - Recursive dispose подтверждён тестами: поддерево освобождает native-раскладки, disposed-элемент отсоединяется от родителя (список детей пустеет), все потомки получают `isDisposed`, повторный dispose не освобождает ресурсы дважды, фокус снимается, disposed-элемент нельзя вернуть в дерево, `Window.dispose()` освобождает контент, а `close()` оставляет его жить.
@@ -332,6 +335,7 @@ lib/src/drawing.dart                 — DrawingContext
 lib/src/path.dart                    — Path и команды контура
 lib/src/text_buffer.dart              — UTF-16 text/selection model и команды
 lib/src/text_layout.dart             — текстовый контракт и cache key
+lib/src/geometry.dart                — FlowDirection, выравнивание и геометрия
 lib/src/headless_text_layout.dart    — deterministic headless text layout
 lib/src/native/native_bindings.dart  — FFI
 lib/src/native/native_text_layout.dart — SkParagraph TextLayout backend
@@ -364,12 +368,14 @@ example/native_scroll_viewer.dart   — ScrollViewer, прокрутка и smok
 example/native_accessibility.dart   — окно с семантикой для проверки моста UI Automation
 example/native_graphics.dart         — пути, тени и режимы наложения
 example/native_template_parts.dart   — шаблоны, размещающие части TextBox и ScrollViewer
+example/native_flow_direction.dart   — окно с направлением раскладки right-to-left
 test/                                — автоматические тесты
 test/text_box_measurement_test.dart — измерение TextBox по метрикам раскладки
 test/dispose_test.dart              — recursive dispose элементов и поддеревьев
 test/semantics_test.dart            — дерево семантики, фокус и выделение
 test/path_test.dart                 — контуры пути и paint
 test/template_parts_test.dart        — части шаблона у TextBox и ScrollViewer
+test/flow_direction_test.dart        — направление раскладки: наследование, зеркалирование, right-to-left
 test/native_graphics_test.dart      — путь, тень и наложение на native backend
 test/native_packaging_test.dart     — порядок поиска библиотеки и раскладка install-дерева
 test/native_scroll_viewer_test.dart — drag полосы прокрутки и клавиатура на native backend
@@ -459,6 +465,8 @@ python tools/bootstrap_native.py --smoke --dart "<путь-к-dart>"
 8. **P2 (частично закрыт 2026-11-28):** accessibility — реализована backend-independent модель семантики (`SemanticsTree`, role/name/value/state/bounds, синхронизация focus и selection) и мост Windows UI Automation (`native/src/uia_windows.cpp`: поставщик `IRawElementProvider` поверх дерева семантики). Мост отдаёт дерево и состояния, но не выполняет действия: `SetFocus`, `Invoke` кнопки и запись значения поля требуют обратного вызова из native в Dart. macOS NSAccessibility и Linux AT-SPI не сделаны — они требуют чужих машин.
 9. **P2 (закрыт 2026-11-26 на Windows x64):** кроссплатформенный CI добавлен (Dart job на трёх ОС и best-effort native job), packaging runtime dependencies и воспроизводимый release build реализованы: `tools/package.py` разбирает зависимости, проверяет, что private-зависимостей нет, собирает бандл с manifest и sha256 и воспроизводимым архивом, а install-правила CMake кладут `icudtl.dat` рядом с библиотекой. Осталось проверить macOS (universal binary, codesign), arm64 и Linux на реальных дистрибутивах. Native job на macOS не запускается: у hosted-runner нет window server, а сборка Skia требует больше диска и времени, чем даёт раннер.
 10. **P2 (закрыт 2026-11-26):** SDL video не потокобезопасен, а native-слой не сериализовал обращения к нему — два изолята с окнами роняли процесс. Теперь все SDL-вызовы идут под process-wide рекурсивным мьютексом, host в процессе может быть только один (второй получает явную ошибку), а `SDL_Quit()` не вызывается. Ограничение «один host на процесс» остаётся осознанным: у SDL одна глобальная очередь событий, и поддержка нескольких host потребовала бы её переделки на стороне Dart.
+
+12. **P1:** направление абзаца в native backend не сделано: `SkParagraph` раскладывает строку в left-to-right, поэтому порядок символов внутри строки в right-to-left дереве остаётся left-to-right. Нужен `SkParagraph::setTextDirection`, а это native ABI версии 6 и пересборка библиотеки; Dart-часть (привязка текста, прокрутка, выравнивание) к этому уже готова.
 
 11. **P1 (закрыт 2026-11-28):** `TextBox` и `ScrollViewer` шаблоны не поддерживали: шаблон заменял содержимое контрола целиком, а у них содержимое — это текст с выделением и caret либо полосы прокрутки. Теперь у обоих есть модель template parts: контрол отдаёт шаблону именованную часть (`text` у `TextBox`, `content`, `horizontalScrollBar` и `verticalScrollBar` у `ScrollViewer`), а шаблон её размещает; часть, которую шаблон не разместил, остаётся у контрола.
 
@@ -974,9 +982,14 @@ One-way local маскирует binding, но не отменяет его; `cl
 12. **Потокобезопасность native-слоя (закрыт 2026-11-26):** SDL-вызовы сериализованы process-wide мьютексом, host в процессе может быть только один, `SDL_Quit()` не вызывается; поведение закреплено тремя native-тестами с двумя изолятами. Дальше по этой теме можно думать только про несколько host — для этого нужна переделка глобальной очереди событий SDL.
 13. **Публикация пакета на pub.dev (закрыт 2026-11-27):** пакет `duix` 0.1.0 опубликован — https://pub.dev/packages/duix. Внутри: лицензия MIT с файлом `LICENSE`, поля `homepage`/`repository`, description и topics, сборки нативной библиотеки для Windows x64, macOS arm64 и Linux x64, разложенные в `build/dist/<платформа>-<архитектура>/`, и дистрибуция `python tools/package.py --dist` в `../duix-publish`. Осталось: macOS x64, Linux arm64 и Windows arm64, codesign/notarization для macOS и публикация следующих версий.
 
-Кодовая работа: слой 0 закрыт, дальше слой 1 — простые элементы ввода.
-Начинать стоит с `TextArea` (многострочный ввод: сейчас `TextBox`
-однострочный) и `CheckBox`. Полный список виджетов и подсистем — в §7.1.
+Кодовая работа: слой 0, пункт 7 — направление раскладки. Часть A закрыта
+2026-11-28 (направление в дереве, зеркалирование раскладки, логическое
+выравнивание, right-to-left текст в поле и прокрутка). Дальше — часть B:
+направление абзаца в native backend (`SkParagraph::setTextDirection`),
+это требует native ABI версии 6 и пересборки библиотеки. После этого —
+слой 1, простые элементы ввода: `TextArea` (многострочный ввод: сейчас
+`TextBox` однострочный) и `CheckBox`. Полный список виджетов и подсистем —
+в §7.1.
 
 GPU backend по-прежнему не входит в ближайшие этапы.
 
@@ -1027,9 +1040,17 @@ UI-кита этого мало, но порядок работ определя
    выделением, якорем диапазона и переходами клавиатурой.
 6. **Мосты accessibility**: UI Automation, NSAccessibility, AT-SPI.
 7. **Направление раскладки** (`FlowDirection`): left-to-right и right-to-left.
-   Сейчас раскладка односторонняя: выравнивание, порядок клавиш и порядок
-   колонок не знают о направлении текста. Нужно зеркалирование панелей, полей
-   ввода и полос прокрутки и выбор направления в `TextLayout`.
+   **Часть A закрыта (2026-11-28):** направление — наследуемое свойство
+   дерева (`UIElement.flowDirection`, значение по умолчанию —
+   left-to-right), логическое выравнивание `start`/`end` (`HorizontalAlignment`)
+   и зеркалирование раскладки: горизонтальная панель, док, текст поля,
+   горизонтальная полоса прокрутки, вертикальная полоса вьюпорта и
+   содержимое вьюпорта. Направление окна достаётся его содержимому, а
+   собственное значение элемента важнее наследованного.
+   **Часть B (открыт):** направление абзаца в native backend —
+   `SkParagraph::setTextDirection`, native ABI версии 6 и пересборка
+   библиотеки. До него порядок символов внутри строки остаётся
+   left-to-right: раскладка зеркалится, а сама строка — нет.
 8. **Команды и горячие клавиши** (`Command`): действие с `canExecute` и
    `execute`, чтобы кнопка, пункт меню и сочетание клавиш вели себя одинаково,
    и реестр сочетаний, который разбирается с конфликтами. Без этого меню
@@ -1175,6 +1196,29 @@ UI-кита этого мало, но порядок работ определя
 ---
 
 ## 9. Журнал работ
+
+### 2026-11-28 — слой 0: направление раскладки (часть A)
+
+Сделано:
+
+- Добавлено направление раскладки: `FlowDirection` в `geometry.dart` и наследуемое свойство `UIElement.flowDirection`. Значение по умолчанию — left-to-right; направление наследуется по дереву, собственное значение элемента важнее наследованного, а направление окна достаётся его содержимому и overlay.
+- `PropertyOwner.setLocalValue` пишет локальное значение даже когда оно равно значению по умолчанию: без этого потомок right-to-left дерева не мог оставить себе left-to-right.
+- Логическое выравнивание: в `HorizontalAlignment` добавлены `start` и `end`, они разрешаются по направлению элемента. Абсолютные `left` и `right` не зеркалятся.
+- Зеркалирование раскладки: горизонтальная `StackPanel` ставит первого ребёнка у правого края, `DockPanel` меняет местами `Dock.left` и `Dock.right`.
+- Текст: `TextLayoutOptions` получил поле направления, `resolveTextAlignment` переводит логическое выравнивание в абсолютное для native (0 — left, 1 — center, 2 — right), поэтому ABI не менялся. Headless-раскладка теперь тоже уважает выравнивание и рисует текст по направлению.
+- `TextBox` в right-to-left: текст начинается у правого края поля, горизонтальное смещение считается от начала строки, каретка остаётся видимой, попадание мыши и область ввода считаются от нового края.
+- `ScrollBar` и `ScrollViewer` в right-to-left: горизонтальная полоса начинается у правого края, бегунок и клик по треку зеркалятся, вертикальная полоса вьюпорта стоит слева, содержимое начинается у правого края, колесо мыши и стрелки двигают содержимое физически.
+
+Проверено:
+
+- `dart analyze` — без замечаний; `dart format` применён.
+- `dart test --exclude-tags clipboard,native` — 323/323; `dart test --tags native --exclude-tags clipboard` — 47/47.
+- `test/flow_direction_test.dart` — 21 тест: наследование, локальное переопределение, отсоединение, окно, логическое и абсолютное выравнивание, зеркалирование панели и дока, разрешение выравнивания текста, ключ кэша опций и right-to-left поведение поля, полосы прокрутки и вьюпорта.
+- Пример `example/native_flow_direction.dart` и его smoke-режим: окно с направлением right-to-left, smoke проверяет зеркалирование панели, положение вертикальной полосы и начало содержимого вьюпорта.
+- Снимок экрана примера подтверждает результат: заголовок и текст поля у правого края, кнопки идут справа налево, вертикальная полоса слева, горизонтальная полоса начинается у правого края.
+- Найдена и исправлена ошибка native-пути: раскладка без ограничения ширины не должна получать выравнивание, иначе абзац уезжает за правый край и каретка не находится. Теперь при бесконечной ширине выравнивание не передаётся в native, как и в headless-раскладке.
+
+Дальше: часть B пункта 7 — направление абзаца в native backend (`SkParagraph::setTextDirection`). Это меняет структуру `DuiTextLayoutOptions`, то есть native ABI становится версии 6, и библиотеку нужно пересобрать; следующая публикация пакета (0.2.0) и так должна нести ABI 5 или 6.
 
 ### 2026-11-28 — список необходимых виджетов и подсистем
 

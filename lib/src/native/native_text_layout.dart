@@ -19,13 +19,18 @@ final class NativeTextLayoutFactory implements TextLayoutFactory {
   @override
   TextLayout create(TextLayoutOptions options) {
     return using((arena) {
+      // A layout without a width limit has no line to align the text in: the
+      // text fills the whole line, so the alignment would move it away.
+      final alignment = options.maxWidth.isFinite
+          ? resolveTextAlignment(options.alignment, options.direction)
+          : 0;
       final handle = bindings.textLayoutCreate(
         text: options.text,
         fontSize: options.fontSize,
         maxWidth: options.maxWidth,
         scale: options.scale,
         fontFamily: options.fontFamily,
-        alignment: options.alignment.index,
+        alignment: alignment,
         arena: arena,
       );
       final metrics = bindings.textLayoutMeasure(handle, arena);

@@ -218,6 +218,14 @@ enum Orientation { horizontal, vertical }
 
 enum TextAlignment { start, center, end }
 
-enum HorizontalAlignment { left, center, right, stretch }
+enum HorizontalAlignment { left, center, right, stretch, start, end }
 
 enum VerticalAlignment { top, center, bottom, stretch }
+
+/// The direction the layout of a tree follows.
+///
+/// The direction decides where the start of the layout is: the left edge of
+/// the window for [leftToRight] and the right edge for [rightToLeft]. The
+/// logical alignment (`start` and `end`), the order of the children of a
+/// panel and the side of a dock follow it.
+enum FlowDirection { leftToRight, rightToLeft }

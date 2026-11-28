@@ -58,6 +58,7 @@ final class Window extends ObservableObject implements WindowHost {
   TextLayoutFactory _textLayoutFactory;
   double _devicePixelRatio = 1;
   UIElement? _content;
+  FlowDirection _flowDirection = FlowDirection.leftToRight;
 
   /// The layer of the window that holds the open popup.
   ///
@@ -186,6 +187,25 @@ final class Window extends ObservableObject implements WindowHost {
 
   UIElement? get content => _content;
 
+  /// The direction the layout of the window follows.
+  ///
+  /// The content of the window and its descendants follow the direction, so
+  /// the whole tree can be laid out from right to left. The direction is
+  /// inherited, so the content of the window may keep a direction of its own.
+  FlowDirection get flowDirection => _flowDirection;
+  set flowDirection(FlowDirection value) {
+    if (_flowDirection == value) return;
+    _flowDirection = value;
+    _applyFlowDirection(_content);
+    _applyFlowDirection(overlay);
+    requestFrame();
+  }
+
+  /// Gives the direction of the window to the root of a tree.
+  void _applyFlowDirection(UIElement? element) {
+    element?.setInheritedValue(UIElement.flowDirectionProperty, _flowDirection);
+  }
+
   /// A snapshot of the semantics of the content tree.
   ///
   /// The tree is built on demand and reads the focus and the selection at the
@@ -206,6 +226,7 @@ final class Window extends ObservableObject implements WindowHost {
     _content?.mountTo(null);
     _content = value;
     _content?.attachToParent(null);
+    _applyFlowDirection(_content);
     _content?.mountTo(this);
     requestFrame();
   }

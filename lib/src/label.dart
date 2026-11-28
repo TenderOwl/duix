@@ -125,6 +125,7 @@ final class Label extends TemplatedControl {
       maxWidth: maxWidth,
       scale: host?.displayScale ?? 1,
       alignment: alignment,
+      direction: flowDirection,
     );
     final current = _textLayout;
     if (current != null &&

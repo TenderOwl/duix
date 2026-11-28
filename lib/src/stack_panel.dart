@@ -79,16 +79,28 @@ final class StackPanel extends Panel {
   @override
   void arrangeCore(Rect finalRect) {
     final content = finalRect.deflate(_padding);
+    final horizontal = _orientation == Orientation.horizontal;
+    // A horizontal panel runs from right to left in a tree with the right to
+    // left direction, so the first child stands at the right edge.
+    final reversed = horizontal && isRightToLeft;
     var offset =
-        _orientation == Orientation.vertical ? content.top : content.left;
+        horizontal ? (reversed ? content.right : content.left) : content.top;
 
     for (final child in children) {
       if (!child.isVisible) continue;
       final size = child.desiredSize;
-      if (_orientation == Orientation.vertical) {
+      if (!horizontal) {
         child.arrange(
             Rect.fromLTWH(content.left, offset, content.width, size.height));
         offset += size.height + spacing;
+      } else if (reversed) {
+        child.arrange(Rect.fromLTWH(
+          offset - size.width,
+          content.top,
+          size.width,
+          content.height,
+        ));
+        offset -= size.width + spacing;
       } else {
         child.arrange(
             Rect.fromLTWH(offset, content.top, size.width, content.height));

@@ -184,11 +184,11 @@ final class TextBox extends TemplatedControl {
 
   int _hitTestOffset(Point position) {
     final area = _textPart.bounds;
+    final layout = _layoutForRender(text);
     final local = Point(
-      position.x - area.left + _horizontalScrollOffset,
+      position.x - _textOriginX(area, layout.width),
       position.y - area.top - _textTopOffset,
     );
-    final layout = _layoutForRender(text);
     final offset = layout.hitTest(local).offset.clamp(0, text.length);
     if (offset > 0 &&
         offset < text.length &&
@@ -341,6 +341,18 @@ final class TextBox extends TemplatedControl {
     _syncTextInputArea();
   }
 
+  /// The x of the left edge of the text inside the text area.
+  ///
+  /// The text starts at the start of the direction: the left edge of the area
+  /// from left to right and its right edge from right to left. The scroll
+  /// offset is counted from that start, so the text moves away from it.
+  double _textOriginX(Rect area, double textWidth) {
+    if (isRightToLeft) {
+      return area.right - textWidth + _horizontalScrollOffset;
+    }
+    return area.left - _horizontalScrollOffset;
+  }
+
   void _ensureCaretVisible([TextLayout? layout]) {
     final viewport = _textPart.bounds.width;
     if (viewport <= 0) {
@@ -358,15 +370,18 @@ final class TextBox extends TemplatedControl {
           (active == null ? compositionText.length : active.end);
     }
     final resolved = layout ?? _layoutForRender(displayText);
-    final caretX = resolved.caretRect(targetOffset).left;
+    final textWidth = resolved.width;
+    final caret = resolved.caretRect(targetOffset).left;
+    // The scroll offset is counted from the start of the text, so the caret
+    // is measured from the same edge.
+    final caretX = isRightToLeft ? textWidth - caret : caret;
     var nextOffset = _horizontalScrollOffset;
     if (caretX < nextOffset) {
       nextOffset = caretX;
     } else if (caretX > nextOffset + viewport - 1) {
       nextOffset = caretX - viewport + 1;
     }
-    final contentWidth =
-        resolved.width > caretX ? resolved.width : caretX.toDouble();
+    final contentWidth = textWidth > caretX ? textWidth : caretX.toDouble();
     final maximumOffset =
         contentWidth > viewport ? contentWidth - viewport + 1 : 0.0;
     _horizontalScrollOffset = nextOffset.clamp(0.0, maximumOffset);
@@ -380,8 +395,8 @@ final class TextBox extends TemplatedControl {
     final width = area.width.clamp(1.0, double.infinity);
     final height = (area.height - 6).clamp(1.0, double.infinity);
     final layout = _layoutForRender(text);
-    final cursorX =
-        layout.caretRect(caretOffset).left - _horizontalScrollOffset;
+    final originX = _textOriginX(area, layout.width);
+    final cursorX = originX - area.left + layout.caretRect(caretOffset).left;
     host.updateTextInputArea(
       this,
       Rect.fromLTWH(area.left, area.top + _textTopOffset, width, height),
@@ -450,7 +465,7 @@ final class TextBox extends TemplatedControl {
     final layout = _layoutForRender(displayText);
     _ensureCaretVisible(layout);
     final origin = Point(
-      area.left - _horizontalScrollOffset,
+      _textOriginX(area, layout.width),
       area.top + _textTopOffset,
     );
 
@@ -532,6 +547,7 @@ final class TextBox extends TemplatedControl {
       fontSize: fontSize,
       maxWidth: double.infinity,
       scale: host?.displayScale ?? 1,
+      direction: flowDirection,
     );
     if (_renderLayout.matches(options, factory)) {
       _measureLayout.dispose();
@@ -548,6 +564,7 @@ final class TextBox extends TemplatedControl {
       fontSize: fontSize,
       maxWidth: double.infinity,
       scale: host?.displayScale ?? 1,
+      direction: flowDirection,
     );
     if (_measureLayout.matches(options, factory)) {
       _renderLayout.dispose();

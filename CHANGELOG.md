@@ -2,6 +2,26 @@
 
 ## Unreleased
 
+- The layout of a tree can run from right to left. `FlowDirection` is an inherited
+  property of the elements now: `UIElement.flowDirection` is left-to-right by default,
+  a child follows its parent, an element with a direction of its own keeps it, and
+  `Window.flowDirection` gives its direction to the content of the window.
+- The alignment of an element can be logical: `HorizontalAlignment.start` and
+  `HorizontalAlignment.end` follow the direction of the tree, while `left` and
+  `right` stay absolute. The horizontal `StackPanel` starts at the right edge and
+  the `DockPanel` swaps its left and right sides in a right-to-left tree.
+- The text of a `TextBox` starts at the right edge of the field in a right-to-left
+  tree, the horizontal scroll of the field is counted from the start of the text, and
+  the caret, the mouse and the input area follow it. The thumb of a horizontal
+  `ScrollBar` starts at the right edge, the vertical bar of a `ScrollViewer` stands
+  on the left and the content of the viewer starts at the right edge.
+- `TextLayoutOptions` carries the direction of the text, and `resolveTextAlignment`
+  turns the logical alignment of a layout into the absolute one of the backend, so
+  the native ABI stays at version 5.
+- The order of the characters inside a line is still left-to-right: the paragraph of
+  the native backend has no direction yet. That is the next step of the item and it
+  needs `SkParagraph::setTextDirection`, the native ABI version 6 and a rebuild of
+  the library.
 - A template does not have to replace the content of a control. A control can offer named
   parts now: `TemplatedControl.registerPart(name, element)` puts a part into the control,
   the template finds it with `control.part(name)` and places it where it belongs, and the
