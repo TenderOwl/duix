@@ -49,9 +49,7 @@ final class Label extends TemplatedControl {
   static const _headlessFactory = HeadlessTextLayoutFactory();
 
   TextAlignment _alignment;
-  TextLayout? _textLayout;
-  TextLayoutOptions? _textLayoutOptions;
-  TextLayoutFactory? _textLayoutFactory;
+  final CachedTextLayout _layout = CachedTextLayout();
 
   String get text => getValue(textProperty);
   set text(String value) => setValue(textProperty, value);
@@ -127,26 +125,8 @@ final class Label extends TemplatedControl {
       alignment: alignment,
       direction: flowDirection,
     );
-    final current = _textLayout;
-    if (current != null &&
-        !current.isDisposed &&
-        identical(_textLayoutFactory, factory) &&
-        _textLayoutOptions == options) {
-      return current;
-    }
-
-    _clearTextLayout();
-    final created = factory.create(options);
-    _textLayout = created;
-    _textLayoutOptions = options;
-    _textLayoutFactory = factory;
-    return created;
+    return _layout.resolve(options, factory);
   }
 
-  void _clearTextLayout() {
-    _textLayout?.dispose();
-    _textLayout = null;
-    _textLayoutOptions = null;
-    _textLayoutFactory = null;
-  }
+  void _clearTextLayout() => _layout.dispose();
 }

@@ -103,3 +103,48 @@ abstract interface class TextLayoutFactory {
   /// Creates a layout with a single, explicit owner.
   TextLayout create(TextLayoutOptions options);
 }
+
+/// A text layout that is reused while its options stay equal.
+///
+/// The layout of a text is expensive, so a control keeps the layout of its
+/// text and hands it out again as long as the text, the size of the font, the
+/// scale, the direction and the backend stay the same.
+final class CachedTextLayout {
+  TextLayout? _layout;
+  TextLayoutOptions? _options;
+  TextLayoutFactory? _factory;
+
+  /// The layout of the moment, if there is one.
+  TextLayout? get current => _layout;
+
+  /// Whether the layout was made for the options and the factory.
+  bool matches(TextLayoutOptions options, TextLayoutFactory factory) {
+    final layout = _layout;
+    return layout != null &&
+        !layout.isDisposed &&
+        identical(_factory, factory) &&
+        _options == options;
+  }
+
+  /// The layout for the options.
+  ///
+  /// The layout of the moment is returned when it was made for the options,
+  /// otherwise the old one is released and a new one is made.
+  TextLayout resolve(TextLayoutOptions options, TextLayoutFactory factory) {
+    if (matches(options, factory)) return _layout!;
+    dispose();
+    final created = factory.create(options);
+    _layout = created;
+    _options = options;
+    _factory = factory;
+    return created;
+  }
+
+  /// Releases the layout.
+  void dispose() {
+    _layout?.dispose();
+    _layout = null;
+    _options = null;
+    _factory = null;
+  }
+}

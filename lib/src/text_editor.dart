@@ -54,8 +54,8 @@ abstract class TextEditor extends TemplatedControl {
   WindowHost? _mountedHost;
   String _compositionText = '';
   TextSelection? _compositionSelection;
-  final _CachedTextLayout _measureLayout = _CachedTextLayout();
-  final _CachedTextLayout _renderLayout = _CachedTextLayout();
+  final CachedTextLayout _measureLayout = CachedTextLayout();
+  final CachedTextLayout _renderLayout = CachedTextLayout();
   bool _isSelecting = false;
 
   /// The text of the control.
@@ -575,42 +575,5 @@ abstract class TextEditor extends TemplatedControl {
     } finally {
       context.popClip();
     }
-  }
-}
-
-/// A text layout together with the options and the factory that produced it.
-///
-/// The layout is reused while the options stay equal and released as soon as
-/// the text, the font size, the scale or the backend changes.
-final class _CachedTextLayout {
-  TextLayout? _layout;
-  TextLayoutOptions? _options;
-  TextLayoutFactory? _factory;
-
-  TextLayout? get current => _layout;
-
-  bool matches(TextLayoutOptions options, TextLayoutFactory factory) {
-    final layout = _layout;
-    return layout != null &&
-        !layout.isDisposed &&
-        identical(_factory, factory) &&
-        _options == options;
-  }
-
-  TextLayout resolve(TextLayoutOptions options, TextLayoutFactory factory) {
-    if (matches(options, factory)) return _layout!;
-    dispose();
-    final created = factory.create(options);
-    _layout = created;
-    _options = options;
-    _factory = factory;
-    return created;
-  }
-
-  void dispose() {
-    _layout?.dispose();
-    _layout = null;
-    _options = null;
-    _factory = null;
   }
 }

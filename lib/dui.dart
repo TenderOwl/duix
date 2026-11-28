@@ -3,6 +3,7 @@ library;
 export 'src/application.dart';
 export 'src/border.dart';
 export 'src/button.dart';
+export 'src/checkbox.dart';
 export 'src/clipboard.dart';
 export 'src/colors.dart';
 export 'src/content_control.dart';

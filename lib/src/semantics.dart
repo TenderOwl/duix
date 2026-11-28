@@ -13,6 +13,13 @@ enum SemanticsRole {
   list,
   image,
   window,
+
+  /// The element is a box that can be checked.
+  ///
+  /// The role stands at the end of the enum, because the index of a role
+  /// crosses the native ABI: the numbers of the roles that are already in the
+  /// tree must not change.
+  checkBox,
 }
 
 /// The state of an element for assistive technologies.

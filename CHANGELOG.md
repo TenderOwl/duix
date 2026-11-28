@@ -2,6 +2,19 @@
 
 ## Unreleased
 
+- A check box is a control now: `CheckBox` has two states, draws a box with a
+  check mark and the text of the label next to it. The state is a property, so
+  it can be bound: a two-way binding keeps the value of the control and the
+  value of the model equal. A click and the space bar toggle the box, and the
+  box stands at the start of the control, so it moves to the right edge in a
+  right-to-left tree.
+- The layout of a text is cached in one place now: `CachedTextLayout` reuses
+  the layout while the text, the size of the font, the scale, the direction and
+  the backend stay the same. `Label`, `TextBox`, `TextArea` and `CheckBox` share
+  it instead of keeping a copy each.
+- The semantics tree knows a check box: the new role `checkBox` carries the
+  state of the box and the name of the label. The role stands at the end of the
+  roles, because the index of a role crosses the native ABI.
 - A control can edit several lines now: `TextArea` is a field of its own. The text is
   wrapped into the width of the area, the area owns a vertical scroll bar, `Shift+Enter`
   starts a new line, the up and down arrows move the caret between the lines, `Home` and

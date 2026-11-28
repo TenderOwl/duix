@@ -22,8 +22,7 @@ void main() {
       'one two three four five six seven eight nine ten eleven twelve';
 
   /// A text that takes more lines than the area of the test can show.
-  const veryLongText =
-      'one two three four five six seven eight '
+  const veryLongText = 'one two three four five six seven eight '
       'one two three four five six seven eight '
       'one two three four five six seven eight '
       'one two three four five six seven eight '

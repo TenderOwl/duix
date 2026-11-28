@@ -95,7 +95,9 @@ Skia canvas масштабируется через `displayScale`. Backbuffer �
 - мост accessibility: дерево семантики окна уходит в native через `dui_window_set_accessibility_tree` — роли, имена, значения, состояния и границы; native хранит дерево плоским списком, у каждого узла индекс родителя; `SdlSkiaHost.nativeHandle(window)` даёт доступ к native-состоянию окна;
 - шаблоны для любого контрола: `TemplatedControl` — базовый класс с механикой шаблона (создание, замена и освобождение persistent-поддерева, `templateRoot`, `hasTemplate`, хук `onTemplateReplacing`); `ContentControl extends TemplatedControl`; собственный контент виджета реализуется через `measureContentCore`/`arrangeContentCore`/`renderContentCore`/`hitTestContentCore`, чтобы шаблон нельзя было случайно перекрыть подкласом; focus ring рисует база (после контента, сверху), а не каждый виджет отдельно; типизированный шаблон живёт в конкретном классе, база хранит `ControlTemplate<dynamic>?`; своё template-свойство есть у `Button`, `Label`, `Border` и `ScrollBar` — у всего набора, который рисует свой вид;
 - части шаблона (template parts): контрол отдаёт шаблону именованные части, а шаблон размещает их; содержимое контрола при этом не заменяется. `TemplatePart` (`lib/src/template_part.dart`) — это элемент дерева, который меряется, расставляется и рисуется через владельца (`measurePart`, `arrangePart`, `renderPart`, `hitTestPart`), поэтому рисует содержимое контрол, а шаблон решает только, где часть лежит. `TemplatedControl` держит реестр частей (`registerPart`, `part`, `templateParts`) и сам размещает, меряет и рисует те части, которые шаблон не разместил; части переживают замену шаблона. `TextBox` отдаёт часть `text` (текст, выделение, composition и caret рисует контрол), `ScrollViewer` — части `content`, `horizontalScrollBar` и `verticalScrollBar`;
-- `Label`, `TextBox`, `TextArea`, `Button`, `Border`, `StackPanel`, `DockPanel`, `Grid`;
+- `Label`, `TextBox`, `TextArea`, `CheckBox`, `Button`, `Border`, `StackPanel`, `DockPanel`, `Grid`;
+- флажок: `CheckBox` (`lib/src/checkbox.dart`) — два состояния, галочка и текст метки рядом. Состояние `isChecked` живёт в системе свойств, поэтому двусторонняя связь держит контрол и модель равными; клик и пробел переключают состояние; квадрат с галочкой стоит у начала контрола (левый край в left-to-right, правый в right-to-left), а текст метки — рядом с ним; выключенный контрол рисуется серым;
+- раскладка текста кэшируется в одном месте: `CachedTextLayout` (`lib/src/text_layout.dart`) переиспользует раскладку, пока не изменились текст, кегль, масштаб, направление и backend; её используют `Label`, `TextBox`, `TextArea` и `CheckBox`;
 - многострочный ввод: общий каркас редактирования вынесен в `TextEditor` (`lib/src/text_editor.dart`) — буфер, команды, composition, мышь, IME, кэш раскладки и отрисовка; `TextBox` и `TextArea` делят его, а не копируют логику. `TextArea` (`lib/src/text_area.dart`) переносит текст по словам в ширину поля, владеет вертикальной полосой прокрутки (часть `verticalScrollBar`), вставляет перевод строки по Shift+Enter, ходит кареткой между строками стрелками вверх и вниз, а Home и End работают по логической строке; прокрутка следует за кареткой, пока пользователь не прокрутил текст сам;
 - постоянное дерево и lifecycle mount/unmount;
 - `DuiProperty`;
@@ -224,7 +226,7 @@ Skia canvas масштабируется через `displayScale`. Backbuffer �
   `direction` (0 — left-to-right, 1 — right-to-left), native ставит
   `SkParagraph::setTextDirection`, поэтому порядок прогонов внутри строки
   задаёт направление абзаца, а сами прогоны сохраняют свой порядок;
-- 339 Dart-теста, включая file-dialog contract, formatted clipboard snapshots, styles/templates, DataContext inheritance/accessors/reparenting, value precedence/transitions, binding lifecycle/diagnostics, ObservableCollection/ItemsControl/virtualization, ScrollViewer measure/scroll/input/clip, Grid tracks/span/gap/invalidate/HiDPI, DockPanel measure/arrange/invalidate, diagnostics FPS/render-on-demand, synchronous live-resize frame с увеличением physical backbuffer, layout constraints/alignment, infinite text width, clipping/rendering, horizontal scrolling, mouse caret/selection, pointer capture, surrogate pairs, composition, clipboard, recursive dispose, semantics tree, packaging, native ScrollViewer automation, render-on-demand, scheduler counters и направление раскладки (21 тест), многострочный ввод: перенос по словам, вертикальная прокрутка, Shift+Enter и навигация по строкам (15 тестов).
+- 355 Dart-теста, включая file-dialog contract, formatted clipboard snapshots, styles/templates, DataContext inheritance/accessors/reparenting, value precedence/transitions, binding lifecycle/diagnostics, ObservableCollection/ItemsControl/virtualization, ScrollViewer measure/scroll/input/clip, Grid tracks/span/gap/invalidate/HiDPI, DockPanel measure/arrange/invalidate, diagnostics FPS/render-on-demand, synchronous live-resize frame с увеличением physical backbuffer, layout constraints/alignment, infinite text width, clipping/rendering, horizontal scrolling, mouse caret/selection, pointer capture, surrogate pairs, composition, clipboard, recursive dispose, semantics tree, packaging, native ScrollViewer automation, render-on-demand, scheduler counters и направление раскладки (21 тест), многострочный ввод: перенос по словам, вертикальная прокрутка, Shift+Enter и навигация по строкам (15 тестов), флажок: два состояния, связь с моделью, клавиатура, рисование галочки и семантика (16 тестов).
 
 ### 3.2. Проверенное поведение
 
@@ -332,6 +334,7 @@ lib/src/label.dart                   — Label
 lib/src/text_box.dart                — TextBox, editing, scrolling и IME
 lib/src/text_editor.dart             — общий каркас редактирования: буфер, команды, composition, мышь и IME
 lib/src/text_area.dart                — TextArea: многострочный ввод, перенос по словам и вертикальная прокрутка
+lib/src/checkbox.dart                 — CheckBox: два состояния, галочка и текст метки
 lib/src/border.dart                  — Border
 lib/src/colors.dart                  — Colors
 lib/src/panel.dart                   — Panel и ElementChildrenList
@@ -346,7 +349,7 @@ lib/src/events.dart                  — routed events
 lib/src/drawing.dart                 — DrawingContext
 lib/src/path.dart                    — Path и команды контура
 lib/src/text_buffer.dart              — UTF-16 text/selection model и команды
-lib/src/text_layout.dart             — текстовый контракт и cache key
+lib/src/text_layout.dart             — текстовый контракт, cache key и общий кэш раскладки
 lib/src/geometry.dart                — FlowDirection, выравнивание и геометрия
 lib/src/headless_text_layout.dart    — deterministic headless text layout
 lib/src/native/native_bindings.dart  — FFI
@@ -375,6 +378,7 @@ example/native_smoke.dart            — native smoke с автоматичес�
 example/native_text_gallery.dart     — Unicode/HiDPI text gallery и её smoke-режим
 example/native_textbox.dart          — интерактивная проверка TextBox и smoke-режим
 example/native_textarea.dart         — интерактивная проверка TextArea и smoke-режим
+example/native_checkbox.dart         — интерактивная проверка CheckBox и smoke-режим
 example/native_frame_benchmark.dart  — idle CPU и async invalidate latency
 example/native_items_control.dart    — список 100 000 элементов и virtualization smoke
 example/native_scroll_viewer.dart   — ScrollViewer, прокрутка и smoke
@@ -391,6 +395,7 @@ test/template_parts_test.dart        — части шаблона у TextBox и
 test/flow_direction_test.dart        — направление раскладки: наследование, зеркалирование, right-to-left
 test/text_area_test.dart              — многострочный ввод: перенос по словам, прокрутка и навигация по строкам
 test/native_text_area_test.dart       — перенос по словам в SkParagraph и правка многострочного поля
+test/checkbox_test.dart               — флажок: состояния, связь с моделью, клавиатура и рисование
 test/native_text_direction_test.dart — направление абзаца на native backend
 test/native_graphics_test.dart      — путь, тень и наложение на native backend
 test/native_packaging_test.dart     — порядок поиска библиотеки и раскладка install-дерева
@@ -419,6 +424,7 @@ dart run example/native_items_control.dart
 dart run example/native_items_control.dart --smoke --diagnostics
 dart run example/native_scroll_viewer.dart --smoke --diagnostics
 dart run example/native_textarea.dart --smoke --diagnostics
+dart run example/native_checkbox.dart --smoke --diagnostics
 dart run example/native_accessibility.dart --seconds=90
 dart run example/native_graphics.dart --smoke --diagnostics
 powershell -ExecutionPolicy Bypass -File tool/verify_uia.ps1 -ProcessId <pid>
@@ -486,6 +492,8 @@ python tools/bootstrap_native.py --smoke --dart "<путь-к-dart>"
 12. **P1 (закрыт 2026-11-28):** направление абзаца в native backend сделано: `DuiTextLayoutOptions` получил поле `direction`, native ставит `SkParagraph::setTextDirection`, native ABI версии 6. Би-алгоритм unicode отдаёт порядок прогонов, а каретка, выделение и попадание мыши считаются по координатам абзаца.
 
 13. **P1:** перенос по словам в headless-раскладке приблизителен: ширина символа считается как 0.6 от кегля, поэтому тестовая раскладка переносит текст не так, как настоящий backend. На native перенос настоящий (SkParagraph), а headless-раскладка нужна только для тестов и тестового рендерера.
+15. **P1:** мост UI Automation ещё не отдаёт галочку: у роли `checkBox` есть индекс в дереве семантики и флаг состояния, но мост Windows пока отдаёт такой узел как `UIA_CustomControlTypeId` — нужен `TogglePattern` с состоянием и переключением. Слой 1 без native-работ, поэтому работа остаётся в мостах accessibility.
+16. **P2:** у `CheckBox` два состояния, как и в плане: третье состояние (неопределённое) для «выбрать всё» ещё не сделано, и в дереве семантики для него есть готовый флаг `indeterminate`.
 14. **P1:** правки `TextArea` не отменяются: стек отмены (п. 9 §7.1) ещё не сделан, поэтому Ctrl+Z в поле не работает.
 11. **P1 (закрыт 2026-11-28):** `TextBox` и `ScrollViewer` шаблоны не поддерживали: шаблон заменял содержимое контрола целиком, а у них содержимое — это текст с выделением и caret либо полосы прокрутки. Теперь у обоих есть модель template parts: контрол отдаёт шаблону именованную часть (`text` у `TextBox`, `content`, `horizontalScrollBar` и `verticalScrollBar` у `ScrollViewer`), а шаблон её размещает; часть, которую шаблон не разместил, остаётся у контрола.
 
@@ -1003,8 +1011,10 @@ One-way local маскирует binding, но не отменяет его; `cl
 
 Кодовая работа: слой 0 закрыт, идёт слой 1 — простые элементы ввода.
 `TextArea` (п. 20) закрыт 2026-11-28: многострочный ввод с переносом по
-словам, вертикальной прокруткой и Shift+Enter. Дальше — `CheckBox` и
-остальные элементы слоя 1. Полный список виджетов и подсистем — в §7.1.
+словам, вертикальной прокруткой и Shift+Enter. `CheckBox` (п. 12) закрыт
+2026-11-28: флажок с двумя состояниями, галочкой и текстом метки. Дальше —
+`RadioButton` с группой radio (п. 13) и остальные элементы слоя 1. Полный
+список виджетов и подсистем — в §7.1.
 Пункт 7 «Направление раскладки» закрыт полностью: часть A (направление в
 дереве, зеркалирование раскладки, логическое выравнивание, right-to-left
 текст в поле и прокрутка) и часть B (направление абзаца в native backend,
@@ -1014,7 +1024,7 @@ GPU backend по-прежнему не входит в ближайшие эта
 
 ### 7.1. Список виджетов к реализации
 
-Сейчас в пакете: `Label`, `TextBox`, `TextArea`, `Button`, `Border`, `ContentPresenter`,
+Сейчас в пакете: `Label`, `TextBox`, `TextArea`, `CheckBox`, `Button`, `Border`, `ContentPresenter`,
 `ContentControl`, `TemplatedControl`, `TemplatePart`, `ItemsControl`
 (+ `VirtualizingStackPanel`), `ScrollBar`, `ScrollViewer`, `PopupLayer`,
 `SelectionModel`, `Path`, `StackPanel`, `DockPanel`, `Grid`. Для настоящего
@@ -1087,7 +1097,7 @@ UI-кита этого мало, но порядок работ определя
 
 **Слой 1 — простые элементы ввода** (по одной сессии, native-работ нет):
 
-12. `CheckBox` — два состояния, галочка.
+12. `CheckBox` — два состояния, галочка. **Готово (2026-11-28):** состояние `isChecked` в системе свойств (двусторонняя связь с моделью), переключение кликом и пробелом, галочка и текст метки рядом, квадрат у начала контрола, выключенное состояние серым, своя роль в дереве семантики.
 13. `RadioButton` + группа radio — нужен контейнер с focus scope и общей
     группой.
 14. `Switch` / `ToggleButton` — переключатель с анимацией.
@@ -1217,6 +1227,47 @@ UI-кита этого мало, но порядок работ определя
 ---
 
 ## 9. Журнал работ
+
+### 2026-11-28 — слой 1, пункт 12: флажок (`CheckBox`)
+
+Сделано:
+
+- Добавлен `CheckBox` (`lib/src/checkbox.dart`): контрол с двумя состояниями.
+  Состояние живёт в системе свойств (`isChecked`), поэтому двусторонняя
+  связь держит контрол и модель равными; клик и пробел переключают его, а
+  обработчик `onChanged` сообщает о новом состоянии.
+- Контрол рисует квадрат с галочкой и текст метки рядом с ним. Квадрат стоит
+  у начала контрола: левый край в left-to-right, правый в right-to-left, — и
+  текст метки встаёт рядом с квадратом, а не с краем окна. Выключенный
+  контрол рисуется серым.
+- У контрола есть свой шаблон (`template`), поэтому вид флажка можно заменить
+  целиком, как у остальных контролов с собственным видом.
+- В дереве семантики появилась роль `checkBox` с состоянием `checked` и
+  именем из текста метки. Роль стоит в конце перечисления, потому что индекс
+  роли пересекает native ABI: числа уже существующих ролей не изменились.
+- Раскладка текста кэшируется в одном месте: `CachedTextLayout` в
+  `lib/src/text_layout.dart`. Раньше кэш раскладки жил внутри `Label` и
+  внутри `TextEditor` — две копии; теперь `Label`, `TextBox`, `TextArea` и
+  `CheckBox` делят один.
+
+Проверено:
+
+- `dart analyze` — без замечаний; `dart format` применён.
+- `dart test --exclude-tags clipboard,native` — 355/355;
+  `dart test --tags native --exclude-tags clipboard` — 55/55.
+- Новый `test/checkbox_test.dart` (16 тестов): клик по квадрату и по тексту
+  метки, повторный клик, пробел, Enter не переключает, обработчик изменения,
+  двусторонняя связь с моделью, выключенный контрол, измерение, положение
+  квадрата и текста в обеих направлениях раскладки, рисование галочки и
+  серого выключенного состояния, семантика, состояние нажатия.
+- Смоук примера `example/native_checkbox.dart --smoke` проходит: клик
+  переключает флажок, пробел переключает его обратно, двусторонняя связь
+  переносит состояние в модель.
+- Снимок экрана примера показывает отмеченный и неотмеченные флажки рядом с
+  текстом метки.
+
+Дальше: слой 1 — `RadioButton` с группой radio (п. 13) и остальные простые
+элементы ввода. Публикация пакета 0.2.0 должна нести native ABI версии 6.
 
 ### 2026-11-28 — слой 1, пункт 20: многострочный ввод (`TextArea`)
 
