@@ -1,6 +1,7 @@
 library;
 
 export 'src/application.dart';
+export 'src/animation.dart';
 export 'src/border.dart';
 export 'src/button.dart';
 export 'src/checkable.dart';
@@ -36,6 +37,7 @@ export 'src/semantics.dart';
 export 'src/size_request.dart';
 export 'src/stack_panel.dart';
 export 'src/styles.dart';
+export 'src/switch.dart';
 export 'src/template_part.dart';
 export 'src/templated_control.dart';
 export 'src/label.dart';

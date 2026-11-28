@@ -125,6 +125,26 @@ final class Color {
   static const white = Color(0xFFFFFFFF);
 
   final int value;
+
+  /// Mixes two colors.
+  ///
+  /// The share of the mix tells how much of the second color is in the
+  /// result: zero gives the first color, one gives the second one.
+  static Color lerp(Color from, Color to, double share) {
+    final t = share < 0 ? 0.0 : (share > 1 ? 1.0 : share);
+    int channel(int shift) {
+      final a = (from.value >> shift) & 0xFF;
+      final b = (to.value >> shift) & 0xFF;
+      return (a + (b - a) * t).round().clamp(0, 255).toInt();
+    }
+
+    return Color(
+      (channel(24) << 24) |
+          (channel(16) << 16) |
+          (channel(8) << 8) |
+          channel(0),
+    );
+  }
 }
 
 /// The way a shape is mixed with the pixels under it.

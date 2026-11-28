@@ -24,6 +24,13 @@ enum SemanticsRole {
   /// The element is a button of a group, where one button is checked at a
   /// time.
   radioButton,
+
+  /// The element is a switch that is on or off.
+  ///
+  /// The role stands at the end of the enum, because the index of a role
+  /// crosses the native ABI: the numbers of the roles that are already in the
+  /// tree must not change.
+  toggleSwitch,
 }
 
 /// The state of an element for assistive technologies.

@@ -2,6 +2,27 @@
 
 ## Unreleased
 
+- A switch is a control now: `Switch` has two states, draws a track and a
+  thumb, and the thumb slides to the other end of the track when the state
+  changes. The color of the track changes with it. The state is a property,
+  so it can be bound: a two-way binding keeps the value of the control and
+  the value of the model equal. A click and the space bar toggle the switch.
+- The place of the thumb is a property now: `progress` stands between zero
+  and one while the thumb slides, and `thumbRect` gives the rectangle of the
+  thumb, so a template can draw its own thumb.
+- A number can move to another value over time: the new `ValueAnimation`
+  runs on the timer of the Dart event loop, so it moves in the native backend
+  and in the tests alike. The easing of the run is a function, and the
+  listener gets the new value on every tick.
+- The core of the toggles knows the width and the height of the mark
+  apart now: `markWidth` and `markHeight` can be answered by a control, so
+  the track of a switch is wider than the box of a check box, and the
+  measure, the text and the focus ring follow those sizes.
+- The semantics tree knows a switch: the new role `toggleSwitch` carries the
+  state of the switch and the name of the label. The role stands at the end
+  of the roles, because the index of a role crosses the native ABI.
+- `Color.lerp` mixes two colors, so a shape can change its color from one
+  value to another.
 - The focus ring of a check box and of a radio button no longer covers the
   control: the ring is drawn around the mark itself, the box with the check
   mark or the circle with the dot. A gap of one pixel stays between the ring

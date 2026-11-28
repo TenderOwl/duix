@@ -72,7 +72,7 @@ dart run bin/main.dart
 ```
 
 The `example/` folder holds more examples: a counter, a text gallery, a
-TextBox, a TextArea, a CheckBox, a RadioButton, a list of 100 000 items, a
+TextBox, a TextArea, a CheckBox, a RadioButton, a Switch, a list of 100 000 items, a
 ScrollViewer, templates that place the parts of a TextBox and a ScrollViewer,
 dialogs and file panels.
 
