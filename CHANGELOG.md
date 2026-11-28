@@ -2,6 +2,21 @@
 
 ## Unreleased
 
+- A template does not have to replace the content of a control. A control can offer named
+  parts now: `TemplatedControl.registerPart(name, element)` puts a part into the control,
+  the template finds it with `control.part(name)` and places it where it belongs, and the
+  control draws the content of the part. A part that no template places stays with the
+  control, so the content is never lost, and the parts outlive the template that
+  placed them.
+- `TextBox` has a template and a part with the text now. The template draws the frame of
+  the field and places the part, the control keeps the text, the selection, the
+  composition and the caret.
+- `ScrollViewer` has a template and three parts now: `content` with the scrolled and
+  clipped content, `horizontalScrollBar` and `verticalScrollBar`. The template decides
+  where the content and the bars sit, the viewer keeps the offset and the values of
+  the bars.
+- `TemplatePart` is the part of a control that draws its content: it is measured,
+  arranged and rendered through the owner of the control.
 - A template is not a thing of the button only. `Label`, `Border` and `ScrollBar` have
   their own template property now, so the look of any widget that draws itself can be
   replaced: a template of a label takes over its text, a template of a border presents

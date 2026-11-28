@@ -1,19 +1,29 @@
 import 'colors.dart';
+import 'control_template.dart';
 import 'drawing.dart';
 import 'events.dart';
-import 'focus_decoration.dart';
 import 'geometry.dart';
 import 'headless_text_layout.dart';
 import 'properties.dart';
 import 'semantics.dart';
 import 'size_request.dart';
+import 'template_part.dart';
+import 'templated_control.dart';
 import 'text_buffer.dart';
 import 'text_layout.dart';
 import 'ui_element.dart';
 
-final class TextBox extends Control {
+/// A control that edits a text.
+///
+/// The text of the field is a part of the control: the control owns the text
+/// and draws it, a template only places the part. The text therefore survives
+/// every template.
+final class TextBox extends TemplatedControl {
   TextBox({String text = '', double fontSize = 14})
-      : buffer = TextBuffer(text: text) {
+      : buffer = TextBuffer(text: text),
+        super(templateProperty: templateProperty) {
+    _textPart = TemplatePart('text', this);
+    registerPart('text', _textPart);
     setValue(textProperty, text);
     setValue(fontSizeProperty, fontSize);
     buffer.addPropertyListener((event) {
@@ -35,6 +45,14 @@ final class TextBox extends Control {
     addHandler(UIElement.keyDown, _keyDown);
   }
 
+  static const templateProperty =
+      DuiProperty<TextBox, ControlTemplate<TextBox>?>(
+    name: 'template',
+    defaultValue: null,
+    affectsMeasure: true,
+    affectsPaint: true,
+  );
+
   static const textProperty = DuiProperty<TextBox, String>(
     name: 'text',
     defaultValue: '',
@@ -50,11 +68,18 @@ final class TextBox extends Control {
 
   static const _headlessFactory = HeadlessTextLayoutFactory();
 
-  /// Horizontal padding of the content area, mirrored by [renderCore].
+  /// The padding around the text inside the field.
+  static const EdgeInsets _contentPadding =
+      EdgeInsets.symmetric(horizontal: 8, vertical: 4);
+
+  /// Horizontal padding of the content area, mirrored by [renderPart].
   static const double _contentPaddingHorizontal = 16;
 
-  /// Vertical padding of the content area, mirrored by [renderCore].
+  /// Vertical padding of the content area, mirrored by [renderPart].
   static const double _contentPaddingVertical = 8;
+
+  /// The distance between the top of the text area and the line of text.
+  static const double _textTopOffset = 3;
 
   /// Smallest width the control reports so an empty field stays visible.
   static const double _minimumWidth = 80;
@@ -63,6 +88,7 @@ final class TextBox extends Control {
   static const double _minimumHeight = 30;
 
   final TextBuffer buffer;
+  late final TemplatePart _textPart;
   WindowHost? _mountedHost;
   String _compositionText = '';
   TextSelection? _compositionSelection;
@@ -70,6 +96,15 @@ final class TextBox extends Control {
   final _CachedTextLayout _renderLayout = _CachedTextLayout();
   double _horizontalScrollOffset = 0;
   bool _isSelecting = false;
+
+  /// The template of the text box.
+  ///
+  /// The template owns the look of the field: it places the part with the
+  /// text and draws the frame around it. The text itself stays with the
+  /// control.
+  @override
+  ControlTemplate<TextBox>? get template =>
+      super.template as ControlTemplate<TextBox>?;
 
   String get text => getValue(textProperty);
   set text(String value) => setValue(textProperty, value);
@@ -85,6 +120,9 @@ final class TextBox extends Control {
   String get compositionText => _compositionText;
   TextSelection? get compositionSelection => _compositionSelection;
   bool get hasComposition => _compositionText.isNotEmpty;
+
+  /// The part of the control that holds the text.
+  UIElement get textPart => _textPart;
 
   void insertText(String value) {
     _clearComposition();
@@ -145,9 +183,10 @@ final class TextBox extends Control {
   }
 
   int _hitTestOffset(Point position) {
+    final area = _textPart.bounds;
     final local = Point(
-      position.x - bounds.left - 8 + _horizontalScrollOffset,
-      position.y - bounds.top - 7,
+      position.x - area.left + _horizontalScrollOffset,
+      position.y - area.top - _textTopOffset,
     );
     final layout = _layoutForRender(text);
     final offset = layout.hitTest(local).offset.clamp(0, text.length);
@@ -297,12 +336,13 @@ final class TextBox extends Control {
 
   @override
   void arrangeCore(Rect finalRect) {
+    super.arrangeCore(finalRect);
     _ensureCaretVisible();
     _syncTextInputArea();
   }
 
   void _ensureCaretVisible([TextLayout? layout]) {
-    final viewport = (bounds.width - 16).clamp(0.0, double.infinity);
+    final viewport = _textPart.bounds.width;
     if (viewport <= 0) {
       _horizontalScrollOffset = 0;
       return;
@@ -336,14 +376,15 @@ final class TextBox extends Control {
     _ensureCaretVisible();
     final host = _mountedHost;
     if (host == null || !isFocused) return;
-    final width = (bounds.width - 16).clamp(1.0, double.infinity);
-    final height = (bounds.height - 14).clamp(1.0, double.infinity);
+    final area = _textPart.bounds;
+    final width = area.width.clamp(1.0, double.infinity);
+    final height = (area.height - 6).clamp(1.0, double.infinity);
     final layout = _layoutForRender(text);
     final cursorX =
         layout.caretRect(caretOffset).left - _horizontalScrollOffset;
     host.updateTextInputArea(
       this,
-      Rect.fromLTWH(bounds.left + 8, bounds.top + 7, width, height),
+      Rect.fromLTWH(area.left, area.top + _textTopOffset, width, height),
       cursorX,
     );
   }
@@ -362,12 +403,21 @@ final class TextBox extends Control {
   }
 
   @override
-  Size measureCore(Size availableSize) {
-    final layout = _layoutForMeasure();
+  Size measureContentCore(Size availableSize) {
+    final size = _textPart.measure(availableSize);
     return Size(
-      layout.width + _contentPaddingHorizontal,
-      layout.height + _contentPaddingVertical,
+      size.width + _contentPaddingHorizontal,
+      size.height + _contentPaddingVertical,
     );
+  }
+
+  @override
+  Size measurePart(UIElement part, Size availableSize) {
+    if (!identical(part, _textPart)) {
+      return super.measurePart(part, availableSize);
+    }
+    final layout = _layoutForMeasure();
+    return Size(layout.width, layout.height);
   }
 
   @override
@@ -377,15 +427,22 @@ final class TextBox extends Control {
       );
 
   @override
-  void renderCore(DrawingContext context) {
+  Rect partRect(UIElement part, Rect contentRect) {
+    if (!identical(part, _textPart)) {
+      return super.partRect(part, contentRect);
+    }
+    return contentRect.deflate(_contentPadding);
+  }
+
+  @override
+  void renderContentCore(DrawingContext context) {
     context.drawRect(bounds, const Paint(Colors.white));
-    if (isFocused) drawFocusRing(context, bounds);
-    final contentBounds = Rect.fromLTWH(
-      bounds.left + 8,
-      bounds.top + 4,
-      (bounds.width - 16).clamp(0, double.infinity),
-      (bounds.height - 8).clamp(0, double.infinity),
-    );
+  }
+
+  @override
+  void renderPart(UIElement part, DrawingContext context) {
+    if (!identical(part, _textPart)) return;
+    final area = _textPart.bounds;
     final compositionBase = selection.start;
     final displayText = hasComposition
         ? text.replaceRange(selection.start, selection.end, compositionText)
@@ -393,11 +450,11 @@ final class TextBox extends Control {
     final layout = _layoutForRender(displayText);
     _ensureCaretVisible(layout);
     final origin = Point(
-      bounds.left + 8 - _horizontalScrollOffset,
-      bounds.top + 7,
+      area.left - _horizontalScrollOffset,
+      area.top + _textTopOffset,
     );
 
-    context.pushClipRect(contentBounds);
+    context.pushClipRect(area);
     try {
       if (!hasComposition && !selection.isCollapsed) {
         for (final rect in layout.selectionRects(

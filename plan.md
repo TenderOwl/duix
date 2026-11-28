@@ -94,6 +94,7 @@ Skia canvas масштабируется через `displayScale`. Backbuffer �
 - popup-слой: `PopupLayer` (`lib/src/popup.dart`) и `Window.overlay` — слой окна поверх содержимого со своим layout и clip, перехватывает клики вне всплывающего окна, закрывается по Escape и возвращает фокус владельцу; размещение: снизу, сверху, слева, справа, у курсора, у области владельца;
 - мост accessibility: дерево семантики окна уходит в native через `dui_window_set_accessibility_tree` — роли, имена, значения, состояния и границы; native хранит дерево плоским списком, у каждого узла индекс родителя; `SdlSkiaHost.nativeHandle(window)` даёт доступ к native-состоянию окна;
 - шаблоны для любого контрола: `TemplatedControl` — базовый класс с механикой шаблона (создание, замена и освобождение persistent-поддерева, `templateRoot`, `hasTemplate`, хук `onTemplateReplacing`); `ContentControl extends TemplatedControl`; собственный контент виджета реализуется через `measureContentCore`/`arrangeContentCore`/`renderContentCore`/`hitTestContentCore`, чтобы шаблон нельзя было случайно перекрыть подкласом; focus ring рисует база (после контента, сверху), а не каждый виджет отдельно; типизированный шаблон живёт в конкретном классе, база хранит `ControlTemplate<dynamic>?`; своё template-свойство есть у `Button`, `Label`, `Border` и `ScrollBar` — у всего набора, который рисует свой вид;
+- части шаблона (template parts): контрол отдаёт шаблону именованные части, а шаблон размещает их; содержимое контрола при этом не заменяется. `TemplatePart` (`lib/src/template_part.dart`) — это элемент дерева, который меряется, расставляется и рисуется через владельца (`measurePart`, `arrangePart`, `renderPart`, `hitTestPart`), поэтому рисует содержимое контрол, а шаблон решает только, где часть лежит. `TemplatedControl` держит реестр частей (`registerPart`, `part`, `templateParts`) и сам размещает, меряет и рисует те части, которые шаблон не разместил; части переживают замену шаблона. `TextBox` отдаёт часть `text` (текст, выделение, composition и caret рисует контрол), `ScrollViewer` — части `content`, `horizontalScrollBar` и `verticalScrollBar`;
 - `Label`, `TextBox`, `Button`, `Border`, `StackPanel`, `DockPanel`, `Grid`;
 - постоянное дерево и lifecycle mount/unmount;
 - `DuiProperty`;
@@ -241,6 +242,7 @@ Skia canvas масштабируется через `displayScale`. Backbuffer �
 - Дерево семантики подтверждено тестами: роли и имена зеркалят дерево UI, элементы без роли сворачиваются, фокус и выделение отражаются в снимке, состояние disabled и границы совпадают с контролом, контрол забирает имя label-контента, `ItemsControl` даёт list с элементами, а disposed-контрол в дерево не попадает.
 - Мост Windows UI Automation подтверждён на живой системе: UIA-клиент читает дерево окна (`Window "DUI accessibility"` → `Custom` → `Text`, `Button`, `Edit`), у элементов верные имя, тип управления, границы на экране и состояния (`IsEnabled`, `IsControlElement`, `IsContentElement` — TRUE), фокус отмечен у кнопки, `FrameworkId` — `Dui`.
 - Шаблоны есть у всего набора виджетов, который рисует свой вид: `Label`, `Border`, `ScrollBar` и `Button`. Шаблон `Label` заменяет её текст, шаблон `Border` показывает содержимое через `ContentPresenter`, шаблон `ScrollBar` рисует полосу и бегунок. Снимок экрана примера `native_aqua_button` подтвердил бейдж с шаблоном и карточку с шаблоном.
+- Части шаблона проверены тестами и снимком экрана: шаблон `TextBox` размещает часть с текстом и текст остаётся на месте, текст не пропадает и когда шаблон часть не разместил, часть переживает замену шаблона и освобождается вместе с контролом; шаблон `ScrollViewer` размещает содержимое и обе полосы, содержимое обрезается по месту части, полосы следуют за смещением вьюпорта.
 - Исправлен перенос строки на самой границе бокса: текст, ширина которого совпадает с шириной бокса, больше не переносит последнее слово на следующую строку (допуск в один физический пиксель в раскладке Skia). Раньше кнопка показывала «Продолжит», а бейдж — «Badg».
 - Графика слоя подтверждена и тестами, и снимком экрана: окно примера `example/native_graphics.dart` рисует кубическую кривую (`drawPath`), белую карточку с мягкой тенью и два прямоугольника, где жёлтый и бирюзовый накладываются в оливковый (`BlendMode.multiply`) с прозрачностью 0.8.
 - Recursive dispose подтверждён тестами: поддерево освобождает native-раскладки, disposed-элемент отсоединяется от родителя (список детей пустеет), все потомки получают `isDisposed`, повторный dispose не освобождает ресурсы дважды, фокус снимается, disposed-элемент нельзя вернуть в дерево, `Window.dispose()` освобождает контент, а `close()` оставляет его жить.
@@ -309,6 +311,7 @@ lib/src/ui_element.dart              — UIElement, Control и WindowHost lifecy
 lib/src/controls.dart                — compatibility barrel для контролов
 lib/src/content_control.dart         — ContentControl и content notifications
 lib/src/control_template.dart        — ControlTemplate и ContentPresenter
+lib/src/template_part.dart            — TemplatePart: именованная часть контрола, которую размещает шаблон
 lib/src/styles.dart                  — типизированные Style и DuiSetter
 lib/src/semantics.dart              — SemanticsRole, SemanticsState, SemanticsNode, SemanticsTree
 lib/src/button.dart                  — Button и persistent template
@@ -360,11 +363,13 @@ example/native_items_control.dart    — список 100 000 элементов
 example/native_scroll_viewer.dart   — ScrollViewer, прокрутка и smoke
 example/native_accessibility.dart   — окно с семантикой для проверки моста UI Automation
 example/native_graphics.dart         — пути, тени и режимы наложения
+example/native_template_parts.dart   — шаблоны, размещающие части TextBox и ScrollViewer
 test/                                — автоматические тесты
 test/text_box_measurement_test.dart — измерение TextBox по метрикам раскладки
 test/dispose_test.dart              — recursive dispose элементов и поддеревьев
 test/semantics_test.dart            — дерево семантики, фокус и выделение
 test/path_test.dart                 — контуры пути и paint
+test/template_parts_test.dart        — части шаблона у TextBox и ScrollViewer
 test/native_graphics_test.dart      — путь, тень и наложение на native backend
 test/native_packaging_test.dart     — порядок поиска библиотеки и раскладка install-дерева
 test/native_scroll_viewer_test.dart — drag полосы прокрутки и клавиатура на native backend
@@ -455,7 +460,7 @@ python tools/bootstrap_native.py --smoke --dart "<путь-к-dart>"
 9. **P2 (закрыт 2026-11-26 на Windows x64):** кроссплатформенный CI добавлен (Dart job на трёх ОС и best-effort native job), packaging runtime dependencies и воспроизводимый release build реализованы: `tools/package.py` разбирает зависимости, проверяет, что private-зависимостей нет, собирает бандл с manifest и sha256 и воспроизводимым архивом, а install-правила CMake кладут `icudtl.dat` рядом с библиотекой. Осталось проверить macOS (universal binary, codesign), arm64 и Linux на реальных дистрибутивах. Native job на macOS не запускается: у hosted-runner нет window server, а сборка Skia требует больше диска и времени, чем даёт раннер.
 10. **P2 (закрыт 2026-11-26):** SDL video не потокобезопасен, а native-слой не сериализовал обращения к нему — два изолята с окнами роняли процесс. Теперь все SDL-вызовы идут под process-wide рекурсивным мьютексом, host в процессе может быть только один (второй получает явную ошибку), а `SDL_Quit()` не вызывается. Ограничение «один host на процесс» остаётся осознанным: у SDL одна глобальная очередь событий, и поддержка нескольких host потребовала бы её переделки на стороне Dart.
 
-11. **P2:** `TextBox` и `ScrollViewer` шаблоны не поддерживают: шаблон заменяет содержимое контрола целиком, а у них содержимое — это текст с выделением и caret либо полосы прокрутки. Для них нужна модель template parts (контрол отдаёт шаблону именованную часть, а шаблон её размещает), иначе тему нельзя применить к вводу и к прокрутке.
+11. **P1 (закрыт 2026-11-28):** `TextBox` и `ScrollViewer` шаблоны не поддерживали: шаблон заменял содержимое контрола целиком, а у них содержимое — это текст с выделением и caret либо полосы прокрутки. Теперь у обоих есть модель template parts: контрол отдаёт шаблону именованную часть (`text` у `TextBox`, `content`, `horizontalScrollBar` и `verticalScrollBar` у `ScrollViewer`), а шаблон её размещает; часть, которую шаблон не разместил, остаётся у контрола.
 
 ---
 
@@ -976,6 +981,7 @@ GPU backend по-прежнему не входит в ближайшие эта
 Сейчас в пакете: `Label`, `TextBox`, `Button`, `Border`, `ContentPresenter`,
 `ContentControl`, `TemplatedControl`, `ItemsControl` (+ `VirtualizingStackPanel`),
 `ScrollBar`, `ScrollViewer`, `PopupLayer`, `SelectionModel`, `Path`, `StackPanel`,
+`TemplatePart`,
 `DockPanel`, `Grid`. Для настоящего UI-кита этого мало, но
 порядок работ определяется не списком виджетов, а подсистемами, без которых
 их нельзя построить.
@@ -1002,10 +1008,11 @@ GPU backend по-прежнему не входит в ближайшие эта
    задаётся любому контролу через его собственное свойство.
    **Доделано (2026-11-28):** своё template-свойство есть не только у кнопки:
    `Label.templateProperty`, `Border.templateProperty` и `ScrollBar.templateProperty` —
-   шаблон есть у каждого виджета, который рисует свой вид. Не шаблонизированы
-   `TextBox` и `ScrollViewer`: их текст с выделением и caret и их полосы прокрутки —
-   это и есть содержимое контрола, а шаблон заменяет содержимое целиком; для них нужна
-   модель template parts.
+   шаблон есть у каждого виджета, который рисует свой вид.
+   **Доделано (2026-11-28):** `TextBox` и `ScrollViewer` тоже шаблонизированы, но по
+   модели template parts: контрол отдаёт шаблону именованную часть (`text` у `TextBox`,
+   `content`, `horizontalScrollBar` и `verticalScrollBar` у `ScrollViewer`), а шаблон её
+   размещает. Содержимое контрола при этом не заменяется.
 4. **Отдельный `ScrollBar`.** Полосы прокрутки встроены в `ScrollViewer`;
    как самостоятельный виджет он нужен и пользователям, и как основа для
    ComboBox и ListView. **Готово (2026-11-27):** `ScrollBar` — отдельный
@@ -1129,6 +1136,54 @@ GPU backend по-прежнему не входит в ближайшие эта
 
 ## 9. Журнал работ
 
+### 2026-11-28 — слой 0: шаблоны, которые не заменяют содержимое
+
+Сделано:
+
+- Добавлен `TemplatePart` (`lib/src/template_part.dart`): именованная часть
+  контрола, которую размещает шаблон. Часть меряется, расставляется и рисуется
+  через владельца (`measurePart`, `arrangePart`, `renderPart`, `hitTestPart`),
+  поэтому содержимое рисует контрол, а шаблон решает только, где часть лежит.
+- `TemplatedControl` получил реестр частей (`registerPart`, `part`,
+  `templateParts`) и правило: часть, которую шаблон не разместил, остаётся у
+  контрола — он сам её меряет, расставляет в своей области и рисует. Части
+  переживают замену шаблона: перед освобождением старого дерева они
+  отсоединяются от него, а без шаблона возвращаются контролу.
+- `TextBox` стал `TemplatedControl` с частью `text`: текст, выделение,
+  composition и caret рисует контрол, а рамку поля рисует шаблон. Геометрия
+  текста (content rect, hit test, IME area) считается от границ части, а не от
+  границ контрола.
+- `ScrollViewer` получил своё template-свойство и три части: `content`
+  (обрезанное и смещённое содержимое), `horizontalScrollBar` и
+  `verticalScrollBar`. Вьюпорт в шаблоне — это границы части с содержимым,
+  полосы следуют за смещением, а видимость полос считается по вьюпорту.
+- Инвалидация контрола распространяется на его части: содержимое изменилось —
+  части перемеряются и перерасставляются, иначе виджет видел бы устаревший
+  размер содержимого.
+- Смещение прокрутки обрезается по фактическому вьюпорту, а не по оценке
+  фазы измерения: шаблон может мерять часть со свободным пространством, и
+  оценка вьюпорта тогда неверна.
+
+Проверено:
+
+- `dart analyze` — No issues found; `dart format` — 0 изменений.
+- `dart test --exclude-tags clipboard,native` — 302/302; `dart test --tags native
+  --exclude-tags clipboard` — 47/47.
+- `test/template_parts_test.dart` (12 тестов): часть с текстом у `TextBox`,
+  текст в шаблоне и без части в шаблоне, переживание замены шаблона, возврат
+  текста при снятии шаблона, освобождение части вместе с контролом, части
+  `ScrollViewer`, обрезка содержимого по месту части и полосы, следующие за
+  смещением.
+- Смоук и снимок экрана примера `example/native_template_parts.dart`: поле в
+  рамке из шаблона с текстом внутри и прокручиваемая область с полосами,
+  размещёнными шаблоном.
+
+Ограничение: части размещает только шаблон — если шаблон их не упоминает,
+контрол рисует их сам, в своей области. Части нельзя пока сделать
+необязательными поимённо (часть всегда рисуется, если шаблон её не скрыл).
+
+Дальше: публикация 0.2.0 с native ABI 5.
+
 ### 2026-11-28 — слой 0, пункт 3: шаблоны для всего набора виджетов
 
 Сделано:
@@ -1158,9 +1213,8 @@ GPU backend по-прежнему не входит в ближайшие эта
 - Снимок экрана примера `native_aqua_button`: бейдж с шаблоном и карточка с
   шаблоном.
 
-Ограничение: `TextBox` и `ScrollViewer` шаблоны не поддерживают — их текст,
-выделение, caret и полосы прокрутки и есть содержимое контрола, а шаблон
-заменяет содержимое целиком. Для них нужна модель template parts.
+Ограничение закрыто следующей записью журнала: для `TextBox` и `ScrollViewer` сделана
+модель template parts, их шаблоны не заменяют содержимое.
 
 Дальше: слой 0 закрыт; публикация 0.2.0 с native ABI 5.
 

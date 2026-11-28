@@ -167,7 +167,13 @@ void main() {
 
     final clip = renderer.commands.whereType<PushClipRectCommand>().single;
     expect(clip.rect, const Rect.fromLTWH(0, 0, 188, 88));
-    final contentRect = renderer.commands.whereType<DrawRectCommand>().first;
+    // The corner between the scroll bars belongs to the viewer and is drawn
+    // before the content, so the content is found by its own size.
+    final contentRect =
+        renderer.commands.whereType<DrawRectCommand>().firstWhere(
+              (command) =>
+                  command.rect.width == 400 && command.rect.height == 300,
+            );
     expect(contentRect.rect, const Rect.fromLTWH(-48, -48, 400, 300));
     expect(
       renderer.commands

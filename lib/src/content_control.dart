@@ -53,8 +53,12 @@ abstract class ContentControl extends TemplatedControl {
 
   @override
   Iterable<UIElement> get logicalChildren {
-    if (hasTemplate) return super.logicalChildren;
-    return _content == null ? const [] : [_content!];
+    final children = <UIElement>[...super.logicalChildren];
+    if (!hasTemplate) {
+      final current = _content;
+      if (current != null) children.add(current);
+    }
+    return children;
   }
 
   /// The accessible name of a content control comes from its content.

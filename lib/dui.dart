@@ -32,6 +32,7 @@ export 'src/semantics.dart';
 export 'src/size_request.dart';
 export 'src/stack_panel.dart';
 export 'src/styles.dart';
+export 'src/template_part.dart';
 export 'src/templated_control.dart';
 export 'src/label.dart';
 export 'src/text_box.dart';

@@ -87,7 +87,10 @@ void main() {
         (command) => command is DrawTextCommand,
       );
       expect(caretIndex, greaterThan(textIndex));
-      expect(renderer.commands.last, isA<PopClipCommand>());
+      final popIndex = renderer.commands.indexWhere(
+        (command) => command is PopClipCommand,
+      );
+      expect(popIndex, greaterThan(caretIndex));
     });
 
     test('unfocused collapsed selection does not draw a caret', () async {
@@ -164,7 +167,11 @@ void main() {
             ),
         isEmpty,
       );
-      expect(renderer.commands.last, isA<PopClipCommand>());
+      final popIndex = renderer.commands.indexWhere(
+        (command) => command is PopClipCommand,
+      );
+      expect(popIndex, greaterThan(0));
+      expect(popIndex, lessThan(renderer.commands.length - 1));
     });
   });
 }

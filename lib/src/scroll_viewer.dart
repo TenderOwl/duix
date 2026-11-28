@@ -1,36 +1,56 @@
 import 'dart:math' as math;
 
 import 'content_control.dart';
+import 'control_template.dart';
 import 'drawing.dart';
 import 'events.dart';
 import 'geometry.dart';
 import 'observable.dart';
+import 'properties.dart';
 import 'scroll_bar.dart';
+import 'template_part.dart';
 import 'ui_element.dart';
 
 /// A scrollable area.
 ///
 /// The viewer keeps the offset of the content and delegates the appearance
 /// and the dragging of the scroll bars to two [ScrollBar] controls.
+///
+/// The content and the scroll bars are parts of the viewer: the viewer owns
+/// them and draws them, a template only places them. The content of the
+/// viewer therefore survives every template.
 final class ScrollViewer extends ContentControl {
+  // The content cannot be a super parameter: the viewer passes its own
+  // template property to the content control.
+  // ignore: use_super_parameters
   ScrollViewer({
-    super.content,
+    UIElement? content,
     ScrollBarVisibility horizontalScrollBarVisibility =
         ScrollBarVisibility.auto,
     ScrollBarVisibility verticalScrollBarVisibility = ScrollBarVisibility.auto,
   })  : _horizontalScrollBarVisibility = horizontalScrollBarVisibility,
-        _verticalScrollBarVisibility = verticalScrollBarVisibility {
+        _verticalScrollBarVisibility = verticalScrollBarVisibility,
+        super(content: content, templateProperty: templateProperty) {
     _horizontalBar = ScrollBar(orientation: Orientation.horizontal);
     _verticalBar = ScrollBar(orientation: Orientation.vertical);
-    for (final bar in [_horizontalBar, _verticalBar]) {
-      bar.attachToParent(this);
-    }
+    _contentPart = TemplatePart('content', this);
+    registerPart('content', _contentPart);
+    registerPart('horizontalScrollBar', _horizontalBar);
+    registerPart('verticalScrollBar', _verticalBar);
     _horizontalBar.addPropertyListener(_barValueChanged);
     _verticalBar.addPropertyListener(_barValueChanged);
     addHandler(UIElement.pointerDown, _pointerDown);
     addHandler(UIElement.mouseWheel, _mouseWheel);
     addHandler(UIElement.keyDown, _keyDown);
   }
+
+  static const templateProperty =
+      DuiProperty<ScrollViewer, ControlTemplate<ScrollViewer>?>(
+    name: 'template',
+    defaultValue: null,
+    affectsMeasure: true,
+    affectsPaint: true,
+  );
 
   static const scrollBarThickness = ScrollBar.defaultThickness;
   static const wheelScrollDistance = 48.0;
@@ -40,16 +60,27 @@ final class ScrollViewer extends ContentControl {
   ScrollBarVisibility _verticalScrollBarVisibility;
   late final ScrollBar _horizontalBar;
   late final ScrollBar _verticalBar;
+  late final TemplatePart _contentPart;
   double _horizontalOffset = 0;
   double _verticalOffset = 0;
   double _viewportWidth = 0;
   double _viewportHeight = 0;
   double _extentWidth = 0;
   double _extentHeight = 0;
+  Size _contentSize = Size.zero;
   bool _isHorizontalScrollBarVisible = false;
   bool _isVerticalScrollBarVisible = false;
   bool _isSyncingBars = false;
   Rect _viewportRect = Rect.zero;
+
+  /// The template of the scroll viewer.
+  ///
+  /// The template owns the look of the viewer: it places the part with the
+  /// content and the two scroll bars. The content and the bars stay with the
+  /// viewer.
+  @override
+  ControlTemplate<ScrollViewer>? get template =>
+      super.template as ControlTemplate<ScrollViewer>?;
 
   ScrollBarVisibility get horizontalScrollBarVisibility =>
       _horizontalScrollBarVisibility;
@@ -74,6 +105,9 @@ final class ScrollViewer extends ContentControl {
 
   /// The vertical scroll bar of the viewer.
   ScrollBar get verticalScrollBar => _verticalBar;
+
+  /// The part of the viewer that holds the scrolled content.
+  UIElement get contentPart => _contentPart;
 
   double get horizontalOffset => _horizontalOffset;
   set horizontalOffset(double value) => scrollTo(horizontal: value);
@@ -156,14 +190,31 @@ final class ScrollViewer extends ContentControl {
       );
 
   @override
-  Iterable<UIElement> get logicalChildren => [
-        ...super.logicalChildren,
-        _horizontalBar,
-        _verticalBar,
-      ];
+  Iterable<UIElement> get logicalChildren {
+    final children = <UIElement>[...super.logicalChildren];
+    final current = content;
+    if (current != null &&
+        !children.contains(current) &&
+        identical(current.logicalParent, this)) {
+      children.add(current);
+    }
+    return children;
+  }
 
   @override
-  Size measureContentCore(Size availableSize) {
+  Size measureContentCore(Size availableSize) =>
+      _contentPart.measure(availableSize);
+
+  @override
+  Size measurePart(UIElement part, Size availableSize) {
+    if (!identical(part, _contentPart)) {
+      return super.measurePart(part, availableSize);
+    }
+    return _measureScrollable(availableSize);
+  }
+
+  /// Measures the content and settles which scroll bars are shown.
+  Size _measureScrollable(Size availableSize) {
     var showHorizontal =
         _horizontalScrollBarVisibility == ScrollBarVisibility.visible;
     var showVertical =
@@ -206,6 +257,7 @@ final class ScrollViewer extends ContentControl {
 
     _isHorizontalScrollBarVisible = showHorizontal;
     _isVerticalScrollBarVisible = showVertical;
+    _contentSize = contentSize;
     final maximumViewport = Size(
       _subtractBar(availableSize.width, showVertical),
       _subtractBar(availableSize.height, showHorizontal),
@@ -214,14 +266,15 @@ final class ScrollViewer extends ContentControl {
     _viewportHeight = math.min(contentSize.height, maximumViewport.height);
     _extentWidth = math.max(contentSize.width, _viewportWidth);
     _extentHeight = math.max(contentSize.height, _viewportHeight);
-    _horizontalOffset =
-        _horizontalScrollBarVisibility == ScrollBarVisibility.disabled
-            ? 0
-            : _horizontalOffset.clamp(0.0, _maxHorizontalOffset);
-    _verticalOffset =
-        _verticalScrollBarVisibility == ScrollBarVisibility.disabled
-            ? 0
-            : _verticalOffset.clamp(0.0, _maxVerticalOffset);
+    // The viewport of the measure is only an estimate: a template may measure
+    // the part with free space, so the offset is clamped when the part is
+    // arranged and the real viewport is known.
+    if (_horizontalScrollBarVisibility == ScrollBarVisibility.disabled) {
+      _horizontalOffset = 0;
+    }
+    if (_verticalScrollBarVisibility == ScrollBarVisibility.disabled) {
+      _verticalOffset = 0;
+    }
 
     return Size(
       _viewportWidth + (showVertical ? scrollBarThickness : 0),
@@ -246,8 +299,21 @@ final class ScrollViewer extends ContentControl {
     };
   }
 
+  void _clampOffsets() {
+    _horizontalOffset =
+        _horizontalScrollBarVisibility == ScrollBarVisibility.disabled
+            ? 0
+            : _horizontalOffset.clamp(0.0, _maxHorizontalOffset);
+    _verticalOffset =
+        _verticalScrollBarVisibility == ScrollBarVisibility.disabled
+            ? 0
+            : _verticalOffset.clamp(0.0, _maxVerticalOffset);
+  }
+
   @override
-  void arrangeContentCore(Rect finalRect) {
+  void arrangeCore(Rect finalRect) {
+    // Without a template the viewport is the control minus the scroll bars.
+    // With a template the part with the content decides the viewport.
     _viewportWidth = math.max(
       0,
       finalRect.width - (_isVerticalScrollBarVisible ? scrollBarThickness : 0),
@@ -257,18 +323,47 @@ final class ScrollViewer extends ContentControl {
       finalRect.height -
           (_isHorizontalScrollBarVisible ? scrollBarThickness : 0),
     );
-    final contentSize = content?.desiredSize ?? Size.zero;
-    _extentWidth = math.max(contentSize.width, _viewportWidth);
-    _extentHeight = math.max(contentSize.height, _viewportHeight);
-    _horizontalOffset =
-        _horizontalOffset.clamp(0.0, _maxHorizontalOffset).toDouble();
-    _verticalOffset = _verticalOffset.clamp(0.0, _maxVerticalOffset).toDouble();
     _viewportRect = Rect.fromLTWH(
       finalRect.left,
       finalRect.top,
       _viewportWidth,
       _viewportHeight,
     );
+    super.arrangeCore(finalRect);
+    if (hasTemplate) _updateScrollBarVisibility();
+    _syncScrollBars();
+  }
+
+  /// Settles which scroll bars are shown, now that the viewport is known.
+  ///
+  /// A template decides how large the viewport is, so the bars follow the
+  /// area the template gave to the content.
+  void _updateScrollBarVisibility() {
+    _isHorizontalScrollBarVisible = _shouldShowScrollBar(
+      _horizontalScrollBarVisibility,
+      _contentSize.width,
+      _viewportWidth,
+    );
+    _isVerticalScrollBarVisible = _shouldShowScrollBar(
+      _verticalScrollBarVisibility,
+      _contentSize.height,
+      _viewportHeight,
+    );
+  }
+
+  @override
+  void arrangePart(UIElement part, Rect finalRect) {
+    if (!identical(part, _contentPart)) {
+      super.arrangePart(part, finalRect);
+      return;
+    }
+    _viewportWidth = finalRect.width;
+    _viewportHeight = finalRect.height;
+    _viewportRect = finalRect;
+    final contentSize = content?.desiredSize ?? Size.zero;
+    _extentWidth = math.max(contentSize.width, _viewportWidth);
+    _extentHeight = math.max(contentSize.height, _viewportHeight);
+    _clampOffsets();
 
     content?.arrange(Rect.fromLTWH(
       finalRect.left - _horizontalOffset,
@@ -276,42 +371,36 @@ final class ScrollViewer extends ContentControl {
       math.max(contentSize.width, _viewportWidth),
       math.max(contentSize.height, _viewportHeight),
     ));
+  }
 
-    _verticalBar.arrange(
-      _isVerticalScrollBarVisible
+  @override
+  Rect partRect(UIElement part, Rect contentRect) {
+    if (identical(part, _contentPart)) return _viewportRect;
+    if (identical(part, _horizontalBar)) {
+      return _isHorizontalScrollBarVisible
           ? Rect.fromLTWH(
-              finalRect.right - scrollBarThickness,
-              finalRect.top,
-              scrollBarThickness,
-              _viewportHeight,
-            )
-          : Rect.zero,
-    );
-    _horizontalBar.arrange(
-      _isHorizontalScrollBarVisible
-          ? Rect.fromLTWH(
-              finalRect.left,
-              finalRect.bottom - scrollBarThickness,
+              contentRect.left,
+              contentRect.bottom - scrollBarThickness,
               _viewportWidth,
               scrollBarThickness,
             )
-          : Rect.zero,
-    );
-
-    _syncScrollBars();
+          : Rect.zero;
+    }
+    if (identical(part, _verticalBar)) {
+      return _isVerticalScrollBarVisible
+          ? Rect.fromLTWH(
+              contentRect.right - scrollBarThickness,
+              contentRect.top,
+              scrollBarThickness,
+              _viewportHeight,
+            )
+          : Rect.zero;
+    }
+    return super.partRect(part, contentRect);
   }
 
   @override
   void renderContentCore(DrawingContext context) {
-    context.pushClipRect(_viewportRect);
-    try {
-      content?.render(context);
-    } finally {
-      context.popClip();
-    }
-
-    _verticalBar.render(context);
-    _horizontalBar.render(context);
     if (_isHorizontalScrollBarVisible && _isVerticalScrollBarVisible) {
       context.drawRect(
         Rect.fromLTWH(
@@ -326,11 +415,31 @@ final class ScrollViewer extends ContentControl {
   }
 
   @override
+  void renderPart(UIElement part, DrawingContext context) {
+    if (!identical(part, _contentPart)) return;
+    context.pushClipRect(_contentPart.bounds);
+    try {
+      content?.render(context);
+    } finally {
+      context.popClip();
+    }
+  }
+
+  @override
   UIElement? hitTestContentCore(Point position) {
     final bar =
         _verticalBar.hitTest(position) ?? _horizontalBar.hitTest(position);
     if (bar != null) return bar;
     if (!_viewportRect.contains(position)) return null;
+    return content?.hitTest(position);
+  }
+
+  @override
+  UIElement? hitTestPart(UIElement part, Point position) {
+    if (!identical(part, _contentPart)) {
+      return super.hitTestPart(part, position);
+    }
+    if (!_contentPart.bounds.contains(position)) return null;
     return content?.hitTest(position);
   }
 
@@ -342,13 +451,15 @@ final class ScrollViewer extends ContentControl {
         ..maximum = _maxHorizontalOffset
         ..value = _horizontalOffset
         ..viewportSize = _viewportWidth
-        ..thickness = scrollBarThickness;
+        ..thickness = scrollBarThickness
+        ..isVisible = _isHorizontalScrollBarVisible;
       _verticalBar
         ..minimum = 0
         ..maximum = _maxVerticalOffset
         ..value = _verticalOffset
         ..viewportSize = _viewportHeight
-        ..thickness = scrollBarThickness;
+        ..thickness = scrollBarThickness
+        ..isVisible = _isVerticalScrollBarVisible;
     } finally {
       _isSyncingBars = false;
     }
