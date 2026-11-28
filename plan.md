@@ -95,7 +95,8 @@ Skia canvas масштабируется через `displayScale`. Backbuffer �
 - мост accessibility: дерево семантики окна уходит в native через `dui_window_set_accessibility_tree` — роли, имена, значения, состояния и границы; native хранит дерево плоским списком, у каждого узла индекс родителя; `SdlSkiaHost.nativeHandle(window)` даёт доступ к native-состоянию окна;
 - шаблоны для любого контрола: `TemplatedControl` — базовый класс с механикой шаблона (создание, замена и освобождение persistent-поддерева, `templateRoot`, `hasTemplate`, хук `onTemplateReplacing`); `ContentControl extends TemplatedControl`; собственный контент виджета реализуется через `measureContentCore`/`arrangeContentCore`/`renderContentCore`/`hitTestContentCore`, чтобы шаблон нельзя было случайно перекрыть подкласом; focus ring рисует база (после контента, сверху), а не каждый виджет отдельно; типизированный шаблон живёт в конкретном классе, база хранит `ControlTemplate<dynamic>?`; своё template-свойство есть у `Button`, `Label`, `Border` и `ScrollBar` — у всего набора, который рисует свой вид;
 - части шаблона (template parts): контрол отдаёт шаблону именованные части, а шаблон размещает их; содержимое контрола при этом не заменяется. `TemplatePart` (`lib/src/template_part.dart`) — это элемент дерева, который меряется, расставляется и рисуется через владельца (`measurePart`, `arrangePart`, `renderPart`, `hitTestPart`), поэтому рисует содержимое контрол, а шаблон решает только, где часть лежит. `TemplatedControl` держит реестр частей (`registerPart`, `part`, `templateParts`) и сам размещает, меряет и рисует те части, которые шаблон не разместил; части переживают замену шаблона. `TextBox` отдаёт часть `text` (текст, выделение, composition и caret рисует контрол), `ScrollViewer` — части `content`, `horizontalScrollBar` и `verticalScrollBar`;
-- `Label`, `TextBox`, `Button`, `Border`, `StackPanel`, `DockPanel`, `Grid`;
+- `Label`, `TextBox`, `TextArea`, `Button`, `Border`, `StackPanel`, `DockPanel`, `Grid`;
+- многострочный ввод: общий каркас редактирования вынесен в `TextEditor` (`lib/src/text_editor.dart`) — буфер, команды, composition, мышь, IME, кэш раскладки и отрисовка; `TextBox` и `TextArea` делят его, а не копируют логику. `TextArea` (`lib/src/text_area.dart`) переносит текст по словам в ширину поля, владеет вертикальной полосой прокрутки (часть `verticalScrollBar`), вставляет перевод строки по Shift+Enter, ходит кареткой между строками стрелками вверх и вниз, а Home и End работают по логической строке; прокрутка следует за кареткой, пока пользователь не прокрутил текст сам;
 - постоянное дерево и lifecycle mount/unmount;
 - `DuiProperty`;
 - `ObservableValue`;
@@ -223,7 +224,7 @@ Skia canvas масштабируется через `displayScale`. Backbuffer �
   `direction` (0 — left-to-right, 1 — right-to-left), native ставит
   `SkParagraph::setTextDirection`, поэтому порядок прогонов внутри строки
   задаёт направление абзаца, а сами прогоны сохраняют свой порядок;
-- 324 Dart-теста, включая file-dialog contract, formatted clipboard snapshots, styles/templates, DataContext inheritance/accessors/reparenting, value precedence/transitions, binding lifecycle/diagnostics, ObservableCollection/ItemsControl/virtualization, ScrollViewer measure/scroll/input/clip, Grid tracks/span/gap/invalidate/HiDPI, DockPanel measure/arrange/invalidate, diagnostics FPS/render-on-demand, synchronous live-resize frame с увеличением physical backbuffer, layout constraints/alignment, infinite text width, clipping/rendering, horizontal scrolling, mouse caret/selection, pointer capture, surrogate pairs, composition, clipboard, recursive dispose, semantics tree, packaging, native ScrollViewer automation, render-on-demand, scheduler counters и направление раскладки (21 тест).
+- 339 Dart-теста, включая file-dialog contract, formatted clipboard snapshots, styles/templates, DataContext inheritance/accessors/reparenting, value precedence/transitions, binding lifecycle/diagnostics, ObservableCollection/ItemsControl/virtualization, ScrollViewer measure/scroll/input/clip, Grid tracks/span/gap/invalidate/HiDPI, DockPanel measure/arrange/invalidate, diagnostics FPS/render-on-demand, synchronous live-resize frame с увеличением physical backbuffer, layout constraints/alignment, infinite text width, clipping/rendering, horizontal scrolling, mouse caret/selection, pointer capture, surrogate pairs, composition, clipboard, recursive dispose, semantics tree, packaging, native ScrollViewer automation, render-on-demand, scheduler counters и направление раскладки (21 тест), многострочный ввод: перенос по словам, вертикальная прокрутка, Shift+Enter и навигация по строкам (15 тестов).
 
 ### 3.2. Проверенное поведение
 
@@ -329,6 +330,8 @@ lib/src/semantics.dart              — SemanticsRole, SemanticsState, Semantics
 lib/src/button.dart                  — Button и persistent template
 lib/src/label.dart                   — Label
 lib/src/text_box.dart                — TextBox, editing, scrolling и IME
+lib/src/text_editor.dart             — общий каркас редактирования: буфер, команды, composition, мышь и IME
+lib/src/text_area.dart                — TextArea: многострочный ввод, перенос по словам и вертикальная прокрутка
 lib/src/border.dart                  — Border
 lib/src/colors.dart                  — Colors
 lib/src/panel.dart                   — Panel и ElementChildrenList
@@ -371,6 +374,7 @@ example/native_aqua_button.dart      — Aqua style/template, hover/pressed и s
 example/native_smoke.dart            — native smoke с автоматическим завершением
 example/native_text_gallery.dart     — Unicode/HiDPI text gallery и её smoke-режим
 example/native_textbox.dart          — интерактивная проверка TextBox и smoke-режим
+example/native_textarea.dart         — интерактивная проверка TextArea и smoke-режим
 example/native_frame_benchmark.dart  — idle CPU и async invalidate latency
 example/native_items_control.dart    — список 100 000 элементов и virtualization smoke
 example/native_scroll_viewer.dart   — ScrollViewer, прокрутка и smoke
@@ -385,6 +389,8 @@ test/semantics_test.dart            — дерево семантики, фок�
 test/path_test.dart                 — контуры пути и paint
 test/template_parts_test.dart        — части шаблона у TextBox и ScrollViewer
 test/flow_direction_test.dart        — направление раскладки: наследование, зеркалирование, right-to-left
+test/text_area_test.dart              — многострочный ввод: перенос по словам, прокрутка и навигация по строкам
+test/native_text_area_test.dart       — перенос по словам в SkParagraph и правка многострочного поля
 test/native_text_direction_test.dart — направление абзаца на native backend
 test/native_graphics_test.dart      — путь, тень и наложение на native backend
 test/native_packaging_test.dart     — порядок поиска библиотеки и раскладка install-дерева
@@ -412,6 +418,7 @@ dart run example/native_frame_benchmark.dart
 dart run example/native_items_control.dart
 dart run example/native_items_control.dart --smoke --diagnostics
 dart run example/native_scroll_viewer.dart --smoke --diagnostics
+dart run example/native_textarea.dart --smoke --diagnostics
 dart run example/native_accessibility.dart --seconds=90
 dart run example/native_graphics.dart --smoke --diagnostics
 powershell -ExecutionPolicy Bypass -File tool/verify_uia.ps1 -ProcessId <pid>
@@ -478,6 +485,8 @@ python tools/bootstrap_native.py --smoke --dart "<путь-к-dart>"
 
 12. **P1 (закрыт 2026-11-28):** направление абзаца в native backend сделано: `DuiTextLayoutOptions` получил поле `direction`, native ставит `SkParagraph::setTextDirection`, native ABI версии 6. Би-алгоритм unicode отдаёт порядок прогонов, а каретка, выделение и попадание мыши считаются по координатам абзаца.
 
+13. **P1:** перенос по словам в headless-раскладке приблизителен: ширина символа считается как 0.6 от кегля, поэтому тестовая раскладка переносит текст не так, как настоящий backend. На native перенос настоящий (SkParagraph), а headless-раскладка нужна только для тестов и тестового рендерера.
+14. **P1:** правки `TextArea` не отменяются: стек отмены (п. 9 §7.1) ещё не сделан, поэтому Ctrl+Z в поле не работает.
 11. **P1 (закрыт 2026-11-28):** `TextBox` и `ScrollViewer` шаблоны не поддерживали: шаблон заменял содержимое контрола целиком, а у них содержимое — это текст с выделением и caret либо полосы прокрутки. Теперь у обоих есть модель template parts: контрол отдаёт шаблону именованную часть (`text` у `TextBox`, `content`, `horizontalScrollBar` и `verticalScrollBar` у `ScrollViewer`), а шаблон её размещает; часть, которую шаблон не разместил, остаётся у контрола.
 
 ---
@@ -992,9 +1001,10 @@ One-way local маскирует binding, но не отменяет его; `cl
 12. **Потокобезопасность native-слоя (закрыт 2026-11-26):** SDL-вызовы сериализованы process-wide мьютексом, host в процессе может быть только один, `SDL_Quit()` не вызывается; поведение закреплено тремя native-тестами с двумя изолятами. Дальше по этой теме можно думать только про несколько host — для этого нужна переделка глобальной очереди событий SDL.
 13. **Публикация пакета на pub.dev (закрыт 2026-11-27):** пакет `duix` 0.1.0 опубликован — https://pub.dev/packages/duix. Внутри: лицензия MIT с файлом `LICENSE`, поля `homepage`/`repository`, description и topics, сборки нативной библиотеки для Windows x64, macOS arm64 и Linux x64, разложенные в `build/dist/<платформа>-<архитектура>/`, и дистрибуция `python tools/package.py --dist` в `../duix-publish`. Осталось: macOS x64, Linux arm64 и Windows arm64, codesign/notarization для macOS и публикация следующих версий.
 
-Кодовая работа: слой 0 закрыт, дальше слой 1 — простые элементы ввода.
-Начинать стоит с `TextArea` (многострочный ввод: сейчас `TextBox`
-однострочный) и `CheckBox`. Полный список виджетов и подсистем — в §7.1.
+Кодовая работа: слой 0 закрыт, идёт слой 1 — простые элементы ввода.
+`TextArea` (п. 20) закрыт 2026-11-28: многострочный ввод с переносом по
+словам, вертикальной прокруткой и Shift+Enter. Дальше — `CheckBox` и
+остальные элементы слоя 1. Полный список виджетов и подсистем — в §7.1.
 Пункт 7 «Направление раскладки» закрыт полностью: часть A (направление в
 дереве, зеркалирование раскладки, логическое выравнивание, right-to-left
 текст в поле и прокрутка) и часть B (направление абзаца в native backend,
@@ -1004,7 +1014,7 @@ GPU backend по-прежнему не входит в ближайшие эта
 
 ### 7.1. Список виджетов к реализации
 
-Сейчас в пакете: `Label`, `TextBox`, `Button`, `Border`, `ContentPresenter`,
+Сейчас в пакете: `Label`, `TextBox`, `TextArea`, `Button`, `Border`, `ContentPresenter`,
 `ContentControl`, `TemplatedControl`, `TemplatePart`, `ItemsControl`
 (+ `VirtualizingStackPanel`), `ScrollBar`, `ScrollViewer`, `PopupLayer`,
 `SelectionModel`, `Path`, `StackPanel`, `DockPanel`, `Grid`. Для настоящего
@@ -1087,10 +1097,11 @@ UI-кита этого мало, но порядок работ определя
 17. `Separator` — разделитель, требует `drawLine`.
 18. `Spacer` — пустое пространство в контейнере, почти бесплатно.
 19. `Image` / `Icon` — требует слой 0 (растровая графика).
-20. `TextArea` — многострочный ввод. Сейчас `TextBox` однострочный: перенос
-    по словам, вертикальная прокрутка, Shift+Enter и IME по нескольким
-    строкам ещё не сделаны. Без него не написать ни комментарий, ни описание,
-    ни журнал.
+20. `TextArea` — многострочный ввод. **Готово (2026-11-28):** перенос по
+    словам в ширину поля, вертикальная прокрутка с полосой, Shift+Enter,
+    переход каретки между строками стрелками, Home и End по строке, IME по
+    нескольким строкам. Общий каркас редактирования вынесен в `TextEditor`,
+    его делят `TextBox` и `TextArea`.
 21. `Hyperlink` — метка-ссылка: клик, hover и focus, подчёркивание.
 22. `GroupBox` — контейнер с заголовком вокруг содержимого.
 
@@ -1206,6 +1217,53 @@ UI-кита этого мало, но порядок работ определя
 ---
 
 ## 9. Журнал работ
+
+### 2026-11-28 — слой 1, пункт 20: многострочный ввод (`TextArea`)
+
+Сделано:
+
+- Общий каркас редактирования вынесен в `TextEditor`
+  (`lib/src/text_editor.dart`): буфер, команды, composition, мышь, IME, кэш
+  раскладки, попадание мыши и отрисовка. `TextBox` и `TextArea` — два
+  наследника, а не две копии логики: иначе правки в одном поле расходились бы
+  с другим.
+- `TextArea` (`lib/src/text_area.dart`): текст переносится по словам в ширину
+  поля, у поля есть вертикальная полоса прокрутки (часть
+  `verticalScrollBar`), Shift+Enter вставляет перевод строки, стрелки вверх и
+  вниз ходят кареткой по строкам, Home и End работают по логической строке,
+  колесо мыши прокручивает текст.
+- Прокрутка следует за кареткой, пока пользователь не прокрутил текст сам;
+  после ручной прокрутки движение каретки снова включает следование.
+- Headless-раскладка (`lib/src/headless_text_layout.dart`) переносит текст по
+  словам и считает геометрию каретки, выделения и попадания мыши по визуальным
+  строкам, поэтому перенос проверяется без native-бэкенда.
+- Ширина раскладки при измерении совпадает с шириной, которую показывает поле:
+  отступы поля и толщина полосы вычитаются из доступной ширины. До этого текст
+  при измерении раскладывался по полной ширине поля, а рисовался уже в более
+  узкой, поэтому перенос отличался от отрисовки.
+- Каретка native-бэкенда стоит в рамке строки, а не в рамке глифа: рамка
+  каретки считается по метрикам строки (`getLineMetricsAt`), поэтому высота
+  каретки равна высоте строки, а вертикальная прокрутка `TextArea` попадает на
+  границу строки. ABI не менялся, библиотека пересобрана.
+
+Проверено:
+
+- `dart analyze` — без замечаний; `dart format` применён.
+- `dart test --exclude-tags clipboard,native` — 339/339;
+  `dart test --tags native --exclude-tags clipboard` — 55/55.
+- Новый `test/text_area_test.dart` (15 тестов): перенос по словам, рост поля
+  вниз, Shift+Enter, клик по строке, появление и скрытие полосы, стрелки между
+  строками, Home и End, колесо, ограничение прокрутки, следование за кареткой и
+  ручная прокрутка, отрисовка строк, части поля.
+- Новый `test/native_text_area_test.dart`: native-абзац переносит текст по
+  ширине, каретка переноса стоит на своей строке, поле в native-окне переносит
+  текст, Shift+Enter и переходы между строками, полоса прокрутки и следование за
+  кареткой.
+- Смоук примера `example/native_textarea.dart --smoke` проходит; снимок экрана
+  показывает перенос по словам и вертикальную полосу прокрутки.
+
+Дальше: слой 1 — `CheckBox` и остальные простые элементы ввода. Публикация
+пакета 0.2.0 должна нести native ABI версии 6.
 
 ### 2026-11-28 — слой 0, пункт 7: направление абзаца в native backend
 

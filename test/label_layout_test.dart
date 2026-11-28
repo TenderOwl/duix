@@ -90,7 +90,8 @@ void main() {
     final size = text.measure(const Size(12, 100));
 
     expect(size.width, 12);
-    expect(size.height, 13);
+    // The text does not fit into the width, so it is wrapped into two lines.
+    expect(size.height, 26);
   });
 }
 

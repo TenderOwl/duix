@@ -2,6 +2,21 @@
 
 ## Unreleased
 
+- A control can edit several lines now: `TextArea` is a field of its own. The text is
+  wrapped into the width of the area, the area owns a vertical scroll bar, `Shift+Enter`
+  starts a new line, the up and down arrows move the caret between the lines, `Home` and
+  `End` work inside a line, and the wheel scrolls the text. The scroll follows the caret
+  until the user scrolls the text away from it.
+- `TextBox` and `TextArea` share one editing core now. `TextEditor` owns the buffer, the
+  commands, the composition, the mouse and the IME, and the two controls only answer the
+  questions of the axis of the text and of the scrolling. The headless layout wraps the
+  text into words as well, so the wrapping can be checked without the native backend.
+- The text of a field is wrapped into the width that the field really shows: the padding
+  of the control and the thickness of the scroll bar are subtracted from the available
+  width before the layout is made.
+- The caret of the native backend stands in the box of the line and not in the box of a
+  glyph: the height of the caret is the height of the line, and the vertical scroll of a
+  `TextArea` lands on the border of the line. The ABI is unchanged.
 - The layout of a tree can run from right to left. `FlowDirection` is an inherited
   property of the elements now: `UIElement.flowDirection` is left-to-right by default,
   a child follows its parent, an element with a direction of its own keeps it, and

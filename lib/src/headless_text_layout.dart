@@ -14,8 +14,11 @@ final class HeadlessTextLayoutFactory implements TextLayoutFactory {
 
 final class HeadlessTextLayout implements TextLayout {
   HeadlessTextLayout._(this.options)
-      : _lines = options.text.split('\n'),
-        _lineStarts = _computeLineStarts(options.text),
+      : _lines = _wrapLines(
+          options.text,
+          options.maxWidth,
+          options.fontSize * 0.6,
+        ),
         _lineHeight = options.fontSize * 1.3,
         _characterWidth = options.fontSize * 0.6 {
     if (options.fontSize <= 0 || !options.fontSize.isFinite) {
@@ -30,21 +33,51 @@ final class HeadlessTextLayout implements TextLayout {
   }
 
   final TextLayoutOptions options;
-  final List<String> _lines;
-  final List<int> _lineStarts;
+
+  /// The visual lines of the text.
+  ///
+  /// A logical line is broken into the pieces that fit into the width of the
+  /// layout, so the lines of the layout are the lines of the screen.
+  final List<_HeadlessLine> _lines;
   final double _lineHeight;
   final double _characterWidth;
   bool _isDisposed = false;
 
-  static List<int> _computeLineStarts(String text) {
-    final starts = <int>[0];
+  /// Breaks the text into the lines that fit into the width of the layout.
+  static List<_HeadlessLine> _wrapLines(
+    String text,
+    double maxWidth,
+    double characterWidth,
+  ) {
+    final lines = <_HeadlessLine>[];
     var offset = 0;
-    final lines = text.split('\n');
-    for (var index = 0; index < lines.length - 1; index++) {
-      offset += lines[index].length + 1;
-      starts.add(offset);
+    for (final content in text.split('\n')) {
+      if (content.isEmpty) {
+        lines.add(_HeadlessLine(offset, offset));
+        offset += 1;
+        continue;
+      }
+      final fit = maxWidth.isFinite && characterWidth > 0
+          ? math.max(1, (maxWidth / characterWidth).floor())
+          : content.length;
+      var start = 0;
+      while (start < content.length) {
+        var end = math.min(start + fit, content.length);
+        if (end < content.length) {
+          // The line breaks at the last space of the piece, so a word is not
+          // split when it fits.
+          final space = content.lastIndexOf(' ', end - 1);
+          if (space > start) end = space;
+        }
+        lines.add(_HeadlessLine(offset + start, offset + end));
+        start = end;
+        while (start < content.length && content[start] == ' ') {
+          start++;
+        }
+      }
+      offset += content.length + 1;
     }
-    return starts;
+    return lines;
   }
 
   @override
@@ -97,13 +130,17 @@ final class HeadlessTextLayout implements TextLayout {
     Paint paint = const Paint(Color(0xFF000000)),
   }) {
     _checkNotDisposed();
-    context.drawText(
-      options.text,
-      Point(position.x + _alignmentOffset, position.y),
-      fontSize: options.fontSize,
-      color: paint.color,
-      alignment: options.alignment,
-    );
+    for (var index = 0; index < _lines.length; index++) {
+      final line = _lines[index];
+      if (line.length == 0) continue;
+      context.drawText(
+        options.text.substring(line.start, line.end),
+        Point(position.x + _alignmentOffset, position.y + index * _lineHeight),
+        fontSize: options.fontSize,
+        color: paint.color,
+        alignment: options.alignment,
+      );
+    }
   }
 
   @override
@@ -111,33 +148,25 @@ final class HeadlessTextLayout implements TextLayout {
     _checkNotDisposed();
     final lineIndex =
         (position.y / _lineHeight).floor().clamp(0, _lines.length - 1);
+    final line = _lines[lineIndex];
     final column = _characterWidth == 0
         ? 0
         : ((position.x - _alignmentOffset) / _characterWidth)
             .round()
-            .clamp(0, _lines[lineIndex].length);
-    return TextPosition(_lineStarts[lineIndex] + column);
+            .clamp(0, line.length);
+    return TextPosition(line.start + column);
   }
 
   @override
   Rect caretRect(int offset) {
     _checkNotDisposed();
     _checkOffset(offset);
-    for (var index = 0; index < _lines.length; index++) {
-      final lineEnd = _lineStarts[index] + _lines[index].length;
-      if (offset <= lineEnd) {
-        return Rect.fromLTWH(
-          (offset - _lineStarts[index]) * _characterWidth + _alignmentOffset,
-          index * _lineHeight,
-          0,
-          _lineHeight,
-        );
-      }
-    }
-    final last = _lines.length - 1;
+    final index = _lineIndexAt(offset);
+    final line = _lines[index];
+    final column = (offset - line.start).clamp(0, line.length);
     return Rect.fromLTWH(
-      _lines[last].length * _characterWidth + _alignmentOffset,
-      last * _lineHeight,
+      column * _characterWidth + _alignmentOffset,
+      index * _lineHeight,
       0,
       _lineHeight,
     );
@@ -155,19 +184,28 @@ final class HeadlessTextLayout implements TextLayout {
 
     final rects = <Rect>[];
     for (var index = 0; index < _lines.length; index++) {
-      final lineStart = _lineStarts[index];
-      final lineEnd = lineStart + _lines[index].length;
-      final selectionStart = math.max(start, lineStart);
-      final selectionEnd = math.min(end, lineEnd);
+      final line = _lines[index];
+      final selectionStart = math.max(start, line.start);
+      final selectionEnd = math.min(end, line.end);
       if (selectionStart >= selectionEnd) continue;
       rects.add(Rect.fromLTWH(
-        (selectionStart - lineStart) * _characterWidth + _alignmentOffset,
+        (selectionStart - line.start) * _characterWidth + _alignmentOffset,
         index * _lineHeight,
         (selectionEnd - selectionStart) * _characterWidth,
         _lineHeight,
       ));
     }
     return List<Rect>.unmodifiable(rects);
+  }
+
+  /// The index of the line that holds the offset.
+  int _lineIndexAt(int offset) {
+    var index = 0;
+    for (var position = 0; position < _lines.length; position++) {
+      if (_lines[position].start > offset) break;
+      index = position;
+    }
+    return index;
   }
 
   @override
@@ -184,4 +222,17 @@ final class HeadlessTextLayout implements TextLayout {
   void _checkNotDisposed() {
     if (_isDisposed) throw StateError('The text layout is disposed.');
   }
+}
+
+/// A line of the text with the offsets it covers.
+final class _HeadlessLine {
+  const _HeadlessLine(this.start, this.end);
+
+  /// The offset of the first character of the line.
+  final int start;
+
+  /// The offset behind the last character of the line.
+  final int end;
+
+  int get length => end - start;
 }

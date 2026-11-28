@@ -2390,6 +2390,26 @@ int32_t dui_text_layout_hit_test(
   }
 }
 
+// The box of the line that holds the offset.
+//
+// The caret stands in a line of the text, so its box is the box of the line
+// and not the box of a glyph. The metrics of the line carry the place of the
+// baseline and the space above and below it.
+static SkRect caret_line_box(
+    skia::textlayout::Paragraph* paragraph,
+    size_t offset_utf16) {
+  const auto line = paragraph->getLineNumberAtUTF16Offset(offset_utf16);
+  skia::textlayout::LineMetrics metrics{};
+  if (line < 0 || !paragraph->getLineMetricsAt(line, &metrics)) {
+    return SkRect::MakeEmpty();
+  }
+  return SkRect::MakeXYWH(
+      0,
+      metrics.fBaseline - metrics.fAscent,
+      0,
+      metrics.fAscent + metrics.fDescent);
+}
+
 int32_t dui_text_layout_caret_rect(
     DuiTextLayout* layout,
     uint32_t offset_utf16,
@@ -2418,9 +2438,12 @@ int32_t dui_text_layout_caret_rect(
         const auto left = info.fDirection == skia::textlayout::TextDirection::kRtl
             ? bounds.right()
             : bounds.left();
+        const auto line = caret_line_box(layout->paragraph.get(), offset_utf16);
+        const auto top = line.height() > 0 ? line.top() : bounds.top();
+        const auto height = line.height() > 0 ? line.height() : bounds.height();
         write_rect(
             out_rect,
-            SkRect::MakeXYWH(left, bounds.top(), 0, bounds.height()),
+            SkRect::MakeXYWH(left, top, 0, height),
             layout->scale);
         return 1;
       }
@@ -2435,9 +2458,13 @@ int32_t dui_text_layout_caret_rect(
         const auto left = box.direction == skia::textlayout::TextDirection::kRtl
             ? box.rect.left()
             : box.rect.right();
+        const auto line = caret_line_box(layout->paragraph.get(), offset_utf16);
+        const auto top = line.height() > 0 ? line.top() : box.rect.top();
+        const auto height =
+            line.height() > 0 ? line.height() : box.rect.height();
         write_rect(
             out_rect,
-            SkRect::MakeXYWH(left, box.rect.top(), 0, box.rect.height()),
+            SkRect::MakeXYWH(left, top, 0, height),
             layout->scale);
         return 1;
       }
