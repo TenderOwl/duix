@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+- Windows UI Automation reads the widgets of a window. The native layer answers
+  `WM_GETOBJECT` with a provider of the semantics tree, so the assistive
+  technologies of the system see the same tree as the framework: the type of the
+  control, its name, its value, its bounds on the screen and its state (enabled,
+  focusable, focused, control and content element). A text field answers the value
+  pattern, and the bridge reports a moved focus and a changed name or value to the
+  system. The example `example/native_accessibility.dart` and the script
+  `tool/verify_uia.ps1` show and check the tree.
 - Templates work for any control, not only for a button. `TemplatedControl` holds
   the template mechanics: it creates, replaces and releases the persistent
   subtree of the control, exposes `templateRoot` and `hasTemplate` and draws the

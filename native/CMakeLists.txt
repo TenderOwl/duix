@@ -23,6 +23,7 @@ endif()
 
 add_library(dui_native SHARED
   src/dui_native.cpp
+  src/uia_windows.cpp
 )
 
 target_include_directories(dui_native
@@ -69,7 +70,9 @@ set_target_properties(dui_paragraph_smoke PROPERTIES
 )
 
 if(WIN32)
-  target_link_libraries(dui_native PRIVATE ole32)
+  # UI Automation serves the semantics tree of the windows to the assistive
+  # technologies of the system, so the helpers of the subsystem are needed.
+  target_link_libraries(dui_native PRIVATE ole32 UIAutomationCore)
 elseif(APPLE)
   enable_language(OBJCXX)
   target_sources(dui_native PRIVATE src/file_dialog_macos.mm)

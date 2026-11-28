@@ -238,6 +238,7 @@ Skia canvas масштабируется через `displayScale`. Backbuffer �
 - Потокобезопасность native-слоя закрыта: все SDL-вызовы сериализованы process-wide рекурсивным мьютексом, второй host в процессе отклоняется с явным сообщением, `SDL_Quit()` больше не вызывается. Параллельный прогон native-файлов (`--concurrency=4`) больше не роняет процесс: вместо аварии тесты получают ошибку «Only one native host per process is supported». Три новых теста в `test/native_thread_safety_test.dart` доказывают это изолированно: два изолята одновременно тянут host (один выигрывает, второй получает понятную ошибку, процесс жив), host снова доступен после освобождения, два изолята одновременно шейпят текст.
 - Quick start проверен end-to-end на «чужом» приложении с зависимостью на собранную папку дистрибуции: `dart run` находит библиотеку внутри пакета (`Library loaded from: …\publish\native\bin\windows-x64\dui_native.dll`) и рисует окно; `dart compile exe` + `dart run duix:setup_native .` дают собранное приложение, которое грузит библиотеку рядом с exe. Установлено ограничение: в AOT package-конфигурация недоступна (`Isolate.resolvePackageUri` возвращает null), поэтому рядом с exe библиотеку копирует `setup_native`.
 - Дерево семантики подтверждено тестами: роли и имена зеркалят дерево UI, элементы без роли сворачиваются, фокус и выделение отражаются в снимке, состояние disabled и границы совпадают с контролом, контрол забирает имя label-контента, `ItemsControl` даёт list с элементами, а disposed-контрол в дерево не попадает.
+- Мост Windows UI Automation подтверждён на живой системе: UIA-клиент читает дерево окна (`Window "DUI accessibility"` → `Custom` → `Text`, `Button`, `Edit`), у элементов верные имя, тип управления, границы на экране и состояния (`IsEnabled`, `IsControlElement`, `IsContentElement` — TRUE), фокус отмечен у кнопки, `FrameworkId` — `Dui`.
 - Recursive dispose подтверждён тестами: поддерево освобождает native-раскладки, disposed-элемент отсоединяется от родителя (список детей пустеет), все потомки получают `isDisposed`, повторный dispose не освобождает ресурсы дважды, фокус снимается, disposed-элемент нельзя вернуть в дерево, `Window.dispose()` освобождает контент, а `close()` оставляет его жить.
 - CI-команды проверены локально: `dart format --output=none --set-exit-if-changed lib example test` возвращает 0, `dart analyze` чист, `dart test --exclude-tags clipboard,native` проходит 226 тестов, `dart test --tags native --exclude-tags clipboard` проходит 36 native-тестов. YAML workflow разобран и проверен по структуре; с 2026-11-27 он ещё и отработал на GitHub — job `Dart` зелёный на всех трёх ОС.
 - Legacy text drawing подтверждён native-тестом: ширина, возвращённая `dui_draw_text`, совпадает с шириной раскладки `dui_text_layout_create` для того же текста, шрифта и scale; ASCII, кириллица, emoji и RTL-строка рисуются во всех трёх выравниваниях.
@@ -329,12 +330,15 @@ lib/src/native/native_text_layout.dart — SkParagraph TextLayout backend
 lib/src/native/sdl_skia_host.dart    — SDL/Skia Dart host
 native/include/dui_native.h          — C ABI
 native/src/dui_native.cpp            — SDL3 + Skia backend
+native/src/uia_windows.h            — снимок дерева семантики для моста UI Automation
+native/src/uia_windows.cpp          — мост Windows UI Automation: поставщик IRawElementProvider
 native/src/file_dialog_macos.mm      — macOS NSOpenPanel и SDL NSWindow parent
 native/src/paragraph_smoke.cpp       — SkParagraph smoke-проверка
 native/CMakeLists.txt                — нативная сборка; Linux требует pkg-config и GTK 4.10+ (`libgtk-4-dev`)
 tools/bootstrap_native.py            — зависимости и сборка
 tools/package.py                    — install-правила, разбор зависимостей, воспроизводимый бандл, папка дистрибуции
 tool/verify_native.dart             — сквозная проверка бандла: загрузка библиотеки и shaping
+tool/verify_uia.ps1                — чтение дерева UI Automation окна
 tool/verify_published.dart          — загрузка библиотеки из папки дистрибуции (проверка опубликованного пакета)
 bin/setup_native.dart               — копирование нативной библиотеки рядом с exe собранного приложения
 README.md                           — quick start, порядок поиска библиотеки, сборка и публикация (английский)
@@ -349,6 +353,7 @@ example/native_textbox.dart          — интерактивная провер
 example/native_frame_benchmark.dart  — idle CPU и async invalidate latency
 example/native_items_control.dart    — список 100 000 элементов и virtualization smoke
 example/native_scroll_viewer.dart   — ScrollViewer, прокрутка и smoke
+example/native_accessibility.dart   — окно с семантикой для проверки моста UI Automation
 test/                                — автоматические тесты
 test/text_box_measurement_test.dart — измерение TextBox по метрикам раскладки
 test/dispose_test.dart              — recursive dispose элементов и поддеревьев
@@ -378,6 +383,8 @@ dart run example/native_frame_benchmark.dart
 dart run example/native_items_control.dart
 dart run example/native_items_control.dart --smoke --diagnostics
 dart run example/native_scroll_viewer.dart --smoke --diagnostics
+dart run example/native_accessibility.dart --seconds=90
+powershell -ExecutionPolicy Bypass -File tool/verify_uia.ps1 -ProcessId <pid>
 ```
 
 Про `--exclude-tags clipboard`: четыре native clipboard-теста работают с реальным
@@ -435,7 +442,7 @@ python tools/bootstrap_native.py --smoke --dart "<путь-к-dart>"
 5. **P2:** поиск видимого диапазона и расчёт estimated extent в `VirtualizingStackPanel` линейны по числу items; переменная высота может уточнять позицию на последующих layout pass.
 6. **P1:** value layers, DataContext inheritance и styles реализованы, но универсальное inherited-property propagation и animation engine ещё отсутствуют; control templates пока поддержаны только у Button.
 7. **P1 (закрыт 2026-11-26):** единый recursive dispose реализован — `UIElement.dispose()` освобождает поддерево, `onDisposed()` отдаёт контролам их ресурсы, `removeChild()` унифицирует удаление ребёнка, `Window.dispose()` закрывает дерево окна.
-8. **P2 (частично закрыт 2026-11-26):** accessibility — реализована backend-independent модель семантики (`SemanticsTree`, role/name/value/state/bounds, синхронизация focus и selection), но платформенные мосты UI Automation, NSAccessibility и AT-SPI ещё нет.
+8. **P2 (частично закрыт 2026-11-28):** accessibility — реализована backend-independent модель семантики (`SemanticsTree`, role/name/value/state/bounds, синхронизация focus и selection) и мост Windows UI Automation (`native/src/uia_windows.cpp`: поставщик `IRawElementProvider` поверх дерева семантики). Мост отдаёт дерево и состояния, но не выполняет действия: `SetFocus`, `Invoke` кнопки и запись значения поля требуют обратного вызова из native в Dart. macOS NSAccessibility и Linux AT-SPI не сделаны — они требуют чужих машин.
 9. **P2 (закрыт 2026-11-26 на Windows x64):** кроссплатформенный CI добавлен (Dart job на трёх ОС и best-effort native job), packaging runtime dependencies и воспроизводимый release build реализованы: `tools/package.py` разбирает зависимости, проверяет, что private-зависимостей нет, собирает бандл с manifest и sha256 и воспроизводимым архивом, а install-правила CMake кладут `icudtl.dat` рядом с библиотекой. Осталось проверить macOS (universal binary, codesign), arm64 и Linux на реальных дистрибутивах. Native job на macOS не запускается: у hosted-runner нет window server, а сборка Skia требует больше диска и времени, чем даёт раннер.
 10. **P2 (закрыт 2026-11-26):** SDL video не потокобезопасен, а native-слой не сериализовал обращения к нему — два изолята с окнами роняли процесс. Теперь все SDL-вызовы идут под process-wide рекурсивным мьютексом, host в процессе может быть только один (второй получает явную ошибку), а `SDL_Quit()` не вызывается. Ограничение «один host на процесс» остаётся осознанным: у SDL одна глобальная очередь событий, и поддержка нескольких host потребовала бы её переделки на стороне Dart.
 
@@ -843,7 +850,7 @@ One-way local маскирует binding, но не отменяет его; `cl
 ## 8.1. Accessibility
 
 - [x] Добавить semantics к дереву: role, name, value, state, bounds.
-- [ ] Windows UI Automation.
+- [x] Windows UI Automation.
 - [ ] macOS NSAccessibility.
 - [ ] Linux AT-SPI.
 - [x] Синхронизировать focus и selection.
@@ -851,9 +858,13 @@ One-way local маскирует binding, но не отменяет его; `cl
 Семантика backend-independent: `SemanticsTree` строится по требованию из дерева
 контролов и снимает role, name, value, state, bounds и выделение текста. Фокус и
 выделение читаются в момент построения, поэтому снимок всегда актуален. Элементы
-без роли сворачиваются, контрол забирает имя label-контента. Платформенные мосты
-(UI Automation, NSAccessibility, AT-SPI) не реализованы: им нужен native-слой и
-проверка на macOS/Linux.
+без роли сворачиваются, контрол забирает имя label-контента.
+
+Мост Windows UI Automation реализован в native-слое: окно отдаёт корень фрагмента
+(`IRawElementProviderFragmentRoot`), а тот — дерево виджетов как элементы
+`IRawElementProviderSimple` с типом управления, именем, значением, границами на
+экране и состоянием. Остались macOS NSAccessibility и Linux AT-SPI: их нельзя
+собрать и проверить на этой машине.
 
 ## 8.2. Нативная интеграция
 
@@ -935,7 +946,7 @@ One-way local маскирует binding, но не отменяет его; `cl
 
 1. **Ручная проверка этапа 8.2:** на macOS собрать Objective‑C++ backend и проверить `NSOpenPanel` в parent/ownerless-режимах, title/initialDirectory/filters и Unicode paths; на Linux аналогично проверить GTK 4.10+ на X11/Wayland (parent пока ownerless).
 2. **Ручная проверка clipboard:** проверить вставку CF_HTML в Word, браузер и другие сторонние приложения.
-3. **Этап 8.1, мосты:** модель семантики готова; остались native-мосты accessibility — Windows UI Automation, macOS NSAccessibility и Linux AT-SPI. Начинать с Windows UI Automation: его можно собрать и проверить на этой машине, тогда как macOS и Linux требуют чужих машин.
+3. **Этап 8.1, мосты:** модель семантики готова; мост Windows UI Automation сделан и проверен на этой машине (дерево, свойства, состояния, события фокуса). Остались macOS NSAccessibility и Linux AT-SPI — они требуют чужих машин. Открытый вопрос моста: действия (`SetFocus`, `Invoke` кнопки, запись значения поля) требуют обратного вызова из native в Dart.
 4. **Ручная проверка ScrollViewer:** автоматическая часть закрыта полностью — `example/native_scroll_viewer.dart --smoke` проходит на Windows (wheel, drag ползунка, клик по треку, клавиатура, offsets, bounds, 3 кадра, scale 2.0); остаётся только визуальная проверка clipping и resize при разных display scales.
 5. **Автоматизация ScrollViewer (закрыт 2026-11-26):** thumb dragging, клик по треку и клавиатурная прокрутка закрыты в native-тесте `test/native_scroll_viewer_test.dart` и в smoke-режиме примера — через публичные `dispatchPointerDown/Move/Up` и `dispatchKeyDown`.
 6. **Незавершённая часть этапа 1.2 (закрыт 2026-11-27):** сборка и Paragraph smoke проверены на Linux (FontConfig/Freetype) и macOS (CoreText) — CI собирает библиотеку и запускает `dui_paragraph_smoke` на обоих runner'ах, шаг падал бы при ошибке. Живая проверка текста на этих платформах остаётся в пунктах 7 и 8.
@@ -1099,6 +1110,47 @@ GPU backend по-прежнему не входит в ближайшие эта
 ---
 
 ## 9. Журнал работ
+
+### 2026-11-28 — слой 0, пункт 6b: мост Windows UI Automation
+
+Сделано:
+
+- Мост к UI Automation живёт в native-слое (`native/src/uia_windows.h`,
+  `native/src/uia_windows.cpp`): окно перехватывает `WM_GETOBJECT` и отдаёт корень
+  фрагмента (`IRawElementProviderFragmentRoot`), а тот — дерево виджетов как элементы
+  `IRawElementProviderSimple`.
+- Снимок дерева неизменяем и разделяется через `shared_ptr` под мьютексом: клиенты
+  UI Automation зовут поставщика из своих потоков. Провайдеры узлов кэшируются в
+  мосте, поэтому один и тот же элемент всегда отдаёт тот же объект.
+- Свойства элемента: тип управления, имя, значение, границы на экране, `IsEnabled`,
+  `IsKeyboardFocusable`, `HasKeyboardFocus`, `IsControlElement`, `IsContentElement`,
+  `IsOffscreen`, `FrameworkId` (`Dui`). Текстовое поле отдаёт паттерн `Value`.
+- События: перенос фокуса (`UiaRaiseAutomationEvent`) и изменение имени или значения
+  (`UiaRaiseAutomationPropertyChangedEvent`) — мост сравнивает снимки соседних кадров.
+- Границы считаются от начала клиентской области окна (`ClientToScreen`), поэтому
+  они совпадают с координатами контролов на экране.
+- Пример `example/native_accessibility.dart` (окно с `Label`, `Button` и `TextBox`) и
+  скрипт `tool/verify_uia.ps1`, который читает дерево окна через UI Automation.
+
+Проверено:
+
+- `dart analyze` — No issues found; `dart format` — 0 изменений.
+- `dart test --exclude-tags clipboard,native` и `dart test --tags native --exclude-tags
+  clipboard` — без падений.
+- `dart run example/native_smoke.dart --smoke` и `dart run
+  example/native_textbox.dart --smoke` проходят после пересборки библиотеки.
+- UIA-клиент (PowerShell + `UIAutomationClient`) видит дерево: `Window "DUI
+  accessibility"` → `Custom` → `Text "Accessibility bridge"`, `Button "Press me"`,
+  `Edit ""`; имена, типы управления и границы верны, у всех элементов `IsEnabled`,
+  `IsControlElement` и `IsContentElement` — TRUE, фокус отмечен у кнопки.
+
+Найденная ошибка: булевы свойства заполнялись значением `TRUE` (1), тогда как VARIANT
+ждёт `VARIANT_TRUE` (-1), поэтому все состояния приходили как `False`.
+
+Ограничение шага: мост отдаёт дерево и состояния, но не выполняет действия — `SetFocus`,
+`Invoke` кнопки и запись значения поля требуют обратного вызова из native в Dart.
+
+Дальше: слой 0, пункт 1c — `drawPath`, прозрачность и блендинг, тени.
 
 ### 2026-11-27 — слой 0, пункт 6 (мост дерева семантики)
 

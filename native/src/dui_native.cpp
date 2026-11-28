@@ -1,5 +1,7 @@
 #include "dui_native.h"
 
+#include "uia_windows.h"
+
 #include <SDL3/SDL.h>
 
 #if defined(_WIN32)
@@ -687,11 +689,66 @@ bool ensure_surface(DuiWindow* window) {
   return true;
 }
 
+#if defined(_WIN32)
+// The window handle of the platform, used by the accessibility bridge.
+void* platform_window_handle(SDL_Window* window) {
+  const SDL_PropertiesID properties = SDL_GetWindowProperties(window);
+  return SDL_GetPointerProperty(properties, SDL_PROP_WINDOW_WIN32_HWND_POINTER, nullptr);
+}
+#endif
+
+// The state of the accessibility bridge of the window.
+DuiUiaSnapshot accessibility_snapshot(DuiWindow* window) {
+  DuiUiaSnapshot snapshot;
+  snapshot.nodes.reserve(window->accessible_nodes.size());
+  for (const DuiAccessibleNodeData& node : window->accessible_nodes) {
+    DuiUiaNode value;
+    value.role = node.role;
+    value.parent = node.parent;
+    value.flags = node.flags;
+    value.left = node.left;
+    value.top = node.top;
+    value.width = node.width;
+    value.height = node.height;
+    value.name = node.name;
+    value.value = node.value;
+    snapshot.nodes.push_back(std::move(value));
+  }
+  if (window->window) {
+#if defined(_WIN32)
+    void* handle = platform_window_handle(window->window);
+    snapshot.hwnd = handle;
+    if (handle != nullptr) {
+      // The bounds of the nodes are relative to the client area of the
+      // window, so the origin of the client area is needed.
+      POINT origin{0, 0};
+      ClientToScreen(static_cast<HWND>(handle), &origin);
+      snapshot.window_x = origin.x;
+      snapshot.window_y = origin.y;
+    }
+#endif
+    const char* title = SDL_GetWindowTitle(window->window);
+    if (title) snapshot.title = title;
+    snapshot.scale = SDL_GetWindowDisplayScale(window->window);
+    int width = 0;
+    int height = 0;
+    SDL_GetWindowSizeInPixels(window->window, &width, &height);
+    snapshot.window_width = width;
+    snapshot.window_height = height;
+  }
+  return snapshot;
+}
+
 void destroy_window_resources(DuiWindow* window) {
   window->surface.reset();
   if (window->window && SDL_TextInputActive(window->window)) {
     SDL_StopTextInput(window->window);
   }
+#if defined(_WIN32)
+  if (window->window) {
+    dui_windows_remove_uia(platform_window_handle(window->window));
+  }
+#endif
   if (window->texture) SDL_DestroyTexture(window->texture);
   if (window->renderer) SDL_DestroyRenderer(window->renderer);
   if (window->window) SDL_DestroyWindow(window->window);
@@ -1166,6 +1223,10 @@ DuiWindow* dui_window_create(
       return nullptr;
     }
 
+#if defined(_WIN32)
+    dui_windows_install_uia(platform_window_handle(window->window));
+#endif
+
     DuiWindow* result = window.get();
     host->windows.push_back(std::move(window));
     return result;
@@ -1594,6 +1655,13 @@ int32_t dui_window_set_accessibility_tree(
     tree.push_back(std::move(data));
   }
   window->accessible_nodes = std::move(tree);
+#if defined(_WIN32)
+  if (window->window) {
+    dui_windows_update_uia(
+        platform_window_handle(window->window),
+        accessibility_snapshot(window));
+  }
+#endif
   return 1;
 }
 
